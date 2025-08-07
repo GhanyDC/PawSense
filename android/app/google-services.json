@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1040108127502",
+    "project_id": "pawsense-134fc",
+    "storage_bucket": "pawsense-134fc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040108127502:android:66c931ef559bea95e7835f",
+        "android_client_info": {
+          "package_name": "com.example.pawsense"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHh98U_IIh6-Uq_BDJyDwGC3yz2MXaUZ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
