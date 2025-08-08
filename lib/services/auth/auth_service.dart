@@ -56,4 +56,15 @@ class AuthService {
   }
 
   User? get currentUser => _auth.currentUser;
+
+  Future<User?> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final cred = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    return cred.user;
+  }
 }

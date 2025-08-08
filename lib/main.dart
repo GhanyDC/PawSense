@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:pawsense/pages/sign_up_page.dart';
 import 'package:pawsense/pages/home_page.dart';
+import 'package:pawsense/pages/sign_in_page.dart';
 
 
 import 'config/firebase_options.dart';
@@ -25,8 +26,9 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      initialRoute: '/signup',
+      initialRoute: '/signin',
       routes: {
+        '/signin': (context) => const SignInPage(),
         '/signup': (context) => const SignUpPage(),
         '/home': (context) => const HomePage(),
       },
