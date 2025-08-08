@@ -2,18 +2,56 @@ class UserModel {
   final String uid;
   final String username;
   final String email;
+  final String? profileImageUrl;
+  final bool darkTheme;
+  final String role; // user | admin | super_admin
+  final DateTime createdAt;
+  final DateTime dateOfBirth;
+  final String contactNumber;
+  final bool agreedToTerms;
+  final String address;
 
-  UserModel({
+  const UserModel({
     required this.uid,
     required this.username,
     required this.email,
+    this.profileImageUrl,
+    this.darkTheme = false,
+    this.role = 'user',
+    required this.createdAt,
+    required this.dateOfBirth,
+    required this.contactNumber,
+    required this.agreedToTerms,
+    required this.address,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'uid': uid,
-      'username': username,
-      'email': email,
-    };
+  Map<String, dynamic> toMap() => {
+        'uid': uid,
+        'username': username,
+        'email': email,
+        'profileImageUrl': profileImageUrl,
+        'darkTheme': darkTheme,
+        'role': role,
+        'createdAt': createdAt.toIso8601String(),
+        'dateOfBirth': dateOfBirth.toIso8601String(),
+        'contactNumber': contactNumber,
+        'agreedToTerms': agreedToTerms,
+        'address': address,
+      };
+
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    return UserModel(
+      uid: map['uid'] ?? '',
+      username: map['username'] ?? '',
+      email: map['email'] ?? '',
+      profileImageUrl: map['profileImageUrl'],
+      darkTheme: map['darkTheme'] ?? false,
+      role: map['role'] ?? 'user',
+      createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
+      dateOfBirth: DateTime.tryParse(map['dateOfBirth'] ?? '') ?? DateTime.now(),
+      contactNumber: map['contactNumber'] ?? '',
+      agreedToTerms: map['agreedToTerms'] ?? false,
+      address: map['address'] ?? '',
+    );
   }
 }

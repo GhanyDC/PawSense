@@ -2,17 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/user_model.dart';
-
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
 
   Future<String?> signUpWithEmail({
     required String email,
     required String password,
     required String username,
+    required String contactNumber,
+    required DateTime dateOfBirth,
+    required bool agreedToTerms,
+    required String address,
   }) async {
-    UserCredential cred = await _auth.createUserWithEmailAndPassword(
+    final cred = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
@@ -26,39 +29,29 @@ class AuthService {
     return user?.emailVerified ?? false;
   }
 
-  Future<void> resendVerificationEmail() async {
-    final user = _auth.currentUser;
-    await user?.sendEmailVerification();
-  }
+  Future<void> resendVerificationEmail() async =>
+      await _auth.currentUser?.sendEmailVerification();
 
-  Future<void> saveUser({
-    required String uid,
-    required String username,
-    required String email,
-  }) async {
+  Future<void> saveUser(UserModel user) async {
     try {
-      final user = UserModel(uid: uid, username: username, email: email);
-      await _firestore.collection('users').doc(uid).set(user.toMap());
-      debugPrint('User saved to Firestore: \\${user.toMap()}');
+      await _firestore.collection('users').doc(user.uid).set(user.toMap());
+      debugPrint('User saved: ${user.uid}');
     } catch (e, stack) {
-      debugPrint('Error saving user to Firestore: $e');
-      debugPrint('Stack trace: $stack');
+      debugPrint('Error saving user: $e\n$stack');
       rethrow;
     }
   }
 
-  Future<void> signOut() async {
-    await _auth.signOut();
-  }
+  Future<void> signOut() async => _auth.signOut();
 
-  /// Stream that emits true when the user's email is verified.
   Stream<bool> get emailVerifiedStream async* {
     while (true) {
       await Future.delayed(const Duration(seconds: 2));
-      final user = _auth.currentUser;
-      await user?.reload();
-      yield user?.emailVerified ?? false;
-      if (user?.emailVerified == true) break;
+      if (await isEmailVerified()) {
+        yield true;
+        break;
+      }
+      yield false;
     }
   }
 

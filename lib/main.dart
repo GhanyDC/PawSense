@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/pages/sign_up_page.dart';
 import 'package:pawsense/pages/home_page.dart';
 
-import 'firebase_options.dart';
+
+import 'config/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

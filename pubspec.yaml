@@ -29,6 +29,7 @@ flutter:
 
   assets:
     - assets/img/
+    - assets/img/sendemail.png
 
   fonts:
     - family: Poppins
