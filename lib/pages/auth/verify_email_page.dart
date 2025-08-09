@@ -121,7 +121,10 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.pop(context)),
-        title: Text('Verify Email', style: Theme.of(context).textTheme.titleLarge),
+        title: Text(
+          'Verify Email',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
       ),
       body: Center(
         child: Padding(
@@ -132,14 +135,11 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
               Image.asset(
                 'assets/img/sendemail.png',
                 height: 150,
-                fit: BoxFit.contain,                
+                fit: BoxFit.contain,
               ),
 
               const SizedBox(height: 40),
-              Text(
-                'Confirm your email address',
-                style: kTextStyleLarge,
-              ),
+              Text('Confirm your email address', style: kTextStyleLarge),
               const SizedBox(height: 12),
               Text(
                 'We sent you a verification link. Please check your email to continue.',

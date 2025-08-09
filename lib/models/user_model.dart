@@ -26,18 +26,18 @@ class UserModel {
   });
 
   Map<String, dynamic> toMap() => {
-        'uid': uid,
-        'username': username,
-        'email': email,
-        'profileImageUrl': profileImageUrl,
-        'darkTheme': darkTheme,
-        'role': role,
-        'createdAt': createdAt.toIso8601String(),
-        'dateOfBirth': dateOfBirth.toIso8601String(),
-        'contactNumber': contactNumber,
-        'agreedToTerms': agreedToTerms,
-        'address': address,
-      };
+    'uid': uid,
+    'username': username,
+    'email': email,
+    'profileImageUrl': profileImageUrl,
+    'darkTheme': darkTheme,
+    'role': role,
+    'createdAt': createdAt.toIso8601String(),
+    'dateOfBirth': dateOfBirth.toIso8601String(),
+    'contactNumber': contactNumber,
+    'agreedToTerms': agreedToTerms,
+    'address': address,
+  };
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
@@ -48,10 +48,39 @@ class UserModel {
       darkTheme: map['darkTheme'] ?? false,
       role: map['role'] ?? 'user',
       createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
-      dateOfBirth: DateTime.tryParse(map['dateOfBirth'] ?? '') ?? DateTime.now(),
+      dateOfBirth:
+          DateTime.tryParse(map['dateOfBirth'] ?? '') ?? DateTime.now(),
       contactNumber: map['contactNumber'] ?? '',
       agreedToTerms: map['agreedToTerms'] ?? false,
       address: map['address'] ?? '',
+    );
+  }
+
+  UserModel copyWith({
+    String? uid,
+    String? username,
+    String? email,
+    String? profileImageUrl,
+    bool? darkTheme,
+    String? role,
+    DateTime? createdAt,
+    DateTime? dateOfBirth,
+    String? contactNumber,
+    bool? agreedToTerms,
+    String? address,
+  }) {
+    return UserModel(
+      uid: uid ?? this.uid,
+      username: username ?? this.username,
+      email: email ?? this.email,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      darkTheme: darkTheme ?? this.darkTheme,
+      role: role ?? this.role,
+      createdAt: createdAt ?? this.createdAt,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      contactNumber: contactNumber ?? this.contactNumber,
+      agreedToTerms: agreedToTerms ?? this.agreedToTerms,
+      address: address ?? this.address,
     );
   }
 }

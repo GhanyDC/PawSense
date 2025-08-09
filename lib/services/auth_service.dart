@@ -2,7 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
+
 class AuthService {
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
+
   /// Checks if a username is already taken in the 'users' collection.
   Future<bool> isUsernameTaken(String username) async {
     final query = await _firestore
@@ -12,8 +16,6 @@ class AuthService {
         .get();
     return query.docs.isNotEmpty;
   }
-  final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
 
   Future<String?> signUpWithEmail({
     required String email,
@@ -24,8 +26,9 @@ class AuthService {
     required bool agreedToTerms,
     required String address,
   }) async {
+    final normalizedEmail = email.trim().toLowerCase();
     final cred = await _auth.createUserWithEmailAndPassword(
-      email: email,
+      email: normalizedEmail,
       password: password,
     );
     await cred.user?.sendEmailVerification();
@@ -43,7 +46,12 @@ class AuthService {
 
   Future<void> saveUser(UserModel user) async {
     try {
-      await _firestore.collection('users').doc(user.uid).set(user.toMap());
+      // Always store email in lowercase
+      final updatedUser = user.copyWith(email: user.email.trim().toLowerCase());
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set(updatedUser.toMap());
       debugPrint('User saved: ${user.uid}');
     } catch (e, stack) {
       debugPrint('Error saving user: $e\n$stack');
@@ -70,18 +78,21 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    final normalizedEmail = email.trim().toLowerCase();
     final cred = await _auth.signInWithEmailAndPassword(
-      email: email,
+      email: normalizedEmail,
       password: password,
     );
     return cred.user;
   }
 
   Future<void> sendPasswordResetEmail(String email) async {
-    await _auth.sendPasswordResetEmail(email: email);
+    final normalizedEmail = email.trim().toLowerCase();
+    await _auth.sendPasswordResetEmail(email: normalizedEmail);
   }
 
   Future<List<String>> fetchSignInMethodsForEmail(String email) async {
-    return await _auth.fetchSignInMethodsForEmail(email);
+    final normalizedEmail = email.trim().toLowerCase();
+    return await _auth.fetchSignInMethodsForEmail(normalizedEmail);
   }
 }
