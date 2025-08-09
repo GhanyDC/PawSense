@@ -3,15 +3,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import 'forgot_password_page.dart';
 import '../../utils/constants.dart';
-import '../../utils/validators.dart'; // <-- Import your validators
+import '../../utils/validators.dart'; 
 
+/// Sign In Page
+///
+/// Allows users to sign in using email and password with Firebase Authentication.
 class SignInPage extends StatefulWidget {
+/// Widget for the sign in page.
   const SignInPage({super.key});
 
   @override
   State<SignInPage> createState() => _SignInPageState();
 }
 
+/// State for SignInPage.
 class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
@@ -22,12 +27,23 @@ class _SignInPageState extends State<SignInPage> {
   bool _obscurePassword = true;
   String? _errorMessage;
 
+  // Track if user has interacted with each field
+  final Map<String, bool> _fieldTouched = {
+    'email': false,
+  };
+
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
+
+  String? _emailValidator(String? value) {
+    return emailValidator(value);
+  }
+
+  // No password validator for sign in
 
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
@@ -100,45 +116,57 @@ class _SignInPageState extends State<SignInPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: InputDecoration(
-                          labelText: 'Email',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          prefixIcon: const Icon(Icons.email_outlined),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                        validator: emailValidator, // <-- using validators.dart
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.email],
+                          autovalidateMode: _fieldTouched['email']!
+                              ? AutovalidateMode.always
+                              : AutovalidateMode.disabled,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
+                            prefixIcon: const Icon(Icons.email_outlined),
+                          ),
+                          validator: _emailValidator,
+                          onChanged: (_) {
+                            if (!_fieldTouched['email']!) {
+                              setState(() => _fieldTouched['email'] = true);
+                            } else {
+                              setState(() {});
+                            }
+                          },
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
                             ),
                           ),
                         ),
-                        obscureText: _obscurePassword,
-                        autofillHints: const [AutofillHints.password],
-                        validator:
-                            passwordValidator, // <-- using validators.dart
                       ),
-                      const SizedBox(height: 8),
                       if (_errorMessage != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),

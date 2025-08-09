@@ -10,6 +10,7 @@ const double kFontSizeLarge = 20.0;
 const double kFontSizeTitle = 24.0;
 
 // Text styles
+/// This file contains app-wide constants such as colors, text styles, and other reusable values.
 const TextStyle kTextStyleSmall = TextStyle(
   fontFamily: kFontFamily,
   fontSize: kFontSizeSmall,

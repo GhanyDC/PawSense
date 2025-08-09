@@ -1,9 +1,14 @@
+/// Sign Up Page
+///
+/// Allows users to create a new account with email, password, and other details.
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import 'verify_email_page.dart';
+import 'terms_and_conditions_modal.dart';
 import '../../utils/constants.dart';
 import '../../utils/validators.dart';
 
+/// Widget for the sign up page.
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -11,6 +16,7 @@ class SignUpPage extends StatefulWidget {
   State<SignUpPage> createState() => _SignUpPageState();
 }
 
+/// State for SignUpPage.
 class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
@@ -199,20 +205,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                           validator: (value) {
                             final result = passwordValidator(value);
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              setState(() {
-                                _passwordFeedback =
-                                    _passwordController.text.isEmpty
-                                    ? null
-                                    : _passwordController.text.length < 8
-                                    ? 'At least 8 characters'
-                                    : !_passwordController.text.contains(
-                                        RegExp(r'[0-9]'),
-                                      )
-                                    ? 'Include at least one number'
-                                    : null;
-                              });
-                            });
+                    
                             return result;
                           },
                           onChanged: (_) {
@@ -395,11 +388,33 @@ class _SignUpPageState extends State<SignUpPage> {
       children: [
         Checkbox(
           value: _agreedToTerms,
-          onChanged: (val) => setState(() => _agreedToTerms = val ?? false),
+          onChanged: (val) async {
+            if (val == true && !_agreedToTerms) {
+              final agreed = await showDialog<bool>(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const TermsAndConditionsModal(),
+              );
+              setState(() => _agreedToTerms = agreed == true);
+            } else if (val == false) {
+              setState(() => _agreedToTerms = false);
+            }
+          },
         ),
         Expanded(
           child: GestureDetector(
-            onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
+            onTap: () async {
+              if (!_agreedToTerms) {
+                final agreed = await showDialog<bool>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const TermsAndConditionsModal(),
+                );
+                setState(() => _agreedToTerms = agreed == true);
+              } else {
+                setState(() => _agreedToTerms = false);
+              }
+            },
             child: const Text('I agree to the Terms and Conditions'),
           ),
         ),
@@ -407,3 +422,4 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 }
+

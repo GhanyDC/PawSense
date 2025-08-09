@@ -1,3 +1,4 @@
+/// Model class representing a user in the app.
 class UserModel {
   final String uid;
   final String username;
@@ -11,6 +12,7 @@ class UserModel {
   final bool agreedToTerms;
   final String address;
 
+  /// Creates a new UserModel instance.
   const UserModel({
     required this.uid,
     required this.username,
@@ -25,6 +27,7 @@ class UserModel {
     required this.address,
   });
 
+  /// Converts the UserModel to a map for Firestore storage.
   Map<String, dynamic> toMap() => {
     'uid': uid,
     'username': username,
@@ -39,6 +42,7 @@ class UserModel {
     'address': address,
   };
 
+  /// Creates a UserModel from a Firestore map.
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       uid: map['uid'] ?? '',
@@ -56,6 +60,7 @@ class UserModel {
     );
   }
 
+  /// Returns a copy of this UserModel with updated fields.
   UserModel copyWith({
     String? uid,
     String? username,

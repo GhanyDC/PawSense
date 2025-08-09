@@ -5,7 +5,11 @@ import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 
+/// Verify Email Page
+///
+/// Instructs users to verify their email address after sign up.
 class VerifyEmailPage extends StatefulWidget {
+/// Widget for the verify email page.
   final String username;
   final String email;
   final String uid;
@@ -29,6 +33,7 @@ class VerifyEmailPage extends StatefulWidget {
   State<VerifyEmailPage> createState() => _VerifyEmailPageState();
 }
 
+/// State for VerifyEmailPage. Handles email verification logic and user saving.
 class _VerifyEmailPageState extends State<VerifyEmailPage> {
   final _authService = AuthService();
 

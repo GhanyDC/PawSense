@@ -1,8 +1,13 @@
+/// Forgot Password Page
+///
+/// Allows users to request a password reset email using Firebase Authentication.
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/constants.dart';
 import '../../utils/validators.dart';
 
+/// Widget for the forgot password page.
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
 
@@ -10,6 +15,7 @@ class ForgotPasswordPage extends StatefulWidget {
   State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
 }
 
+/// State for ForgotPasswordPage.
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -31,73 +37,70 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     });
     try {
       final email = _emailController.text.trim().toLowerCase();
-      final methods = await _authService.fetchSignInMethodsForEmail(email);
-
-      if (methods.isEmpty) {
-        setState(() => _errorMessage = 'No account found for that email.');
-      } else if (!methods.contains('password')) {
-        setState(
-          () => _errorMessage =
-              'This account is linked with a different sign-in method: ${methods.join(', ')}',
-        );
-      } else {
-        await _authService.sendPasswordResetEmail(email);
-        if (mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 32,
-                horizontal: 24,
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 64),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Email Sent!',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'A password reset link has been sent to your email.',
-                    textAlign: TextAlign.center,
-                    style: kTextStyleRegular,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context); // close dialog
-                      Navigator.pop(context); // back to login
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 32,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Back to Login',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
+      await _authService.sendPasswordResetEmail(email);
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-          );
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 32,
+              horizontal: 24,
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green, size: 64),
+                const SizedBox(height: 16),
+                Text(
+                  'Email Sent!',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'A password reset link has been sent to your email.',
+                  textAlign: TextAlign.center,
+                  style: kTextStyleRegular,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // close dialog
+                    Navigator.pop(context); // back to login
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 32,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Back to Login',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    } on Exception catch (e) {
+      String message = 'Failed to send reset link.';
+      if (e is FirebaseAuthException) {
+        if (e.code == 'user-not-found') {
+          message = 'No account found for that email.';
+        } else {
+          message = e.message ?? message;
         }
       }
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to send reset link: $e');
+      setState(() => _errorMessage = message);
     } finally {
       setState(() => _isLoading = false);
     }
