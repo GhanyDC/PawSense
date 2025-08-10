@@ -1,6 +1,3 @@
-
-/// Home page of the app. Displays a welcome message and logout button.
-/// Home page widget that greets the user and provides logout functionality.
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 import '../services/auth_service.dart';
@@ -8,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../services/user_services.dart';
 
-/// Home page widget that greets the user and provides logout functionality.
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -16,23 +12,18 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-  // Handles authentication
+class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
-  // Handles user data
   final UserServices _userServices = UserServices();
-  // Holds the current user's data
   UserModel? _userModel;
-  // Loading state for user fetch
   bool _loading = true;
 
   @override
   void initState() {
-    // Fetch user data on widget initialization
     super.initState();
     _fetchUser();
   }
 
-  /// Fetches the current user's data from Firestore.
   Future<void> _fetchUser() async {
     final user = _authService.currentUser;
     if (user != null) {
@@ -48,7 +39,6 @@ class HomePage extends StatefulWidget {
     }
   }
 
-  /// Logs out the current user and navigates to the sign in page.
   Future<void> _logout(BuildContext context) async {
     await _authService.signOut();
     if (mounted) {
@@ -58,7 +48,6 @@ class HomePage extends StatefulWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Main UI for the home page
     return Scaffold(
       appBar: AppBar(
         title: Text('Home', style: Theme.of(context).textTheme.titleLarge),
