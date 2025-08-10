@@ -1,16 +1,16 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:pawsense/pages/sign_up_page.dart';
+import 'package:pawsense/pages/auth/sign_up_page.dart';
 import 'package:pawsense/pages/home_page.dart';
-
-import 'firebase_options.dart';
+import 'package:pawsense/pages/auth/sign_in_page.dart';
+import 'utils/constants.dart';
+import 'config/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
+  /// Entry point for the PawSense app.
 }
 
 class MyApp extends StatelessWidget {
@@ -21,15 +21,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'PawSense',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      initialRoute: '/signup',
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.system,
+      initialRoute: '/signin',
       routes: {
+        '/signin': (context) => const SignInPage(),
         '/signup': (context) => const SignUpPage(),
         '/home': (context) => const HomePage(),
       },
     );
   }
 }
-
