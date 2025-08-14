@@ -57,24 +57,33 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
       status: AppointmentStatus.cancelled,
     ),
   ];
-
+  
   @override
   Widget build(BuildContext context) {
+    // Filter appointments for the table only
+    List<Appointment> filteredAppointments = appointments.where((appointment) {
+      if (selectedStatus == 'All Status') return true;
+      return appointment.status.name.toLowerCase() ==
+            selectedStatus.toLowerCase();
+    }).toList();
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header uses full list
             AppointmentHeader(
               onNewAppointment: () {
-                // Handle new appointment
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('New Appointment clicked')),
                 );
               },
             ),
             const SizedBox(height: 24),
+
+            // Summary uses full list
             AppointmentSummary(appointments: appointments),
             const SizedBox(height: 24),
 
@@ -88,8 +97,10 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
             ),
 
             const SizedBox(height: 16),
+
+            // Table uses filtered list
             AppointmentTable(
-              appointments: appointments,
+              appointments: filteredAppointments,
               onEdit: (appointment) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Edit ${appointment.pet.name}')),
@@ -113,4 +124,5 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
       ),
     );
   }
+
 }

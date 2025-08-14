@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/utils/constants.dart';
 
 class Signup extends StatelessWidget {
   const Signup({super.key});

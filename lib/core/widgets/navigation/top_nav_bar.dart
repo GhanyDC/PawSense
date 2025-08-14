@@ -60,13 +60,27 @@ class TopNavBar extends StatelessWidget {
             },
             child: Row(
               children: [
-                Text(
-                  userName,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      userName,
+                      style: TextStyle(
+                        fontSize: kFontSizeRegular-2,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      userRole,
+                      style: TextStyle(
+                        fontSize: kFontSizeSmall,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 12),
                 CircleAvatar(

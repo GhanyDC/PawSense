@@ -40,7 +40,7 @@ class DashboardHeader extends StatelessWidget {
         Text(
           'Welcome back, Dr. Johnson',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: kFontSizeRegular,
             color: AppColors.textSecondary,
           ),
         ),
@@ -48,7 +48,7 @@ class DashboardHeader extends StatelessWidget {
         Text(
           'Monitor your clinic\'s performance and recent activity',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontSizeRegular-2,
             color: AppColors.textTertiary,
           ),
         ),
