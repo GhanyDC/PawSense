@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/pages/web/appointment_screen.dart';
+import 'package:pawsense/pages/web/patient_record_screen.dart';
 import '../../core/widgets/navigation/side_navigation.dart';
 import '../../core/widgets/navigation/top_nav_bar.dart';
 import '../../core/utils/app_colors.dart';
@@ -16,6 +17,7 @@ class _AdminMainState extends State<AdminMain> {
   final List<Widget> _pages = [
     DashboardScreen(),
     AppointmentManagementScreen(),
+    PatientRecordsScreen()
   ];
 
   void _onNavItemSelected(int index) {
