@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../services/auth/auth_service.dart';
+import '../../../core/services/auth/auth_service_mobile.dart';
 import 'forgot_password_page.dart';
-import '../../utils/constants.dart';
-import '../../utils/validators.dart';
-import '../../utils/errors.dart';
+import '../../../core/utils/constants.dart';
+import '../../../core/utils/validators.dart';
+import '../../../core/utils/errors.dart';
 
 /// Sign In Page
 ///

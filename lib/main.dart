@@ -1,11 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:pawsense/pages/auth/sign_up_page.dart';
-import 'package:pawsense/pages/home_page.dart';
-import 'package:pawsense/pages/auth/sign_in_page.dart';
-import 'package:pawsense/pages/signup.dart';
-import 'utils/constants.dart';
-import 'config/firebase_options.dart';
+import 'package:pawsense/pages/mobile/auth/sign_up_page.dart';
+import 'package:pawsense/pages/mobile/home_page.dart';
+import 'package:pawsense/pages/mobile/auth/sign_in_page.dart';
+import 'package:pawsense/pages/mobile/signup.dart';
+import 'core/utils/constants.dart';
+import 'core/config/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
