@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../services/auth/auth_service.dart';
-import '../../models/user_model.dart';
-import '../../utils/constants.dart';
-import '../../utils/errors.dart';
+import '../../../core/services/auth/auth_service_mobile.dart';
+import '../../../core/models/user_model.dart';
+import '../../../core/utils/constants.dart';
+import '../../../core/utils/errors.dart';
 
 /// Verify Email Page
 ///

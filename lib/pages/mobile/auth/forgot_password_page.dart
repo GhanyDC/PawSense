@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../services/auth/auth_service.dart';
-import '../../utils/constants.dart';
-import '../../utils/validators.dart';
-import '../../services/user_services.dart';
-import '../../utils/errors.dart';
+import '../../../core/services/auth/auth_service_mobile.dart';
+import '../../../core/utils/constants.dart';
+import '../../../core/utils/validators.dart';
+import '../../../core/services/user_services.dart';
+import '../../../core/utils/errors.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
