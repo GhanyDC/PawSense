@@ -1,0 +1,116 @@
+// screens/appointment_management_screen.dart
+import 'package:flutter/material.dart';
+import '../../core/utils/app_colors.dart';
+import '../../core/models/appointment_models.dart';
+import '../../core/widgets/appointments/appointment_header.dart';
+import '../../core/widgets/appointments/appointment_filters.dart';
+import '../../core/widgets/appointments/appointment_table.dart';
+import '../../core/widgets/appointments/appointment_summary.dart';
+
+class AppointmentManagementScreen extends StatefulWidget {
+  const AppointmentManagementScreen({Key? key}) : super(key: key);
+
+  @override
+  State<AppointmentManagementScreen> createState() => _AppointmentManagementScreenState();
+}
+
+class _AppointmentManagementScreenState extends State<AppointmentManagementScreen> {
+  String searchQuery = '';
+  String selectedStatus = 'All Status';
+  String selectedView = 'Table';
+
+  // Sample data
+  final List<Appointment> appointments = [
+    Appointment(
+      time: '09:00 AM',
+      pet: Pet(name: 'Max', type: 'Dog', emoji: '🐕'),
+      diseaseReason: 'Skin Allergies',
+      owner: Owner(name: 'John Smith', phone: '+1 (555) 123-4567'),
+      status: AppointmentStatus.pending,
+    ),
+    Appointment(
+      time: '10:30 AM',
+      pet: Pet(name: 'Luna', type: 'Cat', emoji: '🐱'),
+      diseaseReason: 'Routine Checkup',
+      owner: Owner(name: 'Sarah Johnson', phone: '+1 (555) 987-6543'),
+      status: AppointmentStatus.confirmed,
+    ),
+    Appointment(
+      time: '02:00 PM',
+      pet: Pet(name: 'Buddy', type: 'Dog', emoji: '🐕'),
+      diseaseReason: 'Dental Cleaning',
+      owner: Owner(name: 'Mike Wilson', phone: '+1 (555) 456-7890'),
+      status: AppointmentStatus.completed,
+    ),
+    Appointment(
+      time: '03:30 PM',
+      pet: Pet(name: 'Whiskers', type: 'Cat', emoji: '🐱'),
+      diseaseReason: 'Digestive Issues',
+      owner: Owner(name: 'Emily Davis', phone: '+1 (555) 234-5678'),
+      status: AppointmentStatus.pending,
+    ),
+    Appointment(
+      time: '04:45 PM',
+      pet: Pet(name: 'Rocky', type: 'Dog', emoji: '🐕'),
+      diseaseReason: 'Emergency Visit',
+      owner: Owner(name: 'David Brown', phone: '+1 (555) 345-6789'),
+      status: AppointmentStatus.cancelled,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppointmentHeader(
+              onNewAppointment: () {
+                // Handle new appointment
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('New Appointment clicked')),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            AppointmentSummary(appointments: appointments),
+            const SizedBox(height: 24),
+
+            AppointmentFilters(
+              searchQuery: searchQuery,
+              selectedStatus: selectedStatus,
+              selectedView: selectedView,
+              onSearchChanged: (query) => setState(() => searchQuery = query),
+              onStatusChanged: (status) => setState(() => selectedStatus = status),
+              onViewChanged: (view) => setState(() => selectedView = view),
+            ),
+
+            const SizedBox(height: 16),
+            AppointmentTable(
+              appointments: appointments,
+              onEdit: (appointment) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Edit ${appointment.pet.name}')),
+                );
+              },
+              onDelete: (appointment) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Delete ${appointment.pet.name}')),
+                );
+              },
+              onView: (appointment) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('View ${appointment.pet.name}')),
+                );
+              },
+            ),
+            
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
