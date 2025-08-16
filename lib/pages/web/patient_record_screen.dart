@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/models/patient_data.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
-import 'package:pawsense/core/widgets/patient_records/patient_card.dart';
-import 'package:pawsense/core/widgets/patient_records/patient_filters.dart';
-import 'package:pawsense/core/widgets/patient_records/patient_header.dart';
-import 'package:pawsense/core/widgets/patient_records/patient_status.dart';
+import 'package:pawsense/core/widgets/admin/patient_records/patient_card.dart';
+import 'package:pawsense/core/widgets/admin/patient_records/patient_filters.dart';
+import 'package:pawsense/core/widgets/admin/patient_records/patient_header.dart';
+import 'package:pawsense/core/widgets/admin/patient_records/patient_status.dart';
 import 'dart:math';
 
 class PatientRecordsScreen extends StatefulWidget {

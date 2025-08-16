@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
-import 'package:pawsense/core/widgets/clinic_schedule/schedule_header.dart';
-import 'package:pawsense/core/widgets/clinic_schedule/schedule_stats.dart';
-import 'package:pawsense/core/widgets/clinic_schedule/time_slot_list.dart';
-import 'package:pawsense/core/widgets/clinic_schedule/week_days_grid.dart';
-import 'package:pawsense/core/widgets/clinic_schedule/week_navigation.dart';
+import 'package:pawsense/core/widgets/admin/clinic_schedule/schedule_header.dart';
+import 'package:pawsense/core/widgets/admin/clinic_schedule/schedule_stats.dart';
+import 'package:pawsense/core/widgets/admin/clinic_schedule/time_slot_list.dart';
+import 'package:pawsense/core/widgets/admin/clinic_schedule/week_days_grid.dart';
+import 'package:pawsense/core/widgets/admin/clinic_schedule/week_navigation.dart';
 
 
 class ClinicScheduleScreen extends StatefulWidget {

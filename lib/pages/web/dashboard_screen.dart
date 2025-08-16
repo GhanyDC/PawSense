@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/widgets/dashboard/recent_activity_list.dart';
-import '../../core/widgets/dashboard/stats_cards_list.dart';
-import '../../core/widgets/dashboard/dashboard_header.dart';
-import '../../core/widgets/dashboard/common_diseases_chart.dart';
+import 'package:pawsense/core/widgets/admin/dashboard/recent_activity_list.dart';
+import '../../core/widgets/admin/dashboard/stats_cards_list.dart';
+import '../../core/widgets/admin/dashboard/dashboard_header.dart';
+import '../../core/widgets/admin/dashboard/common_diseases_chart.dart';
 import '../../core/utils/app_colors.dart';
 
 class DashboardScreen extends StatefulWidget {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../core/widgets/notifications/notification_header.dart';
-import '../../core/widgets/notifications/notification_tabs.dart';
-import '../../core/widgets/notifications/notification_item.dart';
+import '../../core/widgets/admin/notifications/notification_header.dart';
+import '../../core/widgets/admin/notifications/notification_tabs.dart';
+import '../../core/widgets/admin/notifications/notification_item.dart';
 import '../../core/utils/app_colors.dart';
 
 class NotificationsScreen extends StatefulWidget {

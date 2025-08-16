@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/app_colors.dart';
 import '../../core/utils/constants.dart';
-import '../../core/widgets/settings/settings_header.dart';
-import '../../core/widgets/settings/settings_navigation.dart';
-import '../../core/widgets/settings/account_settings.dart';
-import '../../core/widgets/settings/clinic_settings.dart';
-import '../../core/widgets/settings/notification_settings.dart';
-import '../../core/widgets/settings/security_settings.dart';
+import '../../core/widgets/admin/settings/settings_header.dart';
+import '../../core/widgets/admin/settings/settings_navigation.dart';
+import '../../core/widgets/admin/settings/account_settings.dart';
+import '../../core/widgets/admin/settings/clinic_settings.dart';
+import '../../core/widgets/admin/settings/notification_settings.dart';
+import '../../core/widgets/admin/settings/security_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);

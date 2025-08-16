@@ -2,10 +2,10 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/app_colors.dart';
 import '../../core/models/appointment_models.dart';
-import '../../core/widgets/appointments/appointment_header.dart';
-import '../../core/widgets/appointments/appointment_filters.dart';
-import '../../core/widgets/appointments/appointment_table.dart';
-import '../../core/widgets/appointments/appointment_summary.dart';
+import '../../core/widgets/admin/appointments/appointment_header.dart';
+import '../../core/widgets/admin/appointments/appointment_filters.dart';
+import '../../core/widgets/admin/appointments/appointment_table.dart';
+import '../../core/widgets/admin/appointments/appointment_summary.dart';
 
 class AppointmentManagementScreen extends StatefulWidget {
   const AppointmentManagementScreen({Key? key}) : super(key: key);

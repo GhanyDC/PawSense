@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/constants.dart';
-import 'package:pawsense/core/widgets/support/faq_list.dart';
-import 'package:pawsense/core/widgets/support/support_filters.dart';
-import 'package:pawsense/core/widgets/support/support_header.dart';
-import 'package:pawsense/core/widgets/support/support_tabs.dart';
-import 'package:pawsense/core/widgets/support/ticket_list.dart';
+import 'package:pawsense/core/widgets/admin/support/faq_list.dart';
+import 'package:pawsense/core/widgets/admin/support/support_filters.dart';
+import 'package:pawsense/core/widgets/admin/support/support_header.dart';
+import 'package:pawsense/core/widgets/admin/support/support_tabs.dart';
+import 'package:pawsense/core/widgets/admin/support/ticket_list.dart';
 import '../../core/utils/app_colors.dart';
 
 class SupportCenterScreen extends StatefulWidget {
