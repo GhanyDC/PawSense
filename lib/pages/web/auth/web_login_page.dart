@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/auth/auth_service_web.dart';
 import '../../../core/utils/app_colors.dart';
 import '../../../core/utils/constants.dart';
+import 'package:flutter/gestures.dart';
 
 class WebLoginPage extends StatefulWidget {
   const WebLoginPage({Key? key}) : super(key: key);
@@ -407,6 +408,13 @@ class _WebLoginPageState extends State<WebLoginPage> {
                               color: AppColors.primary,
                               fontWeight: FontWeight.w500,
                             ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                Navigator.pushReplacementNamed(
+                                  context,
+                                  '/websignup',
+                                );
+                              },
                           ),
                         ],
                       ),

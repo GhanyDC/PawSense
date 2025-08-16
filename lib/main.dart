@@ -7,6 +7,7 @@ import 'package:pawsense/pages/mobile/home_page.dart';
 import 'package:pawsense/pages/web/admin_main.dart';
 import 'package:pawsense/pages/web/dashboard_screen.dart';
 import 'package:pawsense/pages/web/auth/web_login_page.dart';
+import 'package:pawsense/pages/web/auth/admin_signup_page.dart';
 import 'package:pawsense/pages/web/superadmin_page.dart';
 import 'package:pawsense/core/services/auth/auth_service_web.dart';
 import 'package:pawsense/core/utils/constants.dart';
@@ -47,6 +48,7 @@ class PawSenseApp extends StatelessWidget {
 
         // Web routes
         '/web_login': (context) => const WebLoginPage(),
+        '/admin_signup': (context) => const AdminSignupPage(),
         '/admin_main': (context) => const AdminMainGuard(),
         '/super_admin': (context) => const SuperAdminPageGuard(),
         '/dashboard': (context) => DashboardScreen(),
