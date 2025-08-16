@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:pawsense/pages/web/appointment_screen.dart';
 import 'package:pawsense/pages/web/clinic_schedule_screen.dart';
 import 'package:pawsense/pages/web/patient_record_screen.dart';
-import 'package:pawsense/pages/web/clinic_schedule_screen.dart';
+import 'package:pawsense/pages/web/settings_screen.dart';
+import 'package:pawsense/pages/web/support_screen.dart';
 import 'package:pawsense/pages/web/vet_profile_screen.dart';
 import '../../core/widgets/navigation/side_navigation.dart';
 import '../../core/widgets/navigation/top_nav_bar.dart';
@@ -36,8 +37,8 @@ class _AdminMainState extends State<AdminMain> {
     ClinicScheduleScreen(),
     VetProfileScreen(),
     NotificationsScreen(),
-    SizedBox(), // Support
-    SizedBox(), // Settings
+    SupportCenterScreen(),
+    SettingsScreen()
   ];
 
   void _onNavItemSelected(int index) {
