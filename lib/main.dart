@@ -48,7 +48,7 @@ class PawSenseApp extends StatelessWidget {
         // Web routes - Both admin and super admin use the same guard
         '/web_login': (context) => const WebLoginPage(),
         '/admin_signup': (context) => const AdminSignupPage(),
-        '/admin': (context) => const AdminMainGuard(),
+        '/admin_main': (context) => const AdminMainGuard(),
         '/dashboard': (context) => DashboardScreen(),
       },
     );
