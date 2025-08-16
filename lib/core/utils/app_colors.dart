@@ -12,4 +12,12 @@ class AppColors {
   static const Color warning = Color(0xFFF59E0B);
   static const Color error = Color(0xFFEF4444);
   static const Color info = Color(0xFF3B82F6);
+
+  // Status colors
+  static const Color statusOpen = Color(0xFFEF4444);
+  static const Color statusInProgress = Color(0xFFF59E0B);
+  static const Color statusResolved = Color(0xFF10B981);
+  static const Color statusOpenBg = Color(0xFFFEF2F2);
+  static const Color statusInProgressBg = Color(0xFFFEF3C7);
+  static const Color statusResolvedBg = Color(0xFFECFDF5);
 }
