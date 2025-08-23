@@ -48,8 +48,8 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
   final _websiteController = TextEditingController();
 
   // Step 3: Services and Certifications - Dynamic lists
-  List<ClinicService> _services = [];
-  List<ClinicCertification> _certifications = [];
+  final List<ClinicService> _services = [];
+  final List<ClinicCertification> _certifications = [];
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -862,7 +862,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
         ..._services.asMap().entries.map((entry) {
           final index = entry.key;
           return _buildServiceCard(index);
-        }).toList(),
+        }),
       ],
     );
   }
@@ -1014,7 +1014,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
         ..._certifications.asMap().entries.map((entry) {
           final index = entry.key;
           return _buildCertificationCard(index);
-        }).toList(),
+        }),
       ],
     );
   }

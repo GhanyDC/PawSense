@@ -489,7 +489,7 @@ class DataService {
       'total_entries': _cache.length,
       'active_entries': activeEntries,
       'expired_entries': expiredEntries,
-      'cache_hit_potential': _cache.length > 0 ? activeEntries / _cache.length : 0.0,
+      'cache_hit_potential': _cache.isNotEmpty ? activeEntries / _cache.length : 0.0,
     };
   }
 

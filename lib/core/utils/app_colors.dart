@@ -20,4 +20,22 @@ class AppColors {
   static const Color statusOpenBg = Color(0xFFFEF2F2);
   static const Color statusInProgressBg = Color(0xFFFEF3C7);
   static const Color statusResolvedBg = Color(0xFFECFDF5);
+
+  // Role colors
+  static const Color roleUser = Color(0xFF10B981); // Green
+  static const Color roleAdmin = Color(0xFF3B82F6); // Blue
+  static const Color roleSuperAdmin = Color(0xFF8B5CF6); // Purple
+  static const Color roleUserBg = Color(0xFFECFDF5);
+  static const Color roleAdminBg = Color(0xFFEFF6FF);
+  static const Color roleSuperAdminBg = Color(0xFFF3E8FF);
+
+  // Clinic status colors
+  static const Color clinicPending = Color(0xFFF59E0B); // Orange
+  static const Color clinicApproved = Color(0xFF10B981); // Green
+  static const Color clinicRejected = Color(0xFFEF4444); // Red
+  static const Color clinicSuspended = Color(0xFF6B7280); // Gray
+  static const Color clinicPendingBg = Color(0xFFFEF3C7);
+  static const Color clinicApprovedBg = Color(0xFFECFDF5);
+  static const Color clinicRejectedBg = Color(0xFFFEF2F2);
+  static const Color clinicSuspendedBg = Color(0xFFF9FAFB);
 }
