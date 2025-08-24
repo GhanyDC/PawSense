@@ -10,12 +10,12 @@ class UserCard extends StatelessWidget {
   final Function(bool) onStatusToggle;
 
   const UserCard({
-    Key? key,
+    super.key,
     required this.user,
     required this.onEdit,
     required this.onDelete,
     required this.onStatusToggle,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

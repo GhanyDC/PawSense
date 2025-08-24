@@ -9,12 +9,12 @@ class UserSummaryCards extends StatelessWidget {
   final int adminUsers;
 
   const UserSummaryCards({
-    Key? key,
+    super.key,
     required this.totalUsers,
     required this.activeUsers,
     required this.inactiveUsers,
     required this.adminUsers,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

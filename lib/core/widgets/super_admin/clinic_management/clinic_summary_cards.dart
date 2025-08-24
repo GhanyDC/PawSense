@@ -10,13 +10,13 @@ class ClinicSummaryCards extends StatelessWidget {
   final int suspendedClinics;
 
   const ClinicSummaryCards({
-    Key? key,
+    super.key,
     required this.totalClinics,
     required this.pendingClinics,
     required this.approvedClinics,
     required this.rejectedClinics,
     required this.suspendedClinics,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

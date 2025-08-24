@@ -10,7 +10,7 @@ import '../../../core/widgets/shared/pagination_widget.dart';
 import '../../../core/services/super_admin/super_admin_service.dart';
 
 class ClinicManagementScreen extends StatefulWidget {
-  const ClinicManagementScreen({Key? key}) : super(key: key);
+  const ClinicManagementScreen({super.key});
 
   @override
   State<ClinicManagementScreen> createState() => _ClinicManagementScreenState();
@@ -63,12 +63,27 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
       // Load clinic statistics
       final stats = await SuperAdminService.getClinicStatistics();
       
+      // Fallback: if statistics are all 0 but we have clinics, compute manually
+      final hasEmptyStats = stats.values.every((count) => count == 0);
+      Map<String, int> finalStats = stats;
+      
+      if (hasEmptyStats && (result['clinics'] as List<ClinicRegistration>).isNotEmpty) {
+        final allClinics = await SuperAdminService.getAllClinicRegistrations();
+        finalStats = {
+          'total': allClinics.length,
+          'pending': allClinics.where((c) => c.status == ClinicStatus.pending).length,
+          'approved': allClinics.where((c) => c.status == ClinicStatus.approved).length,
+          'rejected': allClinics.where((c) => c.status == ClinicStatus.rejected).length,
+          'suspended': allClinics.where((c) => c.status == ClinicStatus.suspended).length,
+        };
+      }
+      
       setState(() {
         _clinics = result['clinics'] as List<ClinicRegistration>;
         _totalClinics = result['totalClinics'] as int;
         _totalPages = result['totalPages'] as int;
         _currentPage = result['currentPage'] as int;
-        _clinicStats = stats;
+        _clinicStats = finalStats;
         _isLoading = false;
       });
       
@@ -169,6 +184,32 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
     _loadClinics(); // Load new page
   }
 
+  /// Map a [ClinicStatus] enum to the key name used in [_clinicStats]
+  String _statusKey(ClinicStatus status) {
+    return status.toString().split('.').last; // e.g. ClinicStatus.pending -> 'pending'
+  }
+
+  /// Update local [_clinicStats] to reflect a status change for [clinic].
+  /// This updates the counts immediately for a snappy UI while we still call
+  /// `_loadClinics()` to re-sync with the backend.
+  void _updateLocalClinicStatsForStatusChange(ClinicRegistration clinic, ClinicStatus newStatus) {
+    final oldStatus = clinic.status;
+    if (oldStatus == newStatus) return;
+
+    final oldKey = _statusKey(oldStatus);
+    final newKey = _statusKey(newStatus);
+
+    setState(() {
+      // Safely decrement the old status count (don't go below 0)
+      final oldCount = _clinicStats[oldKey] ?? _clinics.where((c) => c.status == oldStatus).length;
+      _clinicStats[oldKey] = (oldCount > 0) ? oldCount - 1 : 0;
+
+      // Increment the new status count
+      final newCount = _clinicStats[newKey] ?? 0;
+      _clinicStats[newKey] = newCount + 1;
+    });
+  }
+
   void _onViewDetails(ClinicRegistration clinic) {
     // TODO: Show clinic details dialog
     ScaffoldMessenger.of(context).showSnackBar(
@@ -214,6 +255,9 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
         );
         
         if (success) {
+          // Update local summary counts immediately for snappy UI
+          _updateLocalClinicStatsForStatusChange(clinic, ClinicStatus.approved);
+
           final successMessage = isReapproval 
               ? '${clinic.clinicName} re-approved successfully'
               : '${clinic.clinicName} approved successfully';
@@ -224,6 +268,19 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
               backgroundColor: AppColors.success,
             ),
           );
+          // Update the local clinic item so the list row shows the new status
+          setState(() {
+            final idx = _clinics.indexWhere((c) => c.id == clinic.id);
+            if (idx != -1) {
+              _clinics[idx] = _clinics[idx].copyWith(
+                status: ClinicStatus.approved,
+                approvedDate: DateTime.now(),
+                rejectionReason: null,
+                suspensionReason: null,
+              );
+            }
+          });
+
           _loadClinics(); // Reload to get updated data
         } else {
           throw Exception('Failed to approve clinic');
@@ -296,12 +353,28 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
         );
         
         if (success) {
+          // Update local summary counts immediately for snappy UI
+          _updateLocalClinicStatsForStatusChange(clinic, ClinicStatus.rejected);
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${clinic.clinicName} rejected'),
               backgroundColor: AppColors.error,
             ),
           );
+          // Update the local clinic item so the list row shows the new status
+          setState(() {
+            final idx = _clinics.indexWhere((c) => c.id == clinic.id);
+            if (idx != -1) {
+              _clinics[idx] = _clinics[idx].copyWith(
+                status: ClinicStatus.rejected,
+                approvedDate: null,
+                rejectionReason: result['reason'] ?? 'Rejected by admin',
+                suspensionReason: null,
+              );
+            }
+          });
+
           _loadClinics(); // Reload to get updated data
         } else {
           throw Exception('Failed to reject clinic');
@@ -374,12 +447,28 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
         );
         
         if (success) {
+          // Update local summary counts immediately for snappy UI
+          _updateLocalClinicStatsForStatusChange(clinic, ClinicStatus.suspended);
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${clinic.clinicName} suspended'),
               backgroundColor: AppColors.warning,
             ),
           );
+          // Update the local clinic item so the list row shows the new status
+          setState(() {
+            final idx = _clinics.indexWhere((c) => c.id == clinic.id);
+            if (idx != -1) {
+              _clinics[idx] = _clinics[idx].copyWith(
+                status: ClinicStatus.suspended,
+                approvedDate: null,
+                rejectionReason: null,
+                suspensionReason: result['reason'] ?? 'Suspended by admin',
+              );
+            }
+          });
+
           _loadClinics(); // Reload to get updated data
         } else {
           throw Exception('Failed to suspend clinic');
@@ -413,12 +502,22 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
             SizedBox(height: kSpacingLarge),
             
             // Summary Cards
-            ClinicSummaryCards(
-              totalClinics: _clinicStats['total'] ?? _clinics.length,
-              pendingClinics: _clinicStats['pending'] ?? _clinics.where((c) => c.status == ClinicStatus.pending).length,
-              approvedClinics: _clinicStats['approved'] ?? _clinics.where((c) => c.status == ClinicStatus.approved).length,
-              rejectedClinics: _clinicStats['rejected'] ?? _clinics.where((c) => c.status == ClinicStatus.rejected).length,
-              suspendedClinics: _clinicStats['suspended'] ?? _clinics.where((c) => c.status == ClinicStatus.suspended).length,
+            Builder(
+              builder: (context) {
+                final totalClinics = _clinicStats['total'] ?? _clinics.length;
+                final pendingClinics = _clinicStats['pending'] ?? _clinics.where((c) => c.status == ClinicStatus.pending).length;
+                final approvedClinics = _clinicStats['approved'] ?? _clinics.where((c) => c.status == ClinicStatus.approved).length;
+                final rejectedClinics = _clinicStats['rejected'] ?? _clinics.where((c) => c.status == ClinicStatus.rejected).length;
+                final suspendedClinics = _clinicStats['suspended'] ?? _clinics.where((c) => c.status == ClinicStatus.suspended).length;
+      
+                return ClinicSummaryCards(
+                  totalClinics: totalClinics,
+                  pendingClinics: pendingClinics,
+                  approvedClinics: approvedClinics,
+                  rejectedClinics: rejectedClinics,
+                  suspendedClinics: suspendedClinics,
+                );
+              },
             ),
             
             SizedBox(height: kSpacingLarge),

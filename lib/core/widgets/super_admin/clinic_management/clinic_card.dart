@@ -11,13 +11,13 @@ class ClinicCard extends StatelessWidget {
   final VoidCallback onSuspend;
 
   const ClinicCard({
-    Key? key,
+    super.key,
     required this.clinic,
     required this.onViewDetails,
     required this.onApprove,
     required this.onReject,
     required this.onSuspend,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -13,7 +13,7 @@ class UserSearchAndFilter extends StatefulWidget {
   final VoidCallback onExportData;
 
   const UserSearchAndFilter({
-    Key? key,
+    super.key,
     required this.searchQuery,
     required this.selectedRole,
     required this.selectedStatus,
@@ -21,7 +21,7 @@ class UserSearchAndFilter extends StatefulWidget {
     required this.onRoleChanged,
     required this.onStatusChanged,
     required this.onExportData,
-  }) : super(key: key);
+  });
 
   @override
   State<UserSearchAndFilter> createState() => _UserSearchAndFilterState();

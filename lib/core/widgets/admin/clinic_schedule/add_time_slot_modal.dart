@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
-import 'package:pawsense/core/utils/constants.dart';
 
 class AddTimeSlotModal extends StatefulWidget {
   final void Function(Map<String, dynamic> timeSlot)? onCreate;

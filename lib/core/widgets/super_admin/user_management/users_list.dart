@@ -13,14 +13,14 @@ class UsersList extends StatelessWidget {
   final Function(UserModel, bool) onStatusToggle;
 
   const UsersList({
-    Key? key,
+    super.key,
     required this.users,
     required this.isLoading,
     required this.totalUsers,
     required this.onEditUser,
     required this.onDeleteUser,
     required this.onStatusToggle,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

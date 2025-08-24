@@ -45,6 +45,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
 
   // Step 2: Clinic Info
   final _clinicNameController = TextEditingController();
+  final _clinicDescriptionController = TextEditingController();
   final _clinicAddressController = TextEditingController();
   final _clinicPhoneController = TextEditingController();
   final _clinicEmailController = TextEditingController();
@@ -91,6 +92,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
     _lastNameController.dispose();
     _contactNumberController.dispose();
     _clinicNameController.dispose();
+  _clinicDescriptionController.dispose();
     _clinicAddressController.dispose();
     _clinicPhoneController.dispose();
     _clinicEmailController.dispose();
@@ -127,6 +129,11 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
   /// Prepare certifications with dynamic data before signup
   List<ClinicCertification> _prepareCertificationsForSignup() {
     return _certifications.where((cert) => _isCertificationValid(cert)).toList();
+  }
+
+  /// Prepare licenses with dynamic data before signup
+  List<ClinicLicense> _prepareLicensesForSignup() {
+    return _licenses.where((license) => _isLicenseValid(license)).toList();
   }
 
   /// Check if service has enough data to be valid
@@ -282,10 +289,10 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
     });
 
     try {
-      // Prepare services and certifications with dynamic data before signup
+      // Prepare services, certifications, and licenses with dynamic data before signup
       final preparedServices = _prepareServicesForSignup();
       final preparedCertifications = _prepareCertificationsForSignup();
-      // Note: License preparation skipped for now due to Google Drive limitations
+      final preparedLicenses = _prepareLicensesForSignup();
 
       // Create the auth account with dynamic field structure
       final result = await _authService.signUpClinicAdmin(
@@ -310,22 +317,26 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
         clinicDetailsData: ClinicDetails(
           id: '', // Will be generated
           clinicId: '', // Will be set to uid
-          clinicName: _clinicNameController.text.trim(),
-          description: 'Veterinary clinic providing comprehensive pet care services',
+      clinicName: _clinicNameController.text.trim(),
+      description: _clinicDescriptionController.text.trim().isEmpty
+        ? 'Veterinary clinic providing comprehensive pet care services'
+        : _clinicDescriptionController.text.trim(),
           address: _clinicAddressController.text.trim(),
           phone: _clinicPhoneController.text.trim(),
           email: _clinicEmailController.text.trim(),
           services: preparedServices,
           certifications: preparedCertifications,
+          licenses: preparedLicenses,
           createdAt: DateTime.now(),
         ).toMap(),
       );
 
       if (result.success && result.user != null) {
-        // Skip document upload for now due to Google Drive service account limitations
+        // License data (ID, dates) saved successfully
+        // Document images are kept in UI state but not uploaded to storage yet
         // Documents can be uploaded later through admin panel or profile management
         print('✅ Account created successfully: ${result.user!.uid}');
-        print('   Note: Document upload skipped due to service account limitations');
+        print('   Note: License data saved, document images will be uploaded later');
         
         // Show success message and navigate to login
         _showSuccessDialog();
@@ -360,7 +371,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           ),
         ),
         content: Text(
-          'Your registration has been submitted. Please wait for admin approval before logging in.\n\nNote: Document uploads will be available in your profile after approval.',
+          'Your registration has been submitted with all the license information. Please wait for admin approval before logging in.\n\nNote: Document uploads for certifications and licenses will be available in your profile after approval.',
           style: kTextStyleRegular.copyWith(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
         ),
@@ -504,8 +515,8 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           id: 'license_${DateTime.now().millisecondsSinceEpoch}', // Dynamic ID
           clinicId: '', // Will be set to real clinic ID during signup
           licenseId: '', // License ID to be entered by user
-          licensePictureUrl: '', // Required - will be set after image upload
-          licensePictureFileId: '', // Required - will be set after image upload
+          licensePictureUrl: null, // Will be set after image upload (optional for now)
+          licensePictureFileId: null, // Will be set after image upload (optional for now)
           issueDate: Timestamp.now(),
           expiryDate: Timestamp.fromDate(DateTime.now().add(const Duration(days: 365))), // Default 1 year
           createdAt: DateTime.now(),
@@ -769,6 +780,23 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           ),
           const SizedBox(height: 20),
 
+          // Username
+          _buildTextField(
+            controller: _usernameController,
+            label: 'Username',
+            hint: 'Enter your username',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a username';
+              }
+              if (value.length < 3) {
+                return 'Username must be at least 3 characters';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+
           // Email
           _buildTextField(
             controller: _emailController,
@@ -810,22 +838,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           ),
           const SizedBox(height: 20),
 
-          // Username
-          _buildTextField(
-            controller: _usernameController,
-            label: 'Username',
-            hint: 'Enter your username',
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a username';
-              }
-              if (value.length < 3) {
-                return 'Username must be at least 3 characters';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 20),
+  
 
           // Password
           _buildTextField(
@@ -916,6 +929,32 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Please enter your clinic name';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+
+          // Clinic Description (optional)
+          Text(
+            'Clinic Description (Optional)',
+            style: kTextStyleSmall.copyWith(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _clinicDescriptionController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: 'Brief description of your clinic services, specialties, or mission',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value != null && value.length > 1000) {
+                return 'Description must be under 1000 characters';
               }
               return null;
             },

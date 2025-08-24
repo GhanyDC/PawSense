@@ -15,8 +15,8 @@ class ClinicLicense {
   final String id;
   final String clinicId;
   final String licenseId; // Changed from licenseDescription
-  final String licensePictureUrl; // Made required
-  final String licensePictureFileId; // Made required - Google Drive file ID
+  final String? licensePictureUrl; // Made required
+  final String? licensePictureFileId; // Made required - Google Drive file ID
   final Timestamp issueDate;
   final Timestamp expiryDate;
   final LicenseStatus status;
@@ -28,9 +28,9 @@ class ClinicLicense {
   const ClinicLicense({
     required this.id,
     required this.clinicId,
-    required this.licenseId, // Changed from licenseDescription
-    required this.licensePictureUrl, // Made required
-    required this.licensePictureFileId, // Made required
+    required this.licenseId, 
+    this.licensePictureUrl, 
+    this.licensePictureFileId, 
     required this.issueDate,
     required this.expiryDate,
     this.status = LicenseStatus.pending,
@@ -45,7 +45,7 @@ class ClinicLicense {
     return {
       'id': id,
       'clinicId': clinicId,
-      'licenseId': licenseId, // Changed from licenseDescription
+      'licenseId': licenseId,
       'licensePictureUrl': licensePictureUrl,
       'licensePictureFileId': licensePictureFileId,
       'issueDate': issueDate,

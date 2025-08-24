@@ -11,13 +11,13 @@ class ClinicSearchAndFilter extends StatefulWidget {
   final VoidCallback onExportData;
 
   const ClinicSearchAndFilter({
-    Key? key,
+    super.key,
     required this.searchQuery,
     required this.selectedStatus,
     required this.onSearchChanged,
     required this.onStatusChanged,
     required this.onExportData,
-  }) : super(key: key);
+  });
 
   @override
   State<ClinicSearchAndFilter> createState() => _ClinicSearchAndFilterState();

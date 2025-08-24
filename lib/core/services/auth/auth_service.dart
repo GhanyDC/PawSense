@@ -360,6 +360,15 @@ class AuthService {
         clinicDetailsWithIds['certifications'] = certifications;
       }
 
+      if (clinicDetailsWithIds['licenses'] != null) {
+        final licenses = List<Map<String, dynamic>>.from(clinicDetailsWithIds['licenses']);
+        for (int i = 0; i < licenses.length; i++) {
+          licenses[i]['clinicId'] = uid; // Set proper clinic ID for each license
+          print('   License ${i + 1}: ${licenses[i]['licenseId']} (ID: ${licenses[i]['id']})');
+        }
+        clinicDetailsWithIds['licenses'] = licenses;
+      }
+
       await _firestore.collection('clinicDetails').doc(clinicDetailsId).set(clinicDetailsWithIds);
       
       print('✅ Clinic details created successfully');
@@ -368,6 +377,7 @@ class AuthService {
       print('   Verification Status: false (awaiting admin approval)');
       print('   Services count: ${(clinicDetailsWithIds['services'] as List?)?.length ?? 0}');
       print('   Certifications count: ${(clinicDetailsWithIds['certifications'] as List?)?.length ?? 0}');
+      print('   Licenses count: ${(clinicDetailsWithIds['licenses'] as List?)?.length ?? 0}');
       
       return true;
     } catch (e) {
