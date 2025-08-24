@@ -1,7 +1,7 @@
 // widgets/appointment_summary.dart
 import 'package:flutter/material.dart';
 import '../../../utils/app_colors.dart';
-import '../../../models/appointment_models.dart';
+import '../../../models/clinic/appointment_models.dart';
 import 'summary_card.dart';
 
 class AppointmentSummary extends StatelessWidget {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../models/time_slot.dart';
+import '../../../models/clinic/time_slot.dart';
 
 class TimeSlotItem extends StatelessWidget {
   final TimeSlot timeSlot;

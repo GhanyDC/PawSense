@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../models/disease_data.dart';
+import '../../../models/user/disease_data.dart';
 import '../../../utils/app_colors.dart';
 import '../../../utils/constants.dart';
 import 'disease_item.dart';
