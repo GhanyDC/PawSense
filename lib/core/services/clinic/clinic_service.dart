@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/clinic_model.dart';
+import '../../models/clinic/clinic_model.dart';
 import '../../guards/auth_guard.dart';
 
 /// Service for managing clinic basic information

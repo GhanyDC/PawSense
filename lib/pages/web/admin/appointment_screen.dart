@@ -1,7 +1,7 @@
 // screens/appointment_management_screen.dart
 import 'package:flutter/material.dart';
 import '../../../core/utils/app_colors.dart';
-import '../../../core/models/appointment_models.dart';
+import '../../../core/models/clinic/appointment_models.dart';
 import '../../../core/widgets/admin/appointments/appointment_header.dart';
 import '../../../core/widgets/admin/appointments/new_appointment_modal.dart';
 import '../../../core/widgets/admin/appointments/appointment_filters.dart';

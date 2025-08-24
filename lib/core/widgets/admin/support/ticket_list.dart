@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/models/ticket_status.dart';
+import 'package:pawsense/core/models/support/ticket_status.dart';
 import 'package:pawsense/core/widgets/admin/support/ticket_item.dart';
-import '../../../models/support_ticket.dart';
+import '../../../models/support/support_ticket.dart';
 import '../../../utils/constants.dart';
 
 class TicketList extends StatelessWidget {

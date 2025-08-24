@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/user_model.dart';
-import '../../models/clinic_model.dart';
+import '../../models/user/user_model.dart';
+import '../../models/clinic/clinic_model.dart';
 import '../../guards/auth_guard.dart';
 import 'token_manager.dart';
 

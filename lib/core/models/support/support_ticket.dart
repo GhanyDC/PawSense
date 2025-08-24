@@ -1,4 +1,4 @@
-import 'package:pawsense/core/models/ticket_status.dart';
+import 'package:pawsense/core/models/support/ticket_status.dart';
 
 class SupportTicket {
   final String id;

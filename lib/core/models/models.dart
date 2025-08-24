@@ -1,7 +1,7 @@
 // Export all models
-export 'user_model.dart';
-export 'clinic_model.dart';
-export 'clinic_details_model.dart';
-export 'clinic_service_model.dart';
-export 'clinic_certification_model.dart';
-export 'clinic_license_model.dart';
+export 'user/user_model.dart';
+export 'clinic/clinic_model.dart';
+export 'clinic/clinic_details_model.dart';
+export 'clinic/clinic_service_model.dart';
+export 'clinic/clinic_certification_model.dart';
+export 'clinic/clinic_license_model.dart';

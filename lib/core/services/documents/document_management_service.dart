@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../google_drive/google_drive_service.dart';
-import '../../models/clinic_certification_model.dart';
-import '../../models/clinic_license_model.dart';
-import '../../models/clinic_details_model.dart';
+import '../../models/clinic/clinic_certification_model.dart';
+import '../../models/clinic/clinic_license_model.dart';
+import '../../models/clinic/clinic_details_model.dart';
 
 /// Service for managing clinic documents (certifications and licenses)
 class DocumentManagementService {

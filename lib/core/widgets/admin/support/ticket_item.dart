@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../models/support_ticket.dart';
-import '../../../models/ticket_status.dart';
+import '../../../models/support/support_ticket.dart';
+import '../../../models/support/ticket_status.dart';
 import '../../../utils/app_colors.dart';
 import '../../../utils/constants.dart';
 import 'ticket_details_modal.dart';

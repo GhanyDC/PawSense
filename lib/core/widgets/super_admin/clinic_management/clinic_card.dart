@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/models/clinic_registration_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_registration_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 

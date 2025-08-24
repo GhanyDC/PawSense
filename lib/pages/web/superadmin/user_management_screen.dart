@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/models/user_model.dart';
+import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/widgets/shared/page_header.dart';

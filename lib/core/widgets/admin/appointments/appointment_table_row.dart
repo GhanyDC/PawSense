@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import '../../../utils/app_colors.dart';
-import '../../../models/appointment_models.dart';
+import '../../../models/clinic/appointment_models.dart';
 import 'status_badge.dart';
 
 class AppointmentTableRow extends StatelessWidget {

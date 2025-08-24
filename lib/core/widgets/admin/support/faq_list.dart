@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../models/faq_item_model.dart';
+import '../../../models/support/faq_item_model.dart';
 import '../../../utils/constants.dart';
 import 'faq_item.dart';
 

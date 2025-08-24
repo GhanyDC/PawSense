@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../core/services/auth/auth_service_mobile.dart';
-import '../../../core/models/user_model.dart';
+import '../../../core/models/user/user_model.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/errors.dart';
 import '../../../core/utils/app_colors.dart';

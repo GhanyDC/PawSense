@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/models/patient_data.dart';
+import 'package:pawsense/core/models/user/patient_data.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/widgets/admin/patient_records/patient_card.dart';
 import 'package:pawsense/core/widgets/admin/patient_records/patient_filters.dart';

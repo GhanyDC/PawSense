@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/models/schedule_stats.dart';
+import 'package:pawsense/core/models/clinic/schedule_stats.dart';
 import 'stats_card.dart';
 
 class ScheduleStatsWidget extends StatelessWidget {

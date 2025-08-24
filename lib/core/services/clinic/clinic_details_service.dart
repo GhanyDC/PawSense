@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
-import 'package:pawsense/core/models/clinic_details_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_details_model.dart';
 
 /// Service for managing clinic details and settings
 class ClinicDetailsService {

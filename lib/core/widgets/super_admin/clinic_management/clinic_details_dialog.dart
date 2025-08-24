@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/models/clinic_registration_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_registration_model.dart';
 
 class ClinicDetailsDialog extends StatelessWidget {
   final ClinicRegistration clinic;

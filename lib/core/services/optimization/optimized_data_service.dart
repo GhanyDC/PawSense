@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import '../../models/user_model.dart';
-import '../../models/appointment_models.dart';
-import '../../models/patient_data.dart';
-import '../../models/support_ticket.dart';
-import '../../models/faq_item_model.dart';
-import '../../models/ticket_status.dart';
+import '../../models/user/user_model.dart';
+import '../../models/clinic/appointment_models.dart';
+import '../../models/user/patient_data.dart';
+import '../../models/support/support_ticket.dart';
+import '../../models/support/faq_item_model.dart';
+import '../../models/support/ticket_status.dart';
 import 'cache_manager.dart';
 
 /// Optimized data service with comprehensive caching for fast navigation

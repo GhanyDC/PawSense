@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/user_model.dart';
-import '../../models/clinic_registration_model.dart';
+import '../../models/user/user_model.dart';
+import '../../models/clinic/clinic_registration_model.dart';
 
 /// Service for Super Admin operations
 class SuperAdminService {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
-import 'package:pawsense/core/models/time_slot.dart';
+import 'package:pawsense/core/models/clinic/time_slot.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/time_slot_item.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/add_time_slot_modal.dart';
 
