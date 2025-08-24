@@ -245,7 +245,7 @@ class _TicketDetailsModalState extends State<TicketDetailsModal> {
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );

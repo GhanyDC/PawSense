@@ -10,7 +10,7 @@ import '../../../core/widgets/shared/pagination_widget.dart';
 import '../../../core/services/super_admin/super_admin_service.dart';
 
 class UserManagementScreen extends StatefulWidget {
-  const UserManagementScreen({Key? key}) : super(key: key);
+  const UserManagementScreen({super.key});
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -23,7 +23,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   
   // Pagination
   int _currentPage = 1;
-  int _itemsPerPage = 5; // Changed to 5 items per page
+  final int _itemsPerPage = 5; // Changed to 5 items per page
   int _totalUsers = 0;
   int _totalPages = 0;
   
@@ -50,8 +50,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       
       String? statusFilter;
       if (_selectedStatus != 'All Status' && _selectedStatus.isNotEmpty) {
-        if (_selectedStatus == 'Active') statusFilter = 'active';
-        else if (_selectedStatus == 'Suspended') statusFilter = 'suspended';
+        if (_selectedStatus == 'Active') {
+          statusFilter = 'active';
+        } else if (_selectedStatus == 'Suspended') statusFilter = 'suspended';
       }
       
       // Load paginated data from Firestore

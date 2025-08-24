@@ -5,9 +5,9 @@ class ClinicDetailsDialog extends StatelessWidget {
   final ClinicRegistration clinic;
 
   const ClinicDetailsDialog({
-    Key? key,
+    super.key,
     required this.clinic,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

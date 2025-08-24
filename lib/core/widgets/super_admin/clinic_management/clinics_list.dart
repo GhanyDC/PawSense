@@ -14,7 +14,7 @@ class ClinicsList extends StatelessWidget {
   final Function(ClinicRegistration) onSuspend;
 
   const ClinicsList({
-    Key? key,
+    super.key,
     required this.clinics,
     required this.isLoading,
     required this.totalClinics,
@@ -22,7 +22,7 @@ class ClinicsList extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onSuspend,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

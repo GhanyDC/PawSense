@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
-import 'package:pawsense/core/widgets/admin/clinic_schedule/schedule_header.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/schedule_settings_modal.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/schedule_stats.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/time_slot_list.dart';

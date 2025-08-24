@@ -387,8 +387,10 @@ class DocumentManagementService {
             orElse: () => throw Exception('License not found'),
           );
           
-          // Delete image from Google Drive
-          await _googleDriveService.deleteFile(licenseToDelete.licensePictureFileId);
+          // Delete image from Google Drive if it exists
+          if (licenseToDelete.licensePictureFileId != null && licenseToDelete.licensePictureFileId!.isNotEmpty) {
+            await _googleDriveService.deleteFile(licenseToDelete.licensePictureFileId!);
+          }
           
           // Remove license from list
           final updatedLicenses = clinicDetails.licenses

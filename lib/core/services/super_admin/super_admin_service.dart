@@ -483,12 +483,14 @@ class SuperAdminService {
       int suspended = 0;
       
       for (var doc in snapshot.docs) {
-        final status = doc.data()['status'] ?? 'pending';
+        final data = doc.data();
+        final status = (data['status'] ?? 'pending').toString().trim().toLowerCase();
+        
         switch (status) {
           case 'pending':
             pending++;
             break;
-          case 'verified':
+          case 'approved':
             approved++;
             break;
           case 'rejected':
@@ -496,6 +498,10 @@ class SuperAdminService {
             break;
           case 'suspended':
             suspended++;
+            break;
+          default:
+            // Unknown status defaults to pending
+            pending++;
             break;
         }
       }

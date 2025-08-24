@@ -9,12 +9,12 @@ class PaginationWidget extends StatelessWidget {
   final Function(int) onPageChanged;
 
   const PaginationWidget({
-    Key? key,
+    super.key,
     required this.currentPage,
     required this.totalPages,
     required this.totalItems,
     required this.onPageChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -8,11 +8,11 @@ class PageHeader extends StatelessWidget {
   final List<Widget>? actions;
 
   const PageHeader({
-    Key? key,
+    super.key,
     required this.title,
     this.subtitle,
     this.actions,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
