@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/services/auth/auth_service_mobile.dart';
-import 'verify_email_page.dart';
 import 'terms_and_conditions_modal.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
@@ -21,7 +20,8 @@ class _SignUpPageState extends State<SignUpPage>
   final _authService = AuthService();
 
   // Controllers
-  final _usernameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -41,7 +41,8 @@ class _SignUpPageState extends State<SignUpPage>
   late Animation<Offset> _slideAnimation;
 
   final Map<String, bool> _fieldTouched = {
-    'username': false,
+    'firstName': false,
+    'lastName': false,
     'email': false,
     'contact': false,
     'address': false,
@@ -50,7 +51,8 @@ class _SignUpPageState extends State<SignUpPage>
   };
 
   final Map<String, String?> _fieldErrors = {
-    'username': null,
+    'firstName': null,
+    'lastName': null,
     'email': null,
     'contact': null,
     'address': null,
@@ -90,7 +92,8 @@ class _SignUpPageState extends State<SignUpPage>
   @override
   void dispose() {
     for (var c in [
-      _usernameController,
+      _firstNameController,
+      _lastNameController,
       _emailController,
       _passwordController,
       _confirmPasswordController,
@@ -115,8 +118,12 @@ class _SignUpPageState extends State<SignUpPage>
       hasError = true;
     }
 
-    if (_usernameController.text.trim().isEmpty) {
-      _fieldErrors['username'] = 'Enter Username';
+    if (_firstNameController.text.trim().isEmpty) {
+      _fieldErrors['firstName'] = 'Enter First Name';
+      hasError = true;
+    }
+    if (_lastNameController.text.trim().isEmpty) {
+      _fieldErrors['lastName'] = 'Enter Last Name';
       hasError = true;
     }
     if (_emailController.text.trim().isEmpty) {
@@ -160,21 +167,11 @@ class _SignUpPageState extends State<SignUpPage>
     setState(() => _isLoading = true);
 
     try {
-      final usernameTaken = await _authService.isUsernameTaken(
-        _usernameController.text.trim(),
-      );
-      if (usernameTaken) {
-        setState(() {
-          _fieldErrors['username'] = 'Username is already taken. Please choose another.';
-          _isLoading = false;
-        });
-        return;
-      }
-
       final uid = await _authService.signUpWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        username: _usernameController.text.trim(),
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
         contactNumber: _contactController.text.trim(),
         dateOfBirth: _dateOfBirth!,
         agreedToTerms: _agreedToTerms,
@@ -182,20 +179,16 @@ class _SignUpPageState extends State<SignUpPage>
       );
 
       if (uid != null && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VerifyEmailPage(
-              username: _usernameController.text.trim(),
-              email: _emailController.text.trim(),
-              uid: uid,
-              contactNumber: _contactController.text.trim(),
-              dateOfBirth: _dateOfBirth!,
-              agreedToTerms: _agreedToTerms,
-              address: _addressController.text.trim(),
-            ),
-          ),
-        );
+        context.pushReplacement('/verify-email', extra: {
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'uid': uid,
+          'contactNumber': _contactController.text.trim(),
+          'dateOfBirth': _dateOfBirth!,
+          'agreedToTerms': _agreedToTerms,
+          'address': _addressController.text.trim(),
+        });
       }
     } on Exception catch (e) {
       final error = e.toString();
@@ -627,11 +620,19 @@ class _SignUpPageState extends State<SignUpPage>
                                 _buildWelcomeSection(),
                                 const SizedBox(height: 32),
                                 _buildTextField(
-                                  keyName: 'username',
-                                  controller: _usernameController,
-                                  label: 'Username',
-                                  hintText: 'Choose a unique username',
-                                  validator: (v) => requiredValidator(v, 'Username'),
+                                  keyName: 'firstName',
+                                  controller: _firstNameController,
+                                  label: 'First Name',
+                                  hintText: 'Enter your first name',
+                                  validator: (v) => requiredValidator(v, 'First Name'),
+                                  icon: Icons.person_outline,
+                                ),
+                                _buildTextField(
+                                  keyName: 'lastName',
+                                  controller: _lastNameController,
+                                  label: 'Last Name',
+                                  hintText: 'Enter your last name',
+                                  validator: (v) => requiredValidator(v, 'Last Name'),
                                   icon: Icons.person_outline,
                                 ),
                                 _buildTextField(

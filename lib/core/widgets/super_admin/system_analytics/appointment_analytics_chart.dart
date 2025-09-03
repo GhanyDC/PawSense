@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../core/utils/app_colors.dart';
-import '../../../core/utils/constants.dart';
-import '../../../core/models/analytics/analytics_models.dart';
+import 'package:pawsense/core/utils/app_colors.dart';
+import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/models/analytics/analytics_models.dart';
 
-class ClinicPerformanceChart extends StatefulWidget {
-  final ClinicPerformance clinicPerformance;
+class AppointmentAnalyticsChart extends StatefulWidget {
+  final AppointmentAnalytics appointmentAnalytics;
 
-  const ClinicPerformanceChart({
+  const AppointmentAnalyticsChart({
     super.key,
-    required this.clinicPerformance,
+    required this.appointmentAnalytics,
   });
 
   @override
-  State<ClinicPerformanceChart> createState() => _ClinicPerformanceChartState();
+  State<AppointmentAnalyticsChart> createState() => _AppointmentAnalyticsChartState();
 }
 
-class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
+class _AppointmentAnalyticsChartState extends State<AppointmentAnalyticsChart> {
   int selectedChartIndex = 0;
 
   @override
@@ -44,7 +44,7 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Clinic Performance',
+                'Appointment Analytics',
                 style: kTextStyleLarge.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.bold,
@@ -70,28 +70,28 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
                         value: 0,
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: kSpacingMedium),
-                          child: Text('Clinic Registrations', style: kTextStyleRegular),
+                          child: Text('Volume Trends', style: kTextStyleRegular),
                         ),
                       ),
                       DropdownMenuItem(
                         value: 1,
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: kSpacingMedium),
-                          child: Text('Geographic Distribution', style: kTextStyleRegular),
+                          child: Text('Peak Hours', style: kTextStyleRegular),
                         ),
                       ),
                       DropdownMenuItem(
                         value: 2,
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: kSpacingMedium),
-                          child: Text('Utilization Rates', style: kTextStyleRegular),
+                          child: Text('Appointment Types', style: kTextStyleRegular),
                         ),
                       ),
                       DropdownMenuItem(
                         value: 3,
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: kSpacingMedium),
-                          child: Text('Service Popularity', style: kTextStyleRegular),
+                          child: Text('Status Distribution', style: kTextStyleRegular),
                         ),
                       ),
                     ],
@@ -121,26 +121,26 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
   Widget _buildSelectedChart() {
     switch (selectedChartIndex) {
       case 0:
-        return _buildRegistrationsChart();
+        return _buildVolumeTrendsChart();
       case 1:
-        return _buildGeographicChart();
+        return _buildPeakHoursChart();
       case 2:
-        return _buildUtilizationChart();
+        return _buildAppointmentTypesChart();
       case 3:
-        return _buildServicePopularityChart();
+        return _buildStatusDistributionChart();
       default:
-        return _buildRegistrationsChart();
+        return _buildVolumeTrendsChart();
     }
   }
 
-  Widget _buildRegistrationsChart() {
+  Widget _buildVolumeTrendsChart() {
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
           drawHorizontalLine: true,
-          horizontalInterval: 2,
+          horizontalInterval: 10,
           verticalInterval: 1,
           getDrawingHorizontalLine: (value) => FlLine(
             color: AppColors.border,
@@ -161,7 +161,7 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
               reservedSize: 30,
               interval: 1,
               getTitlesWidget: (double value, TitleMeta meta) {
-                final chartData = widget.clinicPerformance.registrationTrends;
+                final chartData = widget.appointmentAnalytics.volumeTrends;
                 if (value.toInt() < chartData.length) {
                   final date = chartData[value.toInt()].date;
                   return Text(
@@ -176,7 +176,7 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 2,
+              interval: 10,
               reservedSize: 42,
               getTitlesWidget: (double value, TitleMeta meta) {
                 return Text(
@@ -192,15 +192,15 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
           border: Border.all(color: AppColors.border),
         ),
         minX: 0,
-        maxX: (widget.clinicPerformance.registrationTrends.length - 1).toDouble(),
+        maxX: (widget.appointmentAnalytics.volumeTrends.length - 1).toDouble(),
         minY: 0,
-        maxY: widget.clinicPerformance.registrationTrends
+        maxY: widget.appointmentAnalytics.volumeTrends
             .map((e) => e.value)
             .reduce((a, b) => a > b ? a : b)
-            .toDouble() + 2,
+            .toDouble() + 10,
         lineBarsData: [
           LineChartBarData(
-            spots: widget.clinicPerformance.registrationTrends
+            spots: widget.appointmentAnalytics.volumeTrends
                 .asMap()
                 .entries
                 .map((entry) => FlSpot(
@@ -209,13 +209,13 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
                     ))
                 .toList(),
             isCurved: true,
-            color: AppColors.success,
+            color: AppColors.warning,
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: FlDotData(show: true),
             belowBarData: BarAreaData(
               show: true,
-              color: AppColors.success.withValues(alpha: 0.3),
+              color: AppColors.warning.withValues(alpha: 0.3),
             ),
           ),
         ],
@@ -223,14 +223,14 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
     );
   }
 
-  Widget _buildGeographicChart() {
-    final sortedData = widget.clinicPerformance.geographicDistribution.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+  Widget _buildPeakHoursChart() {
+    final hourlyData = widget.appointmentAnalytics.peakHours.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
 
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: sortedData.first.value.toDouble() + 5,
+        maxY: hourlyData.map((e) => e.value).reduce((a, b) => a > b ? a : b).toDouble() + 5,
         barTouchData: BarTouchData(
           enabled: false,
         ),
@@ -243,9 +243,10 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
               showTitles: true,
               reservedSize: 30,
               getTitlesWidget: (double value, TitleMeta meta) {
-                if (value.toInt() < sortedData.length) {
+                if (value.toInt() < hourlyData.length) {
+                  final hour = hourlyData[value.toInt()].key;
                   return Text(
-                    sortedData[value.toInt()].key,
+                    '${hour.toString().padLeft(2, '0')}:00',
                     style: kTextStyleSmall.copyWith(color: AppColors.textSecondary),
                   );
                 }
@@ -270,7 +271,7 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
           show: true,
           border: Border.all(color: AppColors.border),
         ),
-        barGroups: sortedData
+        barGroups: hourlyData
             .asMap()
             .entries
             .map((entry) => BarChartGroupData(
@@ -278,8 +279,8 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
                   barRods: [
                     BarChartRodData(
                       toY: entry.value.value.toDouble(),
-                      color: AppColors.info,
-                      width: 30,
+                      color: _getHourColor(entry.value.key),
+                      width: 20,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ],
@@ -289,9 +290,7 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
     );
   }
 
-  Widget _buildUtilizationChart() {
-    final utilizationData = widget.clinicPerformance.utilizationRates.entries.toList();
-
+  Widget _buildAppointmentTypesChart() {
     return PieChart(
       PieChartData(
         pieTouchData: PieTouchData(
@@ -302,13 +301,14 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
         borderData: FlBorderData(show: false),
         sectionsSpace: 2,
         centerSpaceRadius: 40,
-        sections: utilizationData
+        sections: widget.appointmentAnalytics.appointmentTypes.entries
+            .toList()
             .asMap()
             .entries
             .map((entry) => PieChartSectionData(
-                  color: _getUtilizationColor(entry.key),
-                  value: entry.value.value,
-                  title: '${entry.value.key}\n${entry.value.value.toStringAsFixed(1)}%',
+                  color: _getTypeColor(entry.key),
+                  value: entry.value.value.toDouble(),
+                  title: '${entry.value.key}\n${entry.value.value}',
                   radius: 50,
                   titleStyle: kTextStyleSmall.copyWith(
                     color: AppColors.white,
@@ -320,80 +320,66 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
     );
   }
 
-  Widget _buildServicePopularityChart() {
-    final sortedServices = widget.clinicPerformance.servicePopularity.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+  Widget _buildStatusDistributionChart() {
+    // Calculate status distribution based on rates
+    final totalAppointments = widget.appointmentAnalytics.volumeTrends.fold(0.0, (sum, data) => sum + data.value);
+    final cancelledCount = (totalAppointments * widget.appointmentAnalytics.cancellationRate / 100).round();
+    final noShowCount = (totalAppointments * widget.appointmentAnalytics.noShowRate / 100).round();
+    final completedCount = (totalAppointments - cancelledCount - noShowCount).round();
+    final scheduledCount = (totalAppointments * 0.15).round(); // Assume 15% are scheduled
+    
+    final statusDistribution = {
+      'completed': completedCount,
+      'scheduled': scheduledCount,
+      'cancelled': cancelledCount,
+      'no_show': noShowCount,
+    };
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: sortedServices.first.value.toDouble() + 10,
-        barTouchData: BarTouchData(
-          enabled: false,
+    final statusColors = {
+      'completed': AppColors.success,
+      'scheduled': AppColors.info,
+      'cancelled': AppColors.error,
+      'no_show': AppColors.warning,
+    };
+
+    return PieChart(
+      PieChartData(
+        pieTouchData: PieTouchData(
+          touchCallback: (FlTouchEvent event, pieTouchResponse) {
+            // Handle touch events if needed
+          },
         ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 40,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                if (value.toInt() < sortedServices.length) {
-                  final serviceName = sortedServices[value.toInt()].key;
-                  return Padding(
-                    padding: EdgeInsets.only(top: 8.0),
-                    child: Transform.rotate(
-                      angle: -0.5,
-                      child: Text(
-                        serviceName,
-                        style: kTextStyleSmall.copyWith(color: AppColors.textSecondary),
-                      ),
-                    ),
-                  );
-                }
-                return Text('');
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 42,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                return Text(
-                  value.toInt().toString(),
-                  style: kTextStyleSmall.copyWith(color: AppColors.textSecondary),
-                );
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: AppColors.border),
-        ),
-        barGroups: sortedServices
-            .asMap()
-            .entries
-            .map((entry) => BarChartGroupData(
-                  x: entry.key,
-                  barRods: [
-                    BarChartRodData(
-                      toY: entry.value.value.toDouble(),
-                      color: AppColors.primary,
-                      width: 25,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ],
+        borderData: FlBorderData(show: false),
+        sectionsSpace: 2,
+        centerSpaceRadius: 40,
+        sections: statusDistribution.entries
+            .map((entry) => PieChartSectionData(
+                  color: statusColors[entry.key] ?? AppColors.textSecondary,
+                  value: entry.value.toDouble(),
+                  title: '${_formatStatus(entry.key)}\n${entry.value}',
+                  radius: 50,
+                  titleStyle: kTextStyleSmall.copyWith(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ))
             .toList(),
       ),
     );
   }
 
-  Color _getUtilizationColor(int index) {
+  Color _getHourColor(int hour) {
+    // Morning (6-12): Blue
+    if (hour >= 6 && hour < 12) return AppColors.info;
+    // Afternoon (12-18): Green
+    if (hour >= 12 && hour < 18) return AppColors.success;
+    // Evening (18-22): Orange
+    if (hour >= 18 && hour < 22) return AppColors.warning;
+    // Night/Early morning: Red
+    return AppColors.error;
+  }
+
+  Color _getTypeColor(int index) {
     final colors = [
       AppColors.primary,
       AppColors.success,
@@ -404,82 +390,98 @@ class _ClinicPerformanceChartState extends State<ClinicPerformanceChart> {
     return colors[index % colors.length];
   }
 
+  String _formatStatus(String status) {
+    switch (status) {
+      case 'completed':
+        return 'Completed';
+      case 'scheduled':
+        return 'Scheduled';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'no_show':
+        return 'No Show';
+      default:
+        return status;
+    }
+  }
+
   Widget _buildChartStats() {
     switch (selectedChartIndex) {
       case 0:
-        return _buildRegistrationStats();
+        return _buildVolumeStats();
       case 1:
-        return _buildGeographicStats();
+        return _buildPeakHourStats();
       case 2:
-        return _buildUtilizationStats();
+        return _buildTypeStats();
       case 3:
-        return _buildServiceStats();
+        return _buildStatusStats();
       default:
         return Container();
     }
   }
 
-  Widget _buildRegistrationStats() {
-    final total = widget.clinicPerformance.registrationTrends.fold(0.0, (sum, data) => sum + data.value);
-    final average = total / widget.clinicPerformance.registrationTrends.length;
-    
-    return Row(
-      children: [
-        _buildStatCard('Total Clinics', total.toStringAsFixed(0), AppColors.success),
-        SizedBox(width: kSpacingMedium),
-        _buildStatCard('Monthly Average', average.toStringAsFixed(1), AppColors.info),
-        SizedBox(width: kSpacingMedium),
-        _buildStatCard('Peak Month', widget.clinicPerformance.registrationTrends
-            .reduce((a, b) => a.value > b.value ? a : b)
-            .value.toStringAsFixed(0), AppColors.primary),
-      ],
-    );
-  }
-
-  Widget _buildGeographicStats() {
-    final totalClinics = widget.clinicPerformance.geographicDistribution.values.fold(0, (sum, count) => sum + count);
-    final topLocation = widget.clinicPerformance.geographicDistribution.entries
+  Widget _buildVolumeStats() {
+    final total = widget.appointmentAnalytics.volumeTrends.fold(0.0, (sum, data) => sum + data.value);
+    final average = total / widget.appointmentAnalytics.volumeTrends.length;
+    final peak = widget.appointmentAnalytics.volumeTrends
         .reduce((a, b) => a.value > b.value ? a : b);
     
     return Row(
       children: [
-        _buildStatCard('Total Locations', widget.clinicPerformance.geographicDistribution.length.toString(), AppColors.info),
+        _buildStatCard('Total Appointments', total.toStringAsFixed(0), AppColors.warning),
         SizedBox(width: kSpacingMedium),
-        _buildStatCard('Total Clinics', totalClinics.toString(), AppColors.success),
+        _buildStatCard('Daily Average', average.toStringAsFixed(1), AppColors.info),
         SizedBox(width: kSpacingMedium),
-        _buildStatCard('Top Location', '${topLocation.key} (${topLocation.value})', AppColors.primary),
+        _buildStatCard('Peak Day', peak.value.toStringAsFixed(0), AppColors.success),
       ],
     );
   }
 
-  Widget _buildUtilizationStats() {
-    final avgUtilization = widget.clinicPerformance.utilizationRates.values.fold(0.0, (sum, rate) => sum + rate) /
-        widget.clinicPerformance.utilizationRates.length;
-    final maxUtilization = widget.clinicPerformance.utilizationRates.values.reduce((a, b) => a > b ? a : b);
-    
-    return Row(
-      children: [
-        _buildStatCard('Average Utilization', '${avgUtilization.toStringAsFixed(1)}%', AppColors.info),
-        SizedBox(width: kSpacingMedium),
-        _buildStatCard('Max Utilization', '${maxUtilization.toStringAsFixed(1)}%', AppColors.success),
-        SizedBox(width: kSpacingMedium),
-        _buildStatCard('Active Clinics', widget.clinicPerformance.utilizationRates.length.toString(), AppColors.primary),
-      ],
-    );
-  }
-
-  Widget _buildServiceStats() {
-    final totalServices = widget.clinicPerformance.servicePopularity.values.fold(0, (sum, count) => sum + count);
-    final topService = widget.clinicPerformance.servicePopularity.entries
+  Widget _buildPeakHourStats() {
+    final totalHourly = widget.appointmentAnalytics.peakHours.values.fold(0, (sum, count) => sum + count);
+    final peakHour = widget.appointmentAnalytics.peakHours.entries
         .reduce((a, b) => a.value > b.value ? a : b);
     
     return Row(
       children: [
-        _buildStatCard('Service Types', widget.clinicPerformance.servicePopularity.length.toString(), AppColors.info),
+        _buildStatCard('Total Hours Tracked', widget.appointmentAnalytics.peakHours.length.toString(), AppColors.info),
         SizedBox(width: kSpacingMedium),
-        _buildStatCard('Total Bookings', totalServices.toString(), AppColors.success),
+        _buildStatCard('Total Appointments', totalHourly.toString(), AppColors.warning),
         SizedBox(width: kSpacingMedium),
-        _buildStatCard('Most Popular', topService.key, AppColors.primary),
+        _buildStatCard('Peak Hour', '${peakHour.key}:00 (${peakHour.value})', AppColors.success),
+      ],
+    );
+  }
+
+  Widget _buildTypeStats() {
+    final totalTypes = widget.appointmentAnalytics.appointmentTypes.values.fold(0, (sum, count) => sum + count);
+    final mostPopular = widget.appointmentAnalytics.appointmentTypes.entries
+        .reduce((a, b) => a.value > b.value ? a : b);
+    
+    return Row(
+      children: [
+        _buildStatCard('Service Types', widget.appointmentAnalytics.appointmentTypes.length.toString(), AppColors.info),
+        SizedBox(width: kSpacingMedium),
+        _buildStatCard('Total Bookings', totalTypes.toString(), AppColors.warning),
+        SizedBox(width: kSpacingMedium),
+        _buildStatCard('Most Popular', mostPopular.key, AppColors.primary),
+      ],
+    );
+  }
+
+  Widget _buildStatusStats() {
+    final totalAppointments = widget.appointmentAnalytics.volumeTrends.fold(0.0, (sum, data) => sum + data.value);
+    final completionRate = 100 - widget.appointmentAnalytics.cancellationRate - widget.appointmentAnalytics.noShowRate;
+    
+    return Row(
+      children: [
+        _buildStatCard('Total Appointments', totalAppointments.toStringAsFixed(0), AppColors.info),
+        SizedBox(width: kSpacingMedium),
+        _buildStatCard('Completion Rate', '${completionRate.toStringAsFixed(1)}%', AppColors.success),
+        SizedBox(width: kSpacingMedium),
+        _buildStatCard('Cancellation Rate', '${widget.appointmentAnalytics.cancellationRate.toStringAsFixed(1)}%', AppColors.error),
+        SizedBox(width: kSpacingMedium),
+        _buildStatCard('No-Show Rate', '${widget.appointmentAnalytics.noShowRate.toStringAsFixed(1)}%', AppColors.warning),
       ],
     );
   }

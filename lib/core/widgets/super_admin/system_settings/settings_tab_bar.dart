@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/utils/app_colors.dart';
-import '../../../core/utils/constants.dart';
+import 'package:pawsense/core/utils/app_colors.dart';
+import 'package:pawsense/core/utils/constants.dart';
 
 class SettingsTabBar extends StatelessWidget {
   final int currentIndex;

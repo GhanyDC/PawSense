@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../core/utils/app_colors.dart';
-import '../../../core/utils/constants.dart';
-import '../../../core/models/system/system_settings_model.dart';
-import '../../../core/widgets/shared/page_header.dart';
-import '../../../core/widgets/system_settings/settings_tab_bar.dart';
-import '../../../core/widgets/system_settings/profile_tab.dart';
-import '../../../core/widgets/system_settings/security_tab.dart';
-import '../../../core/widgets/system_settings/notifications_tab.dart';
-import '../../../core/widgets/system_settings/system_tab.dart';
-
+import 'package:pawsense/core/widgets/super_admin/system_settings/security_tab.dart';
+import 'package:pawsense/core/widgets/super_admin/system_settings/settings_tab_bar.dart';
+import 'package:pawsense/core/widgets/super_admin/system_settings/notifications_tab.dart';
+import 'package:pawsense/core/widgets/super_admin/system_settings/profile_tab.dart';
+import 'package:pawsense/core/widgets/super_admin/system_settings/system_tab.dart';
+import 'package:pawsense/core/utils/app_colors.dart';
+import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/models/system/system_settings_model.dart';
+import 'package:pawsense/core/widgets/shared/page_header.dart';
 class SystemSettingsScreen extends StatefulWidget {
   const SystemSettingsScreen({super.key});
 

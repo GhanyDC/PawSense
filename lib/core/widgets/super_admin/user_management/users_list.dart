@@ -9,7 +9,6 @@ class UsersList extends StatelessWidget {
   final bool isLoading;
   final int totalUsers; // Add total users count
   final Function(UserModel) onEditUser;
-  final Function(UserModel) onDeleteUser;
   final Function(UserModel, bool) onStatusToggle;
 
   const UsersList({
@@ -18,7 +17,6 @@ class UsersList extends StatelessWidget {
     required this.isLoading,
     required this.totalUsers,
     required this.onEditUser,
-    required this.onDeleteUser,
     required this.onStatusToggle,
   });
 
@@ -130,7 +128,6 @@ class UsersList extends StatelessWidget {
               return UserCard(
                 user: user,
                 onEdit: () => onEditUser(user),
-                onDelete: () => onDeleteUser(user),
                 onStatusToggle: (newStatus) => onStatusToggle(user, newStatus),
               );
             },

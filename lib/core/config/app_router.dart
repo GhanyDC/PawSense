@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pawsense/pages/mobile/auth/sign_in_page.dart';
 import 'package:pawsense/pages/mobile/auth/sign_up_page.dart';
+import 'package:pawsense/pages/mobile/auth/verify_email_page.dart';
 import 'package:pawsense/pages/mobile/home_page.dart';
 import 'package:pawsense/pages/web/auth/web_login_page.dart';
 import 'package:pawsense/pages/web/auth/admin_signup_page.dart';
@@ -38,8 +39,27 @@ class AppRouter {
         builder: (context, state) => const SignUpPage(),
       ),
       GoRoute(
+        path: '/verify-email',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          if (extra == null) {
+            return const SignUpPage(); // Redirect back to signup if no data
+          }
+          return VerifyEmailPage(
+            firstName: extra['firstName'] as String,
+            lastName: extra['lastName'] as String,
+            email: extra['email'] as String,
+            uid: extra['uid'] as String,
+            contactNumber: extra['contactNumber'] as String,
+            dateOfBirth: extra['dateOfBirth'] as DateTime,
+            agreedToTerms: extra['agreedToTerms'] as bool,
+            address: extra['address'] as String,
+          );
+        },
+      ),
+      GoRoute(
         path: '/home',
-        builder: (context, state) => const HomePage(),
+        builder: (context, state) => const UserHomePage(),
       ),
 
       // Web auth routes

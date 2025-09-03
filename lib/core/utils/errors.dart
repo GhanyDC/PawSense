@@ -41,7 +41,7 @@ class AuthErrorMapper {
     } else if (error.contains('invalid-email')) {
       return (field: 'email', message: 'Please enter a valid email address.', generalMessage: null);
     } else if (error.contains('user-disabled')) {
-      return (field: null, message: null, generalMessage: 'This account has been temporarily disabled.');
+      return (field: null, message: null, generalMessage: 'Your account has been deactivated. Please contact support for assistance.');
     } else if (error.contains('invalid-credential')) {
       return (field: null, message: null, generalMessage: 'Invalid email or password.');
     } else if (error.contains('too-many-requests')) {

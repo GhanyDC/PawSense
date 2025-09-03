@@ -188,55 +188,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
-  void _onDeleteUser(UserModel user) async {
-    final fullName = '${user.firstName ?? ''} ${user.lastName ?? ''}'.trim();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete User'),
-        content: Text('Are you sure you want to delete $fullName? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: AppColors.white,
-            ),
-            child: Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    
-    if (result == true) {
-      try {
-        final success = await SuperAdminService.deleteUser(user.uid);
-        if (success) {
-          _loadUsers(); // Reload users after deletion
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('User $fullName deleted successfully'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        } else {
-          throw Exception('Failed to delete user');
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete user: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
   void _onToggleUserStatus(UserModel user) async {
     // Find current status from our data
     final userWithStatus = _usersWithStatus.firstWhere(
@@ -499,7 +450,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               isLoading: _isLoading,
               totalUsers: _totalUsers,
               onEditUser: _onEditUser,
-              onDeleteUser: _onDeleteUser,
               onStatusToggle: (user, status) => _onToggleUserStatus(user),
             ),
             

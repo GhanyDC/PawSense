@@ -25,7 +25,8 @@ class AuthService {
   Future<String?> signUpWithEmail({
     required String email,
     required String password,
-    required String username,
+    required String firstName,
+    required String lastName,
     required String contactNumber,
     required DateTime dateOfBirth,
     required bool agreedToTerms,
@@ -86,6 +87,7 @@ class AuthService {
   User? get currentUser => _auth.currentUser;
 
   /// Signs in a user with email and password. Returns the Firebase user if successful.
+  /// Also checks if the user account is active before allowing sign in.
   Future<User?> signInWithEmail({
     required String email,
     required String password,
@@ -95,6 +97,20 @@ class AuthService {
       email: normalizedEmail,
       password: password,
     );
+    
+    // Check if user account is active
+    if (cred.user != null) {
+      final userData = await getUserData(cred.user!.uid);
+      if (userData != null && userData.isActive == false) {
+        // Sign out the user since their account is inactive
+        await _auth.signOut();
+        throw FirebaseAuthException(
+          code: 'user-disabled',
+          message: 'Your account has been deactivated. Please contact support for assistance.',
+        );
+      }
+    }
+    
     return cred.user;
   }
 
@@ -108,5 +124,24 @@ class AuthService {
   Future<List<String>> fetchSignInMethodsForEmail(String email) async {
     final normalizedEmail = email.trim().toLowerCase();
     return await _auth.fetchSignInMethodsForEmail(normalizedEmail);
+  }
+
+  /// Get user data by ID from Firestore
+  Future<UserModel?> getUserData(String userId) async {
+    try {
+      final DocumentSnapshot doc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return UserModel.fromMap(data);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching user data: $e');
+      return null;
+    }
   }
 }

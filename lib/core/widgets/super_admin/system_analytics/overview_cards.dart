@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../core/utils/app_colors.dart';
-import '../../../core/utils/constants.dart';
-import '../../../core/models/analytics/analytics_models.dart';
+import 'package:pawsense/core/utils/app_colors.dart';
+import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/models/analytics/analytics_models.dart';
 
 class OverviewCards extends StatelessWidget {
   final OverviewMetrics overview;

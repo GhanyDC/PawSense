@@ -303,6 +303,7 @@ class AuthGuard {
       '/admin_signup',
       '/signin',
       '/signup',
+      '/verify-email',
       '/home',
     ];
     return publicRoutes.contains(routePath);

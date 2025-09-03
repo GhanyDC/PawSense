@@ -1,22 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:pawsense/core/models/user/user_model.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
+import 'package:pawsense/core/utils/app_colors.dart';
+import 'package:pawsense/core/widgets/user/shared/navigation/simple_user_app_bar.dart';
+import 'package:pawsense/core/widgets/user/shared/navigation/user_bottom_nav_bar.dart';
+import 'package:pawsense/core/widgets/user/shared/tab_toggle.dart';
+import 'package:pawsense/core/widgets/user/home/profile_header.dart';
+import 'package:pawsense/core/widgets/user/home/pet_info_card.dart';
+import 'package:pawsense/core/widgets/user/home/health_snapshot.dart';
+import 'package:pawsense/core/widgets/user/home/nearby_clinics.dart';
+import 'package:pawsense/core/widgets/user/home/services_grid.dart';
+import 'package:pawsense/core/widgets/user/shared/modals/pet_assessment_modal.dart';
+import 'package:pawsense/core/widgets/user/shared/drawers/menu_drawer.dart';
+import 'package:pawsense/core/widgets/user/shared/drawers/profile_drawer.dart';
 
-import '../../core/services/auth/auth_service_mobile.dart';
-import '../../core/models/user/user_model.dart';
-import '../../core/guards/auth_guard.dart';
-import '../../core/utils/app_colors.dart';
-import '../../core/utils/constants.dart';
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class UserHomePage extends StatefulWidget {
+  const UserHomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<UserHomePage> createState() => _UserHomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  final AuthService _authService = AuthService();
+class _UserHomePageState extends State<UserHomePage> {
   UserModel? _userModel;
   bool _loading = true;
+  int _currentNavIndex = 0;
+  int _currentTabIndex = 0;
+
+  // Drawer keys
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Sample data - in a real app, this would come from your backend
+  final List<PetInfo> _pets = [
+    PetInfo(name: 'Buddy', type: 'Dog', icon: Icons.pets),
+    PetInfo(name: 'Milo', type: 'Cat', icon: Icons.pets),
+  ];
+
+  final List<HealthData> _healthData = [
+    HealthData(condition: 'Mange', count: 1, color: const Color(0xFFFF9500)),
+    HealthData(condition: 'Ringworm', count: 3, color: const Color(0xFF007AFF)),
+    HealthData(condition: 'Flea Allergy', count: 2, color: const Color(0xFF8E44AD)),
+    HealthData(condition: 'Pyoderma', count: 1, color: const Color(0xFFE74C3C)),
+  ];
+
+  final List<ClinicInfo> _nearByClinics = [
+    ClinicInfo(name: 'Happy Paws Vet', distance: '0.8 km • (555) 012-3456', phone: '555-012-3456'),
+    ClinicInfo(name: 'Downtown Animal Care', distance: '1.3 km • (555) 555-1234', phone: '555-555-1234'),
+    ClinicInfo(name: 'City Vet Clinic', distance: '2.1 km • (555) 987-6543', phone: '555-987-6543'),
+    ClinicInfo(name: 'Pet Health Center', distance: '2.5 km • (555) 111-2222', phone: '555-111-2222'),
+  ];
 
   @override
   void initState() {
@@ -25,148 +57,263 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _fetchUser() async {
-    // Use AuthGuard to get current user to leverage caching and deduplication
-    final userModel = await AuthGuard.getCurrentUser();
-    if (userModel != null) {
+    try {
+      final userModel = await AuthGuard.getCurrentUser();
+      if (userModel != null) {
+        setState(() {
+          _userModel = userModel;
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
       setState(() {
-        _userModel = userModel;
         _loading = false;
       });
-    } else {
-      setState(() {
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _logout(BuildContext context) async {
-    await _authService.signOut();
-    if (mounted) {
-      Navigator.pushReplacementNamed(context, '/signin');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        title: Text(
-          'Home',
-          style: kTextStyleTitle.copyWith(color: AppColors.textPrimary),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.logout,
+      appBar: SimpleUserAppBar(
+        user: _userModel,
+        onMenuTap: () {
+          _scaffoldKey.currentState?.openDrawer();
+        },
+        onProfileTap: () {
+          _scaffoldKey.currentState?.openEndDrawer();
+        },
+      ),
+      drawer: MenuDrawer(
+        user: _userModel,
+        onClose: () {
+          Navigator.of(context).pop();
+        },
+      ),
+      endDrawer: ProfileDrawer(
+        user: _userModel,
+        onClose: () {
+          Navigator.of(context).pop();
+        },
+      ),
+      endDrawerEnableOpenDragGesture: false, // Disable default endDrawer icon
+      body: _loading 
+          ? _buildLoadingState()
+          : _userModel != null 
+              ? _buildHomeContent()
+              : _buildErrorState(),
+      bottomNavigationBar: UserBottomNavBar(
+        currentIndex: _currentNavIndex,
+        onIndexChanged: (index) {
+          setState(() {
+            _currentNavIndex = index;
+          });
+        },
+        onCameraPressed: _showCameraDialog,
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 48,
+            color: AppColors.textSecondary,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Unable to load user data',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
               color: AppColors.textSecondary,
-              size: kIconSizeLarge,
             ),
-            tooltip: 'Logout',
-            onPressed: () => _logout(context),
           ),
         ],
       ),
-      body: Center(
-        child: _loading
-            ? CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-              )
-            : Container(
-                margin: EdgeInsets.all(kSpacingLarge),
-                padding: EdgeInsets.all(kSpacingLarge),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(kBorderRadius),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(kShadowOpacity),
-                      blurRadius: kShadowBlurRadius,
-                      offset: kShadowOffset,
-                    ),
-                  ],
-                ),
-                child: _userModel != null
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(40),
-                            ),
-                            child: Icon(
-                              Icons.person,
-                              size: 40,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          SizedBox(height: kSpacingMedium),
-                          Text(
-                            'Welcome to PawSense!',
-                            style: kTextStyleTitle.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: kSpacingSmall),
-                          Text(
-                            _userModel!.username,
-                            style: kTextStyleLarge.copyWith(
-                              color: AppColors.primary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: kSpacingSmall),
-                          Text(
-                            'Your pet care companion',
-                            style: kTextStyleRegular.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(40),
-                            ),
-                            child: Icon(
-                              Icons.pets,
-                              size: 40,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          SizedBox(height: kSpacingMedium),
-                          Text(
-                            'Welcome to PawSense!',
-                            style: kTextStyleTitle.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: kSpacingSmall),
-                          Text(
-                            'Your pet care companion',
-                            style: kTextStyleRegular.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
+    );
+  }
+
+  Widget _buildHomeContent() {
+    return RefreshIndicator(
+      onRefresh: _fetchUser,
+      color: AppColors.primary,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          children: [
+            // Tab Toggle
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: TabToggle(
+                selectedIndex: _currentTabIndex,
+                onTabChanged: (index) {
+                  setState(() {
+                    _currentTabIndex = index;
+                  });
+                },
+                tabs: const ['Dashboard', 'History'],
               ),
+            ),
+            
+            // Content based on selected tab
+            if (_currentTabIndex == 0) ...[
+              // Dashboard Tab
+              ProfileHeader(
+                user: _userModel!,
+                onManagePressed: () {
+                  // Handle manage profile
+                },
+              ),
+              
+              PetInfoCard(
+                pets: _pets,
+                nextAppointmentDate: 'Tomorrow',
+                nextAppointmentTime: '2:30 PM',
+              ),
+              
+              // Add space between pets and health snapshot
+              const SizedBox(height: 24),
+              
+              HealthSnapshot(
+                healthData: _healthData,
+              ),
+              
+              NearbyClinics(
+                clinics: _nearByClinics,
+                onViewMapPressed: () {
+                  // Handle view map
+                },
+              ),
+              
+              // Services moved below nearby clinics
+              ServicesGrid(
+                services: _getServices(),
+              ),
+            ] else ...[
+              // History Tab
+              _buildHistoryContent(),
+            ],
+            
+            const SizedBox(height: 32), // Bottom padding
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildHistoryContent() {
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.history,
+            size: 48,
+            color: AppColors.textSecondary,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'History Coming Soon',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'View your past appointments, scans, and activities here.',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<ServiceItem> _getServices() {
+    return [
+      ServiceItem(
+        title: 'Book Appointment',
+        subtitle: 'Schedule visit',
+        icon: Icons.calendar_today,
+        backgroundColor: const Color(0xFF8E44AD).withValues(alpha: 0.1),
+        onTap: () {
+          // Handle book appointment
+        },
+      ),
+      ServiceItem(
+        title: 'Emergency Hotline',
+        subtitle: '24/7 support',
+        icon: Icons.phone,
+        backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
+        onTap: () {
+          // Handle hotline
+        },
+      ),
+      ServiceItem(
+        title: 'First Aid Guide',
+        subtitle: 'Emergency tips',
+        icon: Icons.medical_services,
+        backgroundColor: const Color(0xFFFF9500).withValues(alpha: 0.1),
+        onTap: () {
+          // Handle first aid guide
+        },
+      ),
+      ServiceItem(
+        title: 'Pet Care Tips',
+        subtitle: 'Daily care',
+        icon: Icons.lightbulb_outline,
+        backgroundColor: const Color(0xFF34C759).withValues(alpha: 0.1),
+        onTap: () {
+          // Handle pet care tips
+        },
+      ),
+    ];
+  }
+
+  void _showCameraDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => const PetAssessmentModal(),
     );
   }
 }
