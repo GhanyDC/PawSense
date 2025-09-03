@@ -6,14 +6,12 @@ import 'package:pawsense/core/utils/constants.dart';
 class UserCard extends StatelessWidget {
   final UserModel user;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
   final Function(bool) onStatusToggle;
 
   const UserCard({
     super.key,
     required this.user,
     required this.onEdit,
-    required this.onDelete,
     required this.onStatusToggle,
   });
 
@@ -184,17 +182,6 @@ class UserCard extends StatelessWidget {
             constraints: BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
-        
-        SizedBox(width: kSpacingSmall),
-        // Delete Icon
-        IconButton(
-          onPressed: onDelete,
-          icon: Icon(Icons.delete_outline, size: 18),
-          color: AppColors.error,
-          tooltip: 'Delete User',
-          padding: EdgeInsets.all(6),
-          constraints: BoxConstraints(minWidth: 32, minHeight: 32),
-        ),
       ],
     );
   }

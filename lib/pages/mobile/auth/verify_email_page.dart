@@ -1,18 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/services/auth/auth_service_mobile.dart';
 import '../../../core/models/user/user_model.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/errors.dart';
 import '../../../core/utils/app_colors.dart';
+import '../../../core/utils/text_utils.dart';
 
 /// Verify Email Page
 ///
 /// Instructs users to verify their email address after sign up.
 class VerifyEmailPage extends StatefulWidget {
 /// Widget for the verify email page.
-  final String username;
+  final String firstName;
+  final String lastName;
   final String email;
   final String uid;
   final String contactNumber;
@@ -22,7 +25,8 @@ class VerifyEmailPage extends StatefulWidget {
 
   const VerifyEmailPage({
     super.key,
-    required this.username,
+    required this.firstName,
+    required this.lastName,
     required this.email,
     required this.uid,
     required this.contactNumber,
@@ -40,7 +44,6 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
     with TickerProviderStateMixin {
   final _authService = AuthService();
 
-  bool _isLoading = false;
   bool _saved = false;
   bool _navigated = false;
   int _seconds = 60;
@@ -115,7 +118,6 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
   }
 
   Future<void> _resendEmail() async {
-    setState(() => _isLoading = true);
     try {
       await _authService.resendVerificationEmail();
       _startTimer();
@@ -125,24 +127,29 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
       _showErrorSnack(mapped.generalMessage ?? 'Failed to resend email. Please try again.');
     } catch (e) {
       _showErrorSnack('Failed to resend email. Please try again.');
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _saveUser() async {
     final user = _authService.currentUser;
     if (!_saved && user != null) {
+      // Create a username with proper capitalization using utility
+      final capitalizedFirstName = TextUtils.capitalizeWords(widget.firstName);
+      final capitalizedLastName = TextUtils.capitalizeWords(widget.lastName);
+      final username = TextUtils.formatFullName(widget.firstName, widget.lastName);
+      
       await _authService.saveUser(
         UserModel(
           uid: widget.uid,
-          username: widget.username,
+          username: username,
           email: widget.email,
           contactNumber: widget.contactNumber,
           dateOfBirth: widget.dateOfBirth,
           agreedToTerms: widget.agreedToTerms,
           createdAt: DateTime.now(),
           address: widget.address,
+          firstName: capitalizedFirstName,
+          lastName: capitalizedLastName,
         ),
       );
       _saved = true;
@@ -218,7 +225,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
       _navigated = true;
       _stopTimer();
       await _saveUser();
-      Navigator.pushReplacementNamed(context, '/home');
+      context.pushReplacement('/home');
     }
   }
 
@@ -411,7 +418,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
                             ),
                           ),
                       GestureDetector(
-                        onTap: () =>Navigator.pushNamed(context, '/signup'),
+                        onTap: () => context.push('/signup'),
                             child: Text(
                               'Sign Up',
                               style: kTextStyleRegular.copyWith(

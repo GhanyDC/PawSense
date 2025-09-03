@@ -9,8 +9,8 @@ class RoleManager {
       displayName: 'Super Administrator',
       routes: [
         RouteInfo('/super-admin/dashboard', 'Dashboard', Icons.dashboard),
-        RouteInfo('/super-admin/clinic-management', 'Clinic Management', Icons.business),
         RouteInfo('/super-admin/system-analytics', 'System Analytics', Icons.analytics),
+        RouteInfo('/super-admin/clinic-management', 'Clinic Management', Icons.business),
         RouteInfo('/super-admin/user-management', 'User Management', Icons.people_outline),
         RouteInfo('/super-admin/notifications', 'Notifications', Icons.notifications_outlined),
         RouteInfo('/super-admin/support', 'Support Center', Icons.help_outline),
