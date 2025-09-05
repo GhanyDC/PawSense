@@ -19,7 +19,7 @@ class VerifyEmailPage extends StatefulWidget {
   final String email;
   final String uid;
   final String contactNumber;
-  final DateTime dateOfBirth;
+  final DateTime? dateOfBirth;
   final bool agreedToTerms;
   final String address;
 
@@ -30,7 +30,7 @@ class VerifyEmailPage extends StatefulWidget {
     required this.email,
     required this.uid,
     required this.contactNumber,
-    required this.dateOfBirth,
+    this.dateOfBirth,
     required this.agreedToTerms,
     required this.address,
   });
