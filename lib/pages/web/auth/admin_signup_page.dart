@@ -32,6 +32,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
 
   int _currentStep = 0;
   bool _isLoading = false;
+  bool _isCheckingEmail = false;
   String? _errorMessage;
 
   // Step 1: Account Info
@@ -693,9 +694,25 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
            _licenseImages[index] != null; // Image is now required
   }
 
-  void _nextStep() {
+  void _nextStep() async {
     if (_currentStep < 2) {
       if (_formKeys[_currentStep].currentState!.validate()) {
+        
+        // Check email availability based on current step
+        if (_currentStep == 0) {
+          await _checkEmailAvailability();
+          
+          if (_errorMessage != null) {
+            return; // Don't proceed if email validation failed
+          }
+        } else if (_currentStep == 1) {
+          await _checkClinicEmailAvailability();
+          
+          if (_errorMessage != null) {
+            return; // Don't proceed if email validation failed
+          }
+        }
+        
         setState(() {
           _currentStep++;
         });
@@ -703,9 +720,68 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
+      } else {
       }
     } else {
       _handleSignup();
+    }
+  }
+
+  Future<void> _checkEmailAvailability() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return;
+
+    setState(() {
+      _isCheckingEmail = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final emailExists = await _authService.emailExists(email);
+      
+      if (emailExists) {
+        setState(() {
+          _errorMessage = 'An account already exists with this email address.';
+        });
+      } else {
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+      });
+    } finally {
+      setState(() {
+        _isCheckingEmail = false;
+      });
+    }
+  }
+
+  Future<void> _checkClinicEmailAvailability() async {
+    final email = _clinicEmailController.text.trim();
+    if (email.isEmpty) return;
+
+    setState(() {
+      _isCheckingEmail = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final emailExists = await _authService.clinicEmailExists(email);
+      
+      if (emailExists) {
+        setState(() {
+          _errorMessage = 'A clinic already exists with this email address.';
+        });
+      } else {
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+      });
+    } finally {
+      setState(() {
+        _isCheckingEmail = false;
+      });
     }
   }
 
@@ -722,43 +798,84 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
   }
 
   Widget _buildStepIndicator() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(3, (index) {
-        final isActive = index == _currentStep;
-        final isCompleted = index < _currentStep;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildStepItem('Account', 0, Icons.person_outline),
+          _buildStepConnector(0),
+          _buildStepItem('Clinic', 1, Icons.local_hospital_outlined),
+          _buildStepConnector(1),
+          _buildStepItem('Details', 2, Icons.description_outlined),
+        ],
+      ),
+    );
+  }
 
-        return Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isCompleted
-                    ? AppColors.success
-                    : isActive
-                    ? AppColors.primary
-                    : AppColors.border,
+  Widget _buildStepItem(String label, int index, IconData icon) {
+    final isActive = index == _currentStep;
+    final isCompleted = index < _currentStep;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isCompleted 
+                ? const Color(0xFF10B981) // Green for completed
+                : isActive 
+                    ? const Color(0xFF8B5CF6) // Purple for active
+                    : const Color(0xFFE5E7EB), // Light gray for pending
+            boxShadow: [
+              BoxShadow(
+                color: (isCompleted || isActive) 
+                    ? (isCompleted ? const Color(0xFF10B981) : const Color(0xFF8B5CF6)).withOpacity(0.2)
+                    : Colors.transparent,
+                blurRadius: 4,
+                offset: const Offset(0, 1),
               ),
-              child: Icon(
-                isCompleted ? Icons.check : Icons.circle,
-                color: AppColors.white,
-                size: 16,
-              ),
-            ),
-            if (index < 2)
-              Container(
-                width: 40,
-                height: 2,
-                color: index < _currentStep
-                    ? AppColors.success
-                    : AppColors.border,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-          ],
-        );
-      }),
+            ],
+          ),
+          child: Icon(
+            isCompleted ? Icons.check : icon,
+            color: (isCompleted || isActive) ? Colors.white : const Color(0xFF6B7280),
+            size: 18,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isActive 
+                ? const Color(0xFF8B5CF6) // Purple for active
+                : isCompleted 
+                    ? const Color(0xFF10B981) // Green for completed
+                    : const Color(0xFF6B7280), // Gray for pending
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepConnector(int index) {
+    final isCompleted = index < _currentStep;
+    
+    return Container(
+      width: 40,
+      height: 2,
+      margin: const EdgeInsets.only(bottom: 24), // Align with circles
+      decoration: BoxDecoration(
+        color: isCompleted 
+            ? const Color(0xFF10B981) // Green for completed connections
+            : const Color(0xFFE5E7EB), // Light gray for pending
+        borderRadius: BorderRadius.circular(1),
+      ),
     );
   }
 
@@ -1314,7 +1431,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
                     onChanged: (value) =>
                         _updateService(index, duration: value),
                     decoration: InputDecoration(
-                      labelText: 'Duration *',
+                      labelText: 'Duration',
                       border: OutlineInputBorder(),
                       hintText: 'e.g. 30 mins',
                     ),
@@ -1809,51 +1926,78 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
         Text(
           label,
           style: kTextStyleSmall.copyWith(
-            fontSize: 14,
+            fontSize: 15, // Increased from 13
             color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          obscureText: obscureText,
-          maxLines: maxLines,
-          style: kTextStyleRegular.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
+        const SizedBox(height: 8), // Increased spacing
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.04), // Reduced shadow intensity
+                blurRadius: 4, // Reduced blur
+                offset: const Offset(0, 2), // Reduced offset
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02), // Reduced secondary shadow
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: kTextStyleRegular.copyWith(
-              color: AppColors.textTertiary,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            obscureText: obscureText,
+            maxLines: maxLines,
+            style: kTextStyleRegular.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+              fontSize: 16, // Increased from 14
             ),
-            filled: true,
-            fillColor: AppColors.white,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: kTextStyleRegular.copyWith(
+                color: AppColors.textTertiary,
+                fontSize: 15, // Increased from 13
+              ),
+              filled: true,
+              fillColor: AppColors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14, // Increased padding for better visual balance
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.border.withOpacity(0.3), width: 1),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.border.withOpacity(0.3), width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.primary, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.error, width: 1.5),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.error, width: 2),
+              ),
+              suffixIcon: suffixIcon,
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: AppColors.border, width: 1),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: AppColors.border, width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: AppColors.primary, width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: AppColors.error, width: 1),
-            ),
-            suffixIcon: suffixIcon,
+            validator: validator,
           ),
-          validator: validator,
         ),
       ],
     );
@@ -1870,43 +2014,68 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
         Text(
           label,
           style: kTextStyleSmall.copyWith(
-            fontSize: 14,
+            fontSize: 15, // Increased from 13
             color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border, width: 1),
-              borderRadius: BorderRadius.circular(8),
-              color: AppColors.white,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    value != null
-                        ? '${value.toDate().day}/${value.toDate().month}/${value.toDate().year}'
-                        : 'Select date',
-                    style: kTextStyleRegular.copyWith(
-                      color: value != null
-                          ? AppColors.textPrimary
-                          : AppColors.textTertiary,
-                      fontWeight: FontWeight.w500,
+        const SizedBox(height: 8), // Increased spacing
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.04), // Reduced shadow intensity
+                blurRadius: 4, // Reduced blur
+                offset: const Offset(0, 2), // Reduced offset
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02), // Reduced secondary shadow
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), // Increased padding
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border.withOpacity(0.3), width: 1),
+                borderRadius: BorderRadius.circular(10),
+                color: AppColors.white,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value != null
+                          ? '${value.toDate().day}/${value.toDate().month}/${value.toDate().year}'
+                          : 'Select date',
+                      style: kTextStyleRegular.copyWith(
+                        color: value != null
+                            ? AppColors.textPrimary
+                            : AppColors.textTertiary,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 16, // Increased from 14
+                      ),
                     ),
                   ),
-                ),
-                Icon(
-                  Icons.calendar_today_outlined,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-              ],
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      Icons.calendar_today_outlined,
+                      color: AppColors.primary,
+                      size: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1918,188 +2087,316 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          margin: const EdgeInsets.all(20),
-          child: Card(
-            elevation: 0,
-            color: AppColors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(40),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: _currentStep > 0
-                            ? _previousStep
-                            : () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back),
-                        color: AppColors.textSecondary,
-                      ),
-                      Expanded(
-                        child: Text(
-                          'Create Admin Account',
-                          style: kTextStyleTitle.copyWith(
-                            fontSize: 28,
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const SizedBox(width: 48), // Balance the back button
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Step Indicator
-                  _buildStepIndicator(),
-                  const SizedBox(height: 40),
-
-                  // Error Message
-                  if (_errorMessage != null)
-                    Container(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.primary.withOpacity(0.1),
+              AppColors.background,
+              AppColors.primary.withOpacity(0.05),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 650,
+                  minHeight: 500,
+                ),
+                child: SizedBox(
+                  height: 900,
+                  child: Card(
+                    elevation: 20,
+                    shadowColor: AppColors.primary.withOpacity(0.15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: Colors.red.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: kTextStyleSmall.copyWith(
-                                fontSize: 14,
-                                color: Colors.red.shade700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Form Content
-                  Expanded(
-                    child: PageView(
-                      controller: _pageController,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        SingleChildScrollView(child: _buildAccountInfoStep()),
-                        SingleChildScrollView(child: _buildClinicInfoStep()),
-                        SingleChildScrollView(child: _buildClinicDetailsStep()),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Navigation Buttons
-                  Row(
-                    children: [
-                      if (_currentStep > 0)
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _isLoading ? null : _previousStep,
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              side: BorderSide(color: AppColors.border),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              'Previous',
-                              style: kTextStyleRegular.copyWith(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.white,
+                            AppColors.white.withOpacity(0.98),
+                          ],
                         ),
-                      if (_currentStep > 0) const SizedBox(width: 16),
-                      Expanded(
-                        flex: _currentStep == 0 ? 1 : 1,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _nextStep,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: AppColors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                            disabledBackgroundColor: AppColors.primary
-                                .withOpacity(0.6),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
+                        border: Border.all(
+                          color: AppColors.primary.withOpacity(0.1),
+                          width: 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Header - Minimized
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                
+                                Expanded(
+                                  child: Text(
+                                    'Create Admin Account',
+                                    style: kTextStyleTitle.copyWith(
+                                      fontSize: 20,
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ),
-                                )
-                              : Text(
-                                  _currentStep == 2 ? 'Create Account' : 'Next',
-                                  style: kTextStyleRegular.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
+                                
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                  
+                            // Error Message - More Compact
+                            if (_errorMessage != null)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.red.shade200),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.red.withOpacity(0.1),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade100,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Icon(
+                                        Icons.error_outline,
+                                        color: Colors.red.shade700,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: kTextStyleSmall.copyWith(
+                                          fontSize: 13,
+                                          color: Colors.red.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                  
+                            // Form Content Container - Bigger for better field visibility
+                            Container(
+                              height: MediaQuery.of(context).size.height * 0.79, // Increased from 0.45
+                              decoration: BoxDecoration(
+                                color: AppColors.white.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.border.withOpacity(0.2),
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Column(
+                                  children: [
+                                    // Step Indicator inside the form container
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.white.withOpacity(0.7),
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(12),
+                                          topRight: Radius.circular(12),
+                                        ),
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: AppColors.border.withOpacity(0.2),
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Center(child: _buildStepIndicator()),
+                                    ),
+                                    // Form content area
+                                    Expanded(
+                                      child: PageView(
+                                        controller: _pageController,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(20), // Increased padding for more space
+                                      child: SingleChildScrollView(
+                                        child: _buildAccountInfoStep(),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(20), // Increased padding for more space
+                                      child: SingleChildScrollView(
+                                        child: _buildClinicInfoStep(),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(20), // Increased padding for more space
+                                      child: SingleChildScrollView(
+                                        child: _buildClinicDetailsStep(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                  
+                            const SizedBox(height: 20),
+                  
+                            // Navigation Buttons - More Compact
+                            Row(
+                              children: [
+                                if (_currentStep > 0)
+                                  Expanded(
+                                    child: Container(
+                                      height: 44,
+                                      child: OutlinedButton(
+                                        onPressed: (_isLoading || _isCheckingEmail) ? null : _previousStep,
+                                        style: OutlinedButton.styleFrom(
+                                          side: BorderSide(color: AppColors.primary, width: 1.5),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          backgroundColor: AppColors.white,
+                                        ),
+                                        child: Text(
+                                          'Previous',
+                                          style: kTextStyleRegular.copyWith(
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_currentStep > 0) const SizedBox(width: 12),
+                                Expanded(
+                                  flex: _currentStep == 0 ? 1 : 1,
+                                  child: Container(
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppColors.primary,
+                                          AppColors.primary.withOpacity(0.8),
+                                        ],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.primary.withOpacity(0.25),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ElevatedButton(
+                                      onPressed: (_isLoading || _isCheckingEmail) ? null : _nextStep,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.transparent,
+                                        foregroundColor: AppColors.white,
+                                        shadowColor: Colors.transparent,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        elevation: 0,
+                                      ),
+                                      child: (_isLoading || _isCheckingEmail)
+                                          ? const SizedBox(
+                                              height: 20,
+                                              width: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                              ),
+                                            )
+                                          : Text(
+                                              _currentStep == 2 ? 'Create Account' : 'Next',
+                                              style: kTextStyleRegular.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                  
+                            const SizedBox(height: 16),
+                  
+                            // Footer - More Compact
+                            RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: kTextStyleSmall.copyWith(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                                children: [
+                                  const TextSpan(text: 'Already have an account? '),
+                                  TextSpan(
+                                    text: 'Sign in here',
+                                    style: kTextStyleSmall.copyWith(
+                                      fontSize: 12,
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () {
+                                        context.go('/web_login');
+                                      },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                    ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-
-                  // Footer
-                  RichText(
-                    textAlign: TextAlign.center,
-                    text: TextSpan(
-                      style: kTextStyleSmall.copyWith(
-                        fontSize: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                      children: [
-                        const TextSpan(text: 'Already have an account? '),
-                        TextSpan(
-                          text: 'Sign in here',
-                          style: kTextStyleSmall.copyWith(
-                            fontSize: 14,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () {
-                              context.go('/web_login');
-                            },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                  
+                                ),
+                              ),
+                            ),
+                ),
+        ),
+      ),
           ),
         ),
       ),

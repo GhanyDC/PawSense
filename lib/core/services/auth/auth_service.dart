@@ -75,6 +75,62 @@ class AuthService {
     return await AuthGuard.canManageCertifications();
   }
 
+  /// Check if email already exists in the system
+  Future<bool> emailExists(String email) async {
+    try {
+      // Method 1: Try fetchSignInMethodsForEmail
+      try {
+        final methods = await _auth.fetchSignInMethodsForEmail(email);
+        if (methods.isNotEmpty) {
+          return true;
+        }
+      } catch (e) {}
+      // Method 2: Try to create a user account to see if email is taken
+      try {
+        final UserCredential result = await _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: 'temp_password_for_check_${DateTime.now().millisecondsSinceEpoch}',
+        );
+        await result.user?.delete();
+        return false;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          return true;
+        } else if (e.code == 'weak-password') {
+          return false;
+        } else {
+          throw Exception('Error checking email: ${e.message}');
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'invalid-email':
+          throw Exception('Invalid email format');
+        case 'network-request-failed':
+          throw Exception('Network error. Please check your connection and try again.');
+        default:
+          throw Exception('Error checking email: ${e.message}');
+      }
+    } catch (e) {
+      throw Exception('Failed to validate email. Please try again.');
+    }
+  }
+
+  /// Check if clinic email already exists in the clinics collection
+  Future<bool> clinicEmailExists(String email) async {
+    try {
+      final clinicQuery = await _firestore
+          .collection('clinics')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+      final exists = clinicQuery.docs.isNotEmpty;
+      return exists;
+    } catch (e) {
+      throw Exception('Failed to validate clinic email. Please try again.');
+    }
+  }
+
   /// Sign out current user
   Future<void> signOut() async {
     _tokenManager.clearToken();
