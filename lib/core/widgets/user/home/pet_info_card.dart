@@ -51,6 +51,7 @@ class PetInfoCard extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
+
               if (pets.length > 2)
                 TextButton(
                   onPressed: () {
@@ -70,6 +71,19 @@ class PetInfoCard extends StatelessWidget {
                 ),
             ],
           ),
+          
+          // Description below title
+          const SizedBox(height: 4),
+          const Text(
+            'Essential details about your pet',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          
           const SizedBox(height: kMobileSizedBoxLarge),
           
           // Pets and appointment row
@@ -132,12 +146,11 @@ class PetInfoCard extends StatelessWidget {
                 
                 const SizedBox(width: 16),
                 
-                // Next appointment section
-                if (nextAppointmentDate != null && nextAppointmentTime != null)
-                  Expanded(
-                    flex: 3,
-                    child: _buildNextAppointment(),
-                  ),
+                // Next appointment section - always show
+                Expanded(
+                  flex: 3,
+                  child: _buildAppointmentSection(),
+                ),
               ],
             ),
           ),
@@ -182,72 +195,112 @@ class PetInfoCard extends StatelessWidget {
     );
   }
 
-  Widget _buildNextAppointment() {
+  Widget _buildAppointmentSection() {
+    // Check if we have appointment data
+    bool hasAppointment = nextAppointmentDate != null && nextAppointmentTime != null;
+    
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primary.withValues(alpha: 0.12),
+            AppColors.primary.withValues(alpha: 0.06),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          width: 1,
+        ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.max,
         children: [
+          // Icon and title in one row
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 24,
+                height: 24,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: hasAppointment 
+                      ? AppColors.primary.withValues(alpha: 0.15)
+                      : AppColors.textSecondary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(
-                  Icons.calendar_today,
-                  size: 18,
-                  color: AppColors.primary,
+                child: Icon(
+                  hasAppointment ? Icons.event_available : Icons.event_busy,
+                  size: 14,
+                  color: hasAppointment ? AppColors.primary : AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Next Appointment',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.textSecondary,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      nextAppointmentDate ?? '',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                        height: 1.3,
-                      ),
-                    ),
-                    Text(
-                      nextAppointmentTime ?? '',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.textSecondary,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
+              const SizedBox(width: 8),
+              Text(
+                'Appointments',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                  height: 1.3,
+                  letterSpacing: 0.5,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          
+          if (hasAppointment) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                nextAppointmentDate!,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              nextAppointmentTime!,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+                height: 1.3,
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.textSecondary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'No Appointments\nToday',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
