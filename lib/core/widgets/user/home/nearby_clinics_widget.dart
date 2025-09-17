@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
+import 'package:pawsense/core/services/clinic/clinic_debug_service.dart';
 
 class ClinicInfo {
   final String id;
@@ -74,30 +75,29 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
 
   Future<void> _loadClinics() async {
     try {
+      print('NearbyClinicsWidget: Starting to load clinics...');
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
 
-      // Get all available clinics to show accurate count
-      final clinicsData = await ClinicListService.getAllActiveClinics();
+      final clinicsData = await ClinicListService.getClinicsNearby(
+        limit: widget.displayLimit + 2, // Get a few extra for "View All" button
+      );
+
+      print('NearbyClinicsWidget: Received ${clinicsData.length} clinics from service');
       
-      final List<ClinicInfo> clinics = [];
-      for (int i = 0; i < clinicsData.length; i++) {
-        try {
-          final clinic = ClinicInfo.fromMap(clinicsData[i]);
-          clinics.add(clinic);
-        } catch (e) {
-          // Skip invalid clinic data
-          continue;
-        }
-      }
+      final clinics = clinicsData.map((data) => ClinicInfo.fromMap(data)).toList();
+      
+      print('NearbyClinicsWidget: Successfully mapped ${clinics.length} clinic objects');
 
       setState(() {
         _clinics = clinics;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('NearbyClinicsWidget: Error loading clinics: $e');
+      print('NearbyClinicsWidget: Stack trace: $stackTrace');
       setState(() {
         _isLoading = false;
         _errorMessage = 'Failed to load clinics. Please try again.';
@@ -220,23 +220,56 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
   }
 
   Widget _buildEmptyState() {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            Icon(
+            const Icon(
               Icons.local_hospital_outlined,
               color: AppColors.textSecondary,
               size: 32,
             ),
-            SizedBox(height: 8),
-            Text(
+            const SizedBox(height: 8),
+            const Text(
               'No clinics available at the moment',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Debug button - remove in production
+            ElevatedButton(
+              onPressed: () async {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Creating sample clinics...')),
+                );
+                
+                try {
+                  await ClinicDebugService.createMultipleSampleClinics();
+                  
+                  // Reload clinics
+                  _loadClinics();
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Sample clinics created successfully!')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error creating clinics: $e')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              child: const Text(
+                'Create Sample Clinics',
+                style: TextStyle(fontSize: 12),
               ),
             ),
           ],
@@ -284,7 +317,7 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
         color: AppColors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppColors.border,
+          color: AppColors.primary,
           width: 2,
         ),
         boxShadow: [
@@ -360,7 +393,7 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
                           color: AppColors.textSecondary,
                           height: 1.2,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -393,7 +426,7 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
             ),
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
 
           // Action button
           _buildActionButton(

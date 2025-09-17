@@ -43,13 +43,6 @@ class _UserHomePageState extends State<UserHomePage> {
     HealthData(condition: 'Pyoderma', count: 1, color: const Color(0xFFE74C3C)),
   ];
 
-  final List<ClinicInfo> _nearByClinics = [
-    ClinicInfo(name: 'Happy Paws Vet', distance: '0.8 km • (555) 012-3456', phone: '555-012-3456'),
-    ClinicInfo(name: 'Downtown Animal Care', distance: '1.3 km • (555) 555-1234', phone: '555-555-1234'),
-    ClinicInfo(name: 'City Vet Clinic', distance: '2.1 km • (555) 987-6543', phone: '555-987-6543'),
-    ClinicInfo(name: 'Pet Health Center', distance: '2.5 km • (555) 111-2222', phone: '555-111-2222'),
-  ];
-
   // Sample AI history data
   final List<AIHistoryData> _aiHistory = [
     AIHistoryData(
@@ -256,8 +249,8 @@ class _UserHomePageState extends State<UserHomePage> {
 
                       PetInfoCard(
                         pets: _pets,
-                        nextAppointmentDate: 'Tomorrow',
-                        nextAppointmentTime: '2:30 PM',
+                        nextAppointmentDate: null, // No appointment
+                        nextAppointmentTime: null, // No appointment
                       ),
 
                       // Add space between pets and health snapshot
@@ -267,10 +260,15 @@ class _UserHomePageState extends State<UserHomePage> {
                         healthData: _healthData,
                       ),
 
-                      NearbyClinics(
-                        clinics: _nearByClinics,
-                        onViewMapPressed: () {
-                          // Handle view map
+                      NearbyClinicsWidget(
+                        onViewAllPressed: () {
+                          // Handle view all clinics
+                          print('View all clinics pressed');
+                        },
+                        onMessageClinic: (clinic) {
+                          // Handle message clinic
+                          print('Message clinic: ${clinic.name}');
+                          // TODO: Navigate to messaging or contact page
                         },
                       ),
 
