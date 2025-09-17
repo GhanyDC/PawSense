@@ -10,11 +10,13 @@ import 'package:pawsense/core/services/auth/auth_service_mobile.dart';
 class ProfileDrawer extends StatelessWidget {
   final UserModel? user;
   final VoidCallback? onClose;
+  final Function(UserModel)? onUserUpdated;
 
   const ProfileDrawer({
     super.key,
     this.user,
     this.onClose,
+    this.onUserUpdated,
   });
 
   @override
@@ -196,9 +198,19 @@ class ProfileDrawer extends StatelessWidget {
                     icon: Icons.person_outline,
                     title: 'Edit Profile',
                     subtitle: 'Update your personal information',
-                    onTap: () {
+                    onTap: () async {
                       Navigator.pop(context);
                       // Navigate to edit profile
+                      if (user != null) {
+                        final updatedUser = await context.push('/edit-profile', extra: {
+                          'user': user!,
+                        });
+                        
+                        // If user data was updated, call the callback
+                        if (updatedUser != null && updatedUser is UserModel && onUserUpdated != null) {
+                          onUserUpdated!(updatedUser);
+                        }
+                      }
                     },
                   ),
                   _buildProfileOption(
