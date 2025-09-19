@@ -10,6 +10,7 @@ class UsersList extends StatelessWidget {
   final int totalUsers; // Add total users count
   final Function(UserModel) onEditUser;
   final Function(UserModel, bool) onStatusToggle;
+  final Function(UserModel)? onUpdateUser; // Add onUpdateUser callback
 
   const UsersList({
     super.key,
@@ -18,6 +19,7 @@ class UsersList extends StatelessWidget {
     required this.totalUsers,
     required this.onEditUser,
     required this.onStatusToggle,
+    this.onUpdateUser, // Add to constructor
   });
 
   @override
@@ -39,8 +41,21 @@ class UsersList extends StatelessWidget {
           ],
         ),
         child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.primary,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                color: AppColors.primary,
+              ),
+              SizedBox(height: kSpacingMedium),
+              Text(
+                'Loading users...',
+                style: kTextStyleRegular.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -129,6 +144,7 @@ class UsersList extends StatelessWidget {
                 user: user,
                 onEdit: () => onEditUser(user),
                 onStatusToggle: (newStatus) => onStatusToggle(user, newStatus),
+                onUpdateUser: onUpdateUser, // Pass the callback
               );
             },
           ),

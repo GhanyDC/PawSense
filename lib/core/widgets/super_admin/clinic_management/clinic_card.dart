@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/models/clinic/clinic_registration_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
+import 'clinic_details_modal.dart';
 
 class ClinicCard extends StatelessWidget {
   final ClinicRegistration clinic;
@@ -9,6 +10,7 @@ class ClinicCard extends StatelessWidget {
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final VoidCallback onSuspend;
+  final Function(ClinicRegistration)? onUpdateClinic;
 
   const ClinicCard({
     super.key,
@@ -17,6 +19,7 @@ class ClinicCard extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onSuspend,
+    this.onUpdateClinic,
   });
 
   @override
@@ -126,7 +129,7 @@ class ClinicCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    onPressed: onViewDetails,
+                    onPressed: () => _showClinicDetailsModal(context),
                     icon: Icon(Icons.visibility_outlined, size: kIconSizeMedium),
                     color: AppColors.info,
                     tooltip: 'View Details',
@@ -237,5 +240,32 @@ class ClinicCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  void _showClinicDetailsModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => ClinicDetailsModal(
+        clinic: clinic,
+        onUpdateClinic: onUpdateClinic,
+        onStatusChange: (status, reason) {
+          // Handle status changes based on the new status
+          switch (status) {
+            case ClinicStatus.approved:
+              onApprove();
+              break;
+            case ClinicStatus.rejected:
+              onReject();
+              break;
+            case ClinicStatus.suspended:
+              onSuspend();
+              break;
+            case ClinicStatus.pending:
+              // Handle pending status if needed
+              break;
+          }
+        },
+      ),
+    );
   }
 }

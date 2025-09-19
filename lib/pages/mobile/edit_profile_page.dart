@@ -328,7 +328,7 @@ class _EditProfilePageState extends State<EditProfilePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFDFF9),
+      backgroundColor: AppColors.bgsecond,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -341,7 +341,7 @@ class _EditProfilePageState extends State<EditProfilePage>
           style: kMobileTextStyleTitle.copyWith(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: 18,
           ),
         ),
         centerTitle: true,
@@ -451,7 +451,7 @@ class _EditProfilePageState extends State<EditProfilePage>
                     // Save Button
                     SizedBox(
                       width: double.infinity,
-                      height: 40,
+                      height: 50,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,

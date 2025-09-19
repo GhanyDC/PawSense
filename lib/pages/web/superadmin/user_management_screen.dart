@@ -188,6 +188,47 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
+  Future<void> _onUpdateUser(UserModel updatedUser) async {
+    try {
+      // Call the SuperAdminService to update the user in Firestore
+      final success = await SuperAdminService.updateUser(updatedUser);
+      
+      if (success) {
+        final fullName = '${updatedUser.firstName ?? ''} ${updatedUser.lastName ?? ''}'.trim();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('User $fullName updated successfully'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+        
+        // Reload users to get updated data
+        _loadUsers();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update user'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update user: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   void _onToggleUserStatus(UserModel user) async {
     // Find current status from our data
     final userWithStatus = _usersWithStatus.firstWhere(
@@ -404,7 +445,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     foregroundColor: AppColors.white,
                     padding: const EdgeInsets.symmetric(horizontal: kSpacingMedium, vertical: kSpacingSmall),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(kBorderRadius),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                 ),
@@ -451,6 +492,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               totalUsers: _totalUsers,
               onEditUser: _onEditUser,
               onStatusToggle: (user, status) => _onToggleUserStatus(user),
+              onUpdateUser: _onUpdateUser, // Add the update callback
             ),
             
             if (!_isLoading && _totalUsers > 0) ...[

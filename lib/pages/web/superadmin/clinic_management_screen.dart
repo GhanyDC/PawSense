@@ -217,6 +217,53 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
     );
   }
 
+  Future<void> _onUpdateClinic(ClinicRegistration updatedClinic) async {
+    try {
+      // Call the SuperAdminService to update the clinic in Firestore
+      final success = await SuperAdminService.updateClinic(updatedClinic);
+      
+      if (success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${updatedClinic.clinicName} updated successfully'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+        
+        // Update the local clinic in the list
+        setState(() {
+          final index = _clinics.indexWhere((c) => c.id == updatedClinic.id);
+          if (index != -1) {
+            _clinics[index] = updatedClinic;
+          }
+        });
+        
+        // Reload clinics to get updated data
+        _loadClinics();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update ${updatedClinic.clinicName}'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating clinic: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   void _onApprove(ClinicRegistration clinic) async {
     final isReapproval = clinic.status == ClinicStatus.suspended;
     final actionText = isReapproval ? 'Re-approve' : 'Approve';
@@ -547,6 +594,7 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> {
               onApprove: _onApprove,
               onReject: _onReject,
               onSuspend: _onSuspend,
+              onUpdateClinic: _onUpdateClinic,
             ),
             
             if (!_isLoading && _clinics.isNotEmpty) ...[

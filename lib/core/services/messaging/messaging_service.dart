@@ -315,6 +315,47 @@ class MessagingService {
     }
   }
 
+  /// Delete conversation and all its messages
+  static Future<bool> deleteConversationAndMessages(String conversationId) async {
+    try {
+      print('=== Deleting conversation and messages: $conversationId ===');
+      
+      // Start a batch operation for atomic deletion
+      final batch = _firestore.batch();
+      
+      // First, get all messages for this conversation
+      final messagesSnapshot = await _firestore
+          .collection('messages')
+          .where('conversationId', isEqualTo: conversationId)
+          .get();
+      
+      print('Found ${messagesSnapshot.docs.length} messages to delete');
+      
+      // Delete all messages
+      for (final messageDoc in messagesSnapshot.docs) {
+        batch.delete(messageDoc.reference);
+      }
+      
+      // Mark conversation as inactive (soft delete)
+      batch.update(
+        _firestore.collection('conversations').doc(conversationId),
+        {
+          'isActive': false,
+          'updatedAt': Timestamp.fromDate(DateTime.now()),
+        },
+      );
+      
+      // Commit the batch operation
+      await batch.commit();
+      
+      print('=== Successfully deleted conversation and ${messagesSnapshot.docs.length} messages ===');
+      return true;
+    } catch (e) {
+      print('Error deleting conversation and messages: $e');
+      return false;
+    }
+  }
+
   /// Delete conversation
   static Future<bool> deleteConversation(String conversationId) async {
     try {

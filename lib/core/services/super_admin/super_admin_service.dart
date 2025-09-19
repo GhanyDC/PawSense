@@ -30,24 +30,15 @@ class SuperAdminService {
         bool isActive = statusFilter == 'active';
         query = query.where('isActive', isEqualTo: isActive);
       }
-      
-      // Get total count first (for pagination info)
-      final totalCountSnapshot = await query.get();
-      final totalUsers = totalCountSnapshot.docs.length;
-      
-      // Apply pagination
-      final offset = (page - 1) * itemsPerPage;
 
-      // Get all matching documents for pagination
+      // Get all matching documents first
       final allSnapshot = await query.get();
       final allDocs = allSnapshot.docs;
 
-      // Apply pagination in memory
-      final limitedDocs = allDocs.skip(offset).take(itemsPerPage).toList();
+      print('SuperAdminService: Retrieved ${allDocs.length} users from Firestore');
 
-      print('SuperAdminService: Pagination debug - total docs: ${allDocs.length}, offset: $offset, taking: $itemsPerPage, limitedDocs count: ${limitedDocs.length}');
-
-      final users = limitedDocs.map((doc) {
+      // Convert all documents to user objects with status
+      final allUsers = allDocs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         final user = UserModel.fromMap({
           'uid': doc.id,
@@ -62,11 +53,11 @@ class SuperAdminService {
         };
       }).toList();
 
-      // Apply search filter in memory (for simplicity)
-      List<Map<String, dynamic>> filteredUsers = users;
+      // Apply search filter FIRST (before pagination)
+      List<Map<String, dynamic>> filteredUsers = allUsers;
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        print('SuperAdminService: Applying search filter: "$searchQuery" on ${users.length} users');
-        filteredUsers = users.where((userMap) {
+        print('SuperAdminService: Applying search filter: "$searchQuery" on ${allUsers.length} users');
+        filteredUsers = allUsers.where((userMap) {
           final user = userMap['user'] as UserModel;
           final searchLower = searchQuery.toLowerCase();
           final matches = user.username.toLowerCase().contains(searchLower) ||
@@ -81,13 +72,18 @@ class SuperAdminService {
         print('SuperAdminService: After search filtering: ${filteredUsers.length} users');
       }
 
-      print('SuperAdminService: Found ${filteredUsers.length} users for page $page (offset: $offset, total docs: ${allDocs.length})');
+      // NOW apply pagination to the filtered results
+      final totalFilteredUsers = filteredUsers.length;
+      final offset = (page - 1) * itemsPerPage;
+      final paginatedUsers = filteredUsers.skip(offset).take(itemsPerPage).toList();
+
+      print('SuperAdminService: Pagination applied - filtered total: $totalFilteredUsers, page: $page, offset: $offset, returned: ${paginatedUsers.length}');
 
       return {
-        'users': filteredUsers,
-        'totalUsers': totalUsers,
+        'users': paginatedUsers,
+        'totalUsers': totalFilteredUsers, // Use filtered count, not original count
         'currentPage': page,
-        'totalPages': (totalUsers / itemsPerPage).ceil(),
+        'totalPages': (totalFilteredUsers / itemsPerPage).ceil(),
         'itemsPerPage': itemsPerPage,
       };
     } catch (e) {
@@ -190,6 +186,101 @@ class SuperAdminService {
     return await updateUserStatus(uid, true);
   }
   
+  /// Update user profile data
+  static Future<bool> updateUser(UserModel user) async {
+    try {
+      final updateData = <String, dynamic>{
+        'username': user.username,
+        'email': user.email,
+        'role': user.role,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
+      // Add optional fields if they exist
+      if (user.firstName != null) {
+        updateData['firstName'] = user.firstName;
+      }
+      if (user.lastName != null) {
+        updateData['lastName'] = user.lastName;
+      }
+      if (user.contactNumber != null) {
+        updateData['contactNumber'] = user.contactNumber;
+      }
+      if (user.address != null) {
+        updateData['address'] = user.address;
+      }
+      if (user.dateOfBirth != null) {
+        updateData['dateOfBirth'] = Timestamp.fromDate(user.dateOfBirth!);
+      }
+      if (user.profileImageUrl != null) {
+        updateData['profileImageUrl'] = user.profileImageUrl;
+      }
+      
+      // Add status-related fields
+      updateData['isActive'] = user.isActive;
+      if (user.suspensionReason != null) {
+        updateData['suspensionReason'] = user.suspensionReason;
+      }
+      if (user.suspendedAt != null) {
+        updateData['suspendedAt'] = Timestamp.fromDate(user.suspendedAt!);
+      }
+      
+      await _firestore.collection('users').doc(user.uid).update(updateData);
+      return true;
+    } catch (e) {
+      print('Error updating user: $e');
+      return false;
+    }
+  }
+  
+  /// Update clinic basic information
+  static Future<bool> updateClinic(ClinicRegistration clinic) async {
+    try {
+      final clinicUpdateData = <String, dynamic>{
+        'clinicName': clinic.clinicName,
+        'email': clinic.email,
+        'phone': clinic.phone,
+        'address': clinic.address,
+        'licenseNumber': clinic.licenseNumber,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
+      final userUpdateData = <String, dynamic>{
+        'username': clinic.adminName,
+        'email': clinic.email,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
+      // Update clinic document
+      await _firestore.collection('clinics').doc(clinic.id).update(clinicUpdateData);
+      
+      // Update admin user document
+      await _firestore.collection('users').doc(clinic.adminId).update(userUpdateData);
+      
+      // Update clinic details if exists
+      final clinicDetailsQuery = await _firestore
+          .collection('clinicDetails')
+          .where('clinicId', isEqualTo: clinic.id)
+          .limit(1)
+          .get();
+      
+      if (clinicDetailsQuery.docs.isNotEmpty) {
+        await clinicDetailsQuery.docs.first.reference.update({
+          'clinicName': clinic.clinicName,
+          'address': clinic.address,
+          'phone': clinic.phone,
+          'email': clinic.email,
+          'updatedAt': DateTime.now().toIso8601String(),
+        });
+      }
+      
+      return true;
+    } catch (e) {
+      print('Error updating clinic: $e');
+      return false;
+    }
+  }
+  
   /// Delete user
   static Future<bool> deleteUser(String uid) async {
     try {
@@ -261,34 +352,25 @@ class SuperAdminService {
       if (statusFilter != null && statusFilter.isNotEmpty && statusFilter != 'all') {
         query = query.where('status', isEqualTo: statusFilter);
       }
-      
-      // Get total count first (for pagination info)
-      final totalCountSnapshot = await query.get();
-      final totalClinics = totalCountSnapshot.docs.length;
-      
-      // Apply pagination
-      final offset = (page - 1) * itemsPerPage;
 
-      // Get all matching documents for pagination
+      // Get all matching documents first
       final allSnapshot = await query.get();
       final allDocs = allSnapshot.docs;
 
-      // Apply pagination in memory
-      final limitedDocs = allDocs.skip(offset).take(itemsPerPage).toList();
+      print('SuperAdminService: Retrieved ${allDocs.length} clinics from Firestore');
 
-      print('SuperAdminService: Pagination debug - total docs: ${allDocs.length}, offset: $offset, taking: $itemsPerPage, limitedDocs count: ${limitedDocs.length}');
-
-      List<ClinicRegistration> clinicRegistrations = [];
-      for (var clinicDoc in limitedDocs) {
+      // Convert all documents to clinic registration objects
+      List<ClinicRegistration> allClinics = [];
+      for (var clinicDoc in allDocs) {
         final registration = await _buildClinicRegistration(clinicDoc);
-        clinicRegistrations.add(registration);
+        allClinics.add(registration);
       }
-      
-      // Apply search filter in memory (for simplicity)
-      List<ClinicRegistration> filteredClinics = clinicRegistrations;
+
+      // Apply search filter FIRST (before pagination)
+      List<ClinicRegistration> filteredClinics = allClinics;
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        print('SuperAdminService: Applying clinic search filter: "$searchQuery" on ${clinicRegistrations.length} clinics');
-        filteredClinics = clinicRegistrations.where((clinic) {
+        print('SuperAdminService: Applying clinic search filter: "$searchQuery" on ${allClinics.length} clinics');
+        filteredClinics = allClinics.where((clinic) {
           final searchLower = searchQuery.toLowerCase();
           final matches = clinic.clinicName.toLowerCase().contains(searchLower) ||
                  clinic.email.toLowerCase().contains(searchLower) ||
@@ -301,14 +383,19 @@ class SuperAdminService {
         }).toList();
         print('SuperAdminService: After clinic search filtering: ${filteredClinics.length} clinics');
       }
-      
-      print('SuperAdminService: Found ${filteredClinics.length} clinics for page $page (offset: $offset, total docs: ${allDocs.length})');
+
+      // NOW apply pagination to the filtered results
+      final totalFilteredClinics = filteredClinics.length;
+      final offset = (page - 1) * itemsPerPage;
+      final paginatedClinics = filteredClinics.skip(offset).take(itemsPerPage).toList();
+
+      print('SuperAdminService: Pagination applied - filtered total: $totalFilteredClinics, page: $page, offset: $offset, returned: ${paginatedClinics.length}');
       
       return {
-        'clinics': filteredClinics,
-        'totalClinics': totalClinics,
+        'clinics': paginatedClinics,
+        'totalClinics': totalFilteredClinics, // Use filtered count, not original count
         'currentPage': page,
-        'totalPages': (totalClinics / itemsPerPage).ceil(),
+        'totalPages': (totalFilteredClinics / itemsPerPage).ceil(),
         'itemsPerPage': itemsPerPage,
       };
     } catch (e) {

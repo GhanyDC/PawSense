@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/services/messaging/messaging_service.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
-import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'conversation_page.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
 
@@ -96,10 +96,10 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         title: const Text(
-          'Select Clinic',
+          'Available Clinics',
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            fontSize: 18,
+            fontSize: 16,
             color: AppColors.white,
           ),
         ),
@@ -112,31 +112,33 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
         children: [
           // Search bar
           Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
+            padding: const EdgeInsets.all(kMobilePaddingMedium),
             color: AppColors.white,
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search clinics...',
-                hintStyle: TextStyle(color: AppColors.textSecondary),
-                prefixIcon: Icon(
+                hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                prefixIcon: const Icon(
                   Icons.search,
                   color: AppColors.textSecondary,
+                  size: 20,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(kBorderRadius),
-                  borderSide: BorderSide(color: AppColors.border),
+                  borderRadius: kMobileBorderRadiusButtonPreset,
+                  borderSide: const BorderSide(color: AppColors.border),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(kBorderRadius),
-                  borderSide: BorderSide(color: AppColors.border),
+                  borderRadius: kMobileBorderRadiusButtonPreset,
+                  borderSide: const BorderSide(color: AppColors.border),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(kBorderRadius),
-                  borderSide: BorderSide(color: AppColors.primary),
+                  borderRadius: kMobileBorderRadiusButtonPreset,
+                  borderSide: const BorderSide(color: AppColors.primary),
                 ),
                 filled: true,
                 fillColor: AppColors.background,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
           ),
@@ -174,7 +176,7 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
                         ),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.all(kSpacingMedium),
+                        padding: const EdgeInsets.all(kMobilePaddingMedium),
                         itemCount: _filteredClinics.length,
                         itemBuilder: (context, index) {
                           final clinic = _filteredClinics[index];
@@ -189,30 +191,30 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
 
   Widget _buildClinicTile(Map<String, dynamic> clinic) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: kMobileSizedBoxMedium),
       child: Material(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        elevation: 2,
+        borderRadius: kMobileBorderRadiusSmallPreset,
+        elevation: 1,
         shadowColor: AppColors.textSecondary.withValues(alpha: 0.1),
         child: InkWell(
           onTap: () => _startConversation(clinic),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: kMobileBorderRadiusSmallPreset,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(kMobilePaddingSmall),
             child: Row(
               children: [
                 // Clinic avatar
                 CircleAvatar(
-                  radius: 28,
+                  radius: 20,
                   backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                   child: Icon(
                     Icons.local_hospital,
                     color: AppColors.primary,
-                    size: 28,
+                    size: 20,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: kMobileSizedBoxLarge),
                 
                 // Clinic details
                 Expanded(
@@ -223,67 +225,69 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
                         clinic['name'].toString(),
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 16,
+                          fontSize: 14,
                           color: AppColors.textPrimary,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.location_on,
-                            size: 14,
+                            size: 12,
                             color: AppColors.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               clinic['address'].toString(),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: AppColors.textSecondary,
-                                fontSize: 14,
+                                fontSize: 12,
                               ),
-                              maxLines: 2,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
                       if (clinic['phone'] != null && clinic['phone'].toString().isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.phone,
-                              size: 14,
+                              size: 12,
                               color: AppColors.textSecondary,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               clinic['phone'].toString(),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: AppColors.textSecondary,
-                                fontSize: 12,
+                                fontSize: 11,
                               ),
                             ),
                           ],
                         ),
                       ],
                       if (clinic['isVerified'] == true) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.verified,
-                              size: 14,
+                              size: 12,
                               color: AppColors.success,
                             ),
                             const SizedBox(width: 4),
-                            Text(
+                            const Text(
                               'Verified',
                               style: TextStyle(
                                 color: AppColors.success,
-                                fontSize: 12,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -295,10 +299,10 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
                 ),
                 
                 // Arrow icon
-                Icon(
+                const Icon(
                   Icons.arrow_forward_ios,
                   color: AppColors.textSecondary,
-                  size: 16,
+                  size: 14,
                 ),
               ],
             ),
