@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
+import 'package:pawsense/pages/mobile/clinic_details.dart';
+import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
+import 'package:pawsense/core/models/messaging/conversation_model.dart';
+import 'package:pawsense/core/services/messaging/messaging_service.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
+import 'package:pawsense/pages/mobile/messaging/clinic_selection_page.dart';
 
 class ClinicInfo {
   final String id;
@@ -103,6 +109,83 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
         _errorMessage = 'Failed to load clinics. Please try again.';
       });
     }
+  }
+
+  Future<void> _messageClinic(ClinicInfo clinic) async {
+    try {
+      // Get current user
+      final currentUser = await AuthGuard.getCurrentUser();
+      if (currentUser == null) {
+        _showSnackBar('Please log in to send messages');
+        return;
+      }
+
+      // Check if conversation already exists with this clinic
+      final conversationsStream = MessagingService.getUserConversations();
+      await for (final conversations in conversationsStream.take(1)) {
+        // Look for existing conversation with this clinic
+        Conversation? existingConversation;
+        try {
+          existingConversation = conversations.firstWhere(
+            (conv) => conv.clinicId == clinic.id,
+          );
+        } catch (e) {
+          // No existing conversation found
+          existingConversation = null;
+        }
+
+        if (existingConversation != null) {
+          // Navigate to existing conversation (like clicking from messages menu)
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ConversationPage(
+                conversation: existingConversation!,
+              ),
+            ),
+          );
+        } else {
+          // Create a temporary conversation for new conversation
+          final tempConversation = Conversation(
+            id: 'temp_${clinic.id}_${DateTime.now().millisecondsSinceEpoch}',
+            userId: currentUser.uid,
+            userName: '${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}'.trim(),
+            clinicId: clinic.id,
+            clinicName: clinic.name,
+            lastMessageTime: DateTime.now(),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+
+          // Navigate to conversation page with temporary conversation
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ConversationPage(
+                conversation: tempConversation,
+              ),
+            ),
+          );
+        }
+        break; // Exit the stream after first result
+      }
+    } catch (e) {
+      print('Error in _messageClinic: $e');
+      _showSnackBar('Error loading conversation');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
   }
 
   @override
@@ -259,7 +342,14 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
             padding: const EdgeInsets.only(top: 8),
             child: Center(
               child: TextButton(
-                onPressed: widget.onViewAllPressed,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ClinicSelectionPage(),
+                    ),
+                  );
+                },
                 child: Text(
                   'View All Clinics (${_clinics.length})',
                   style: const TextStyle(
@@ -277,134 +367,140 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
   }
 
   Widget _buildClinicItem(ClinicInfo clinic) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.border,
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ClinicDetailsPage(clinicId: clinic.id),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Clinic icon
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
+        );
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.border,
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
               color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
-            child: Icon(
-              clinic.isVerified ? Icons.verified : Icons.local_hospital,
-              size: 16,
-              color: clinic.isVerified ? AppColors.success : AppColors.primary,
+          ],
+        ),
+        child: Row(
+          children: [
+            // Clinic icon
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                clinic.isVerified ? Icons.verified : Icons.local_hospital,
+                size: 16,
+                color: clinic.isVerified ? AppColors.success : AppColors.primary,
+              ),
             ),
-          ),
 
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Clinic info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        clinic.name,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                          height: 1.2,
+            // Clinic info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          clinic.name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    if (clinic.isVerified)
+                      if (clinic.isVerified)
+                        const Icon(
+                          Icons.verified,
+                          size: 12,
+                          color: AppColors.success,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
                       const Icon(
-                        Icons.verified,
+                        Icons.location_on,
                         size: 12,
-                        color: AppColors.success,
+                        color: AppColors.textSecondary,
                       ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      size: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        clinic.address,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.textSecondary,
-                          height: 1.2,
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          clinic.address,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.textSecondary,
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.phone,
-                      size: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        clinic.phone,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.textSecondary,
-                          height: 1.2,
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.phone,
+                        size: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          clinic.phone,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.textSecondary,
+                            height: 1.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          const SizedBox(width: 16),
+            const SizedBox(width: 16),
 
-          // Action button
-          _buildActionButton(
-            icon: Icons.message,
-            onPressed: () {
-              if (widget.onMessageClinic != null) {
-                widget.onMessageClinic!(clinic);
-              }
-            },
-          ),
-        ],
+            // Action button
+            _buildActionButton(
+              icon: Icons.message,
+              onPressed: () => _messageClinic(clinic),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -4,7 +4,7 @@ import 'package:pawsense/core/models/messaging/conversation_model.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
-import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/widgets/user/shared/navigation/user_app_bar.dart';
 import 'package:pawsense/core/widgets/user/messaging/conversation_list_item.dart';
 import 'clinic_selection_page.dart';
@@ -80,16 +80,17 @@ class _MessagingPageState extends State<MessagingPage> {
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
-            color: AppColors.white,
+            padding: const EdgeInsets.fromLTRB(kMobilePaddingMedium,kMobilePaddingMedium,kMobilePaddingMedium,0),
+            color: AppColors.background,
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    'Your Conversations',
+                    'Messages',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
+                      fontSize: 16
                     ),
                   ),
                 ),
@@ -125,34 +126,40 @@ class _MessagingPageState extends State<MessagingPage> {
                       children: [
                         Icon(
                           Icons.error_outline,
-                          size: 64,
+                          size: 48,
                           color: AppColors.textSecondary,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: kMobileSizedBoxLarge),
                         Text(
                           'Error loading conversations',
                           style: TextStyle(
                             color: AppColors.textSecondary,
-                            fontSize: 16,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: kMobileSizedBoxSmall),
                         Text(
                           'Error: ${snapshot.error}',
                           style: TextStyle(
                             color: AppColors.error,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: kMobileSizedBoxLarge),
                         ElevatedButton(
                           onPressed: () {
                             setState(() {
                               // Force rebuild to retry
                             });
                           },
-                          child: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          ),
+                          child: const Text('Retry', style: TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
@@ -166,34 +173,35 @@ class _MessagingPageState extends State<MessagingPage> {
                       children: [
                         Icon(
                           Icons.chat_bubble_outline,
-                          size: 64,
+                          size: 48,
                           color: AppColors.textSecondary,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: kMobileSizedBoxLarge),
                         Text(
                           'No conversations yet',
                           style: TextStyle(
                             color: AppColors.textSecondary,
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: kMobileSizedBoxSmall),
                         Text(
                           'Start a conversation with a vet clinic',
                           style: TextStyle(
                             color: AppColors.textSecondary,
-                            fontSize: 14,
+                            fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: kMobileSizedBoxXLarge),
                         ElevatedButton.icon(
                           onPressed: () => _navigateToClinicSelection(),
-                          icon: const Icon(Icons.add),
-                          label: const Text('New Message'),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('New Message', style: TextStyle(fontSize: 12)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: AppColors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           ),
                         ),
                       ],
@@ -203,17 +211,20 @@ class _MessagingPageState extends State<MessagingPage> {
 
                 final conversations = snapshot.data!;
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(kSpacingMedium),
+              return ListView.separated(
+                padding: const EdgeInsets.all(kMobilePaddingMedium),
                   itemCount: conversations.length,
                   itemBuilder: (context, index) {
                     final conversation = conversations[index];
                     return ConversationListItem(
                       conversation: conversation,
                       onTap: () => _navigateToConversation(conversation),
+                      onDelete: () => _deleteConversation(conversation),
                     );
                   },
+                  separatorBuilder: (context, index) => const SizedBox(height: kMobileSizedBoxMedium),
                 );
+
               },
             ),
           ),
@@ -229,6 +240,32 @@ class _MessagingPageState extends State<MessagingPage> {
         builder: (context) => ConversationPage(conversation: conversation),
       ),
     );
+  }
+
+  Future<void> _deleteConversation(Conversation conversation) async {
+    try {
+      await MessagingService.deleteConversationAndMessages(conversation.id);
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Conversation with ${conversation.clinicName} deleted'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete conversation: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   void _navigateToClinicSelection() {
