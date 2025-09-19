@@ -7,6 +7,7 @@ import 'package:pawsense/core/services/user/pet_service.dart';
 import 'package:pawsense/core/services/cloudinary/cloudinary_service.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
+import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/utils/breed_options.dart';
 import 'package:pawsense/core/widgets/user/pets/pet_form_fields.dart';
@@ -204,9 +205,9 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.bgsecond,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.bgsecond,
         elevation: 0,
         title: Text(
           _isEditing ? 'Edit Pet' : 'Add Pet',
@@ -216,37 +217,11 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
             fontWeight: FontWeight.w600,
           ),
         ),
+                centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                  ),
-                ),
-              ),
-            )
-          else
-            TextButton(
-              onPressed: _savePet,
-              child: Text(
-                _isEditing ? 'Update' : 'Save',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(kMobileMarginHorizontal),
@@ -255,6 +230,105 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 20),
+              
+              // Pet Picture Section
+              Center(
+                child: GestureDetector(
+                  onTap: _uploadingImage ? null : _pickPetImage,
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(60),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.3),
+                            width: 2,
+                          ),
+                        ),
+                        child: _uploadingImage
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(58), // Slightly smaller to fit inside border
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                  ),
+                                ),
+                              )
+                            : _petImageUrl != null
+                                ? Padding(
+                                    padding: const EdgeInsets.all(2), // Account for border width
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(58),
+                                      child: Image.network(
+                                        _petImageUrl!,
+                                        width: 116,
+                                        height: 116,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(58),
+                                            ),
+                                            child: Icon(
+                                              Icons.pets,
+                                              size: 40,
+                                              color: AppColors.primary,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Icon(
+                                      Icons.pets,
+                                      size: 40,
+                                      color: AppColors.primary.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.white,
+                              width: 2,
+                            ),
+                          ),
+                          child: Icon(
+                            _petImageUrl != null ? Icons.edit : Icons.camera_alt,
+                            color: AppColors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  _petImageUrl != null ? 'Tap to change photo' : 'Tap to add photo',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              
               const SizedBox(height: 20),
               
               // Pet Name
@@ -271,119 +345,6 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
                   }
                   return null;
                 },
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Pet Picture Section
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pet Photo',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: GestureDetector(
-                      onTap: _uploadingImage ? null : _pickPetImage,
-                      child: Stack(
-                        children: [
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(60),
-                              border: Border.all(
-                                color: AppColors.primary.withValues(alpha: 0.3),
-                                width: 2,
-                              ),
-                            ),
-                            child: _uploadingImage
-                                ? Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(58), // Slightly smaller to fit inside border
-                                    ),
-                                    child: const Center(
-                                      child: CircularProgressIndicator(
-                                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                      ),
-                                    ),
-                                  )
-                                : _petImageUrl != null
-                                    ? Padding(
-                                        padding: const EdgeInsets.all(2), // Account for border width
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(58),
-                                          child: Image.network(
-                                            _petImageUrl!,
-                                            width: 116,
-                                            height: 116,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return Container(
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.primary.withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(58),
-                                                ),
-                                                child: Icon(
-                                                  Icons.pets,
-                                                  size: 40,
-                                                  color: AppColors.primary,
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      )
-                                    : Center(
-                                        child: Icon(
-                                          Icons.pets,
-                                          size: 40,
-                                          color: AppColors.primary.withValues(alpha: 0.6),
-                                        ),
-                                      ),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: AppColors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Icon(
-                                _petImageUrl != null ? Icons.edit : Icons.camera_alt,
-                                color: AppColors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      _petImageUrl != null ? 'Tap to change photo' : 'Tap to add photo',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
               ),
               
               const SizedBox(height: 20),
@@ -468,7 +429,7 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
               
               const SizedBox(height: 40),
               
-              // Save Button
+             // Save Button
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -477,29 +438,34 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.white,
+                    disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(kButtonRadius),
                     ),
-                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    elevation: 2,
+                    shadowColor: Colors.black.withOpacity(0.1),
                   ),
                   child: _loading
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
                           ),
                         )
                       : Text(
-                          _isEditing ? 'Update Pet' : 'Add Pet',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                          _isEditing ? 'Save Changes' : 'Add Pet',
+                          style: kTextStyleRegular.copyWith(
+                            fontSize: 14,
+                            color: AppColors.white,
+                            fontWeight: FontWeight.bold,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                 ),
-              ),
+              )
             ],
           ),
         ),

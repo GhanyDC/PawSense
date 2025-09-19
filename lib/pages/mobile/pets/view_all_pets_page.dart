@@ -181,18 +181,18 @@ class _ViewAllPetsPageState extends State<ViewAllPetsPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.primary,
         elevation: 0,
         title: const Text(
           'My Pets',
           style: TextStyle(
-            color: AppColors.textPrimary,
+            color: AppColors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back, color: AppColors.white),
           onPressed: () => _handleBackNavigation(),
         ),
       ),
@@ -216,6 +216,7 @@ class _ViewAllPetsPageState extends State<ViewAllPetsPage> {
   Widget _buildContent() {
     return Column(
       children: [
+        SizedBox(height: 12),
         // Search Bar with spacing
         Padding(
           padding: EdgeInsets.symmetric(
@@ -257,6 +258,7 @@ class _ViewAllPetsPageState extends State<ViewAllPetsPage> {
         final pet = _pets[index];
         return PetCard(
           pet: pet,
+          onTap: () => _navigateToEditPet(pet),
           onEdit: () => _navigateToEditPet(pet),
           onDelete: () => _deletePet(pet),
         );
