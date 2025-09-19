@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/widgets/super_admin/user_management/user_details_modal.dart';
 
 class UserCard extends StatelessWidget {
   final UserModel user;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final Function(bool) onStatusToggle;
+  final Function(UserModel)? onUpdateUser;
 
   const UserCard({
     super.key,
     required this.user,
-    required this.onEdit,
+    this.onEdit,
     required this.onStatusToggle,
+    this.onUpdateUser,
   });
 
   @override
@@ -150,13 +153,15 @@ class UserCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // View/Info Icon
-        IconButton(
-          onPressed: onEdit,
-          icon: Icon(Icons.visibility_outlined, size: 18),
-          color: AppColors.info,
-          tooltip: 'View Details',
-          padding: EdgeInsets.all(6),
-          constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+        Builder(
+          builder: (context) => IconButton(
+            onPressed: () => _showUserDetailsModal(context),
+            icon: Icon(Icons.visibility_outlined, size: 18),
+            color: AppColors.info,
+            tooltip: 'View Details',
+            padding: EdgeInsets.all(6),
+            constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
         ),
         SizedBox(width: kSpacingSmall),
         
@@ -267,5 +272,18 @@ class UserCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  void _showUserDetailsModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => UserDetailsModal(
+        user: user,
+        onUpdateUser: onUpdateUser,
+        onStatusChange: (isActive, reason) {
+          onStatusToggle(isActive);
+        },
+      ),
+    );
   }
 }

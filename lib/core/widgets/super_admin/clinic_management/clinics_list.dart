@@ -12,6 +12,7 @@ class ClinicsList extends StatelessWidget {
   final Function(ClinicRegistration) onApprove;
   final Function(ClinicRegistration) onReject;
   final Function(ClinicRegistration) onSuspend;
+  final Function(ClinicRegistration)? onUpdateClinic; // Add onUpdateClinic callback
 
   const ClinicsList({
     super.key,
@@ -22,6 +23,7 @@ class ClinicsList extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onSuspend,
+    this.onUpdateClinic, // Add to constructor
   });
 
   @override
@@ -141,6 +143,7 @@ class ClinicsList extends StatelessWidget {
                 onApprove: () => onApprove(clinic),
                 onReject: () => onReject(clinic),
                 onSuspend: () => onSuspend(clinic),
+                onUpdateClinic: onUpdateClinic, // Pass the update callback
               );
             },
           ),

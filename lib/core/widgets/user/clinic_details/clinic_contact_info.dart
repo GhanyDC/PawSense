@@ -1,15 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/clinic_details_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_model.dart';
 
-class ClinicContactInfo extends StatelessWidget {
+class ClinicContactInfo extends StatefulWidget {
   final ClinicDetails clinic;
 
   const ClinicContactInfo({
     Key? key,
     required this.clinic,
   }) : super(key: key);
+
+  @override
+  State<ClinicContactInfo> createState() => _ClinicContactInfoState();
+}
+
+class _ClinicContactInfoState extends State<ClinicContactInfo> {
+  Clinic? _basicClinicData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBasicClinicData();
+  }
+
+  Future<void> _loadBasicClinicData() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('clinics')
+          .doc(widget.clinic.clinicId)
+          .get();
+      
+      if (doc.exists) {
+        setState(() {
+          _basicClinicData = Clinic.fromMap(doc.data()!);
+        });
+      }
+    } catch (e) {
+      print('Error loading basic clinic data: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +70,8 @@ class ClinicContactInfo extends StatelessWidget {
               _buildContactItem(
                 icon: Icons.phone,
                 label: 'Contact Number',
-                value: clinic.phone,
-                onTap: () => _makePhoneCall(clinic.phone),
+                value: widget.clinic.phone,
+                onTap: () => _makePhoneCall(widget.clinic.phone),
                 color: AppColors.primary,
                 isFullWidth: true,
               ),
@@ -47,22 +79,22 @@ class ClinicContactInfo extends StatelessWidget {
               _buildContactItem(
                 icon: Icons.email,
                 label: 'Email',
-                value: clinic.email,
-                onTap: () => _sendEmail(clinic.email),
+                value: widget.clinic.email,
+                onTap: () => _sendEmail(widget.clinic.email),
                 color: AppColors.info,
                 isFullWidth: true,
               ),
             ],
           ),
           
-          // Website (if available)
-          if (clinic.socialMedia != null && clinic.socialMedia!['website'] != null) ...[
-            const SizedBox(height: kMobileSizedBoxSmall),
+          // Website (if available from multiple sources)
+          if (_getWebsiteUrl() != null) ...[
+            const SizedBox(height: kMobileSizedBoxMedium),
             _buildContactItem(
               icon: Icons.language,
               label: 'Website',
-              value: clinic.socialMedia!['website']!,
-              onTap: () => _openWebsite(clinic.socialMedia!['website']!),
+              value: _getWebsiteUrl()!,
+              onTap: () => _openWebsite(_getWebsiteUrl()!),
               color: AppColors.success,
               isFullWidth: true,
             ),
@@ -182,6 +214,24 @@ class ClinicContactInfo extends StatelessWidget {
   String _truncateText(String text, int maxLength) {
     if (text.length <= maxLength) return text;
     return '${text.substring(0, maxLength)}...';
+  }
+
+  /// Get website URL from multiple possible sources
+  String? _getWebsiteUrl() {
+    // First check the basic clinic data for direct website field
+    if (_basicClinicData?.website != null && _basicClinicData!.website!.isNotEmpty) {
+      return _basicClinicData!.website;
+    }
+    
+    // Check socialMedia map as fallback
+    if (widget.clinic.socialMedia != null && widget.clinic.socialMedia!['website'] != null) {
+      final website = widget.clinic.socialMedia!['website'] as String?;
+      if (website != null && website.isNotEmpty) {
+        return website;
+      }
+    }
+    
+    return null;
   }
 
   void _makePhoneCall(String phone) {
