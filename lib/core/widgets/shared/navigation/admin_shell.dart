@@ -105,7 +105,16 @@ class _AdminShellState extends State<AdminShell> {
     final routes = AppRouter.getRoutesForRole(_userRole);
     
     for (int i = 0; i < routes.length; i++) {
-      if (routes[i].path == currentLocation) {
+      final routePath = routes[i].path;
+      
+      // Check for exact match first
+      if (routePath == currentLocation) {
+        return i;
+      }
+      
+      // Check if current location starts with the route path (for parameterized routes)
+      // For example: '/admin/messaging' should match '/admin/messaging/conversationId'
+      if (currentLocation.startsWith(routePath + '/') || currentLocation.startsWith(routePath)) {
         return i;
       }
     }

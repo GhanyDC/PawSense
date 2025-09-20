@@ -81,26 +81,6 @@ class ChatHeader extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Active now',
-                      style: kTextStyleSmall.copyWith(
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),

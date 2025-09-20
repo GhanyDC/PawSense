@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import '../../../models/messaging/conversation_model.dart';
 
-class ConversationList extends StatelessWidget {
+class ConversationList extends StatefulWidget {
   final List<Conversation> conversations;
   final Conversation? selectedConversation;
   final Function(Conversation) onConversationSelected;
@@ -22,10 +23,97 @@ class ConversationList extends StatelessWidget {
   });
 
   @override
+  State<ConversationList> createState() => _ConversationListState();
+}
+
+class _ConversationListState extends State<ConversationList> {
+  // Track which conversations have been read (persistent storage)
+  final Set<String> _readConversations = <String>{};
+  bool _isLoadingPreferences = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReadConversations();
+  }
+
+  // Load read conversations from SharedPreferences
+  Future<void> _loadReadConversations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final readConversationsJson = prefs.getStringList('read_conversations') ?? [];
+      if (mounted) {
+        setState(() {
+          _readConversations.clear();
+          _readConversations.addAll(readConversationsJson);
+          _isLoadingPreferences = false;
+        });
+        print('📖 Loaded ${_readConversations.length} read conversations from storage: $_readConversations');
+      }
+    } catch (e) {
+      print('❌ Error loading read conversations: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingPreferences = false;
+        });
+      }
+    }
+  }
+
+  // Save read conversations to SharedPreferences
+  Future<void> _saveReadConversations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('read_conversations', _readConversations.toList());
+      print('💾 Saved ${_readConversations.length} read conversations to storage');
+    } catch (e) {
+      print('❌ Error saving read conversations: $e');
+    }
+  }
+
+  void _markAsRead(String conversationId) {
+    if (mounted) {
+      setState(() {
+        _readConversations.add(conversationId);
+      });
+      _saveReadConversations(); // Persist to storage
+      print('✅ Marked conversation $conversationId as read. Total read: ${_readConversations.length}');
+    }
+  }
+
+  // Optional: Method to clear all read status (for testing/debugging)
+  Future<void> _clearAllReadStatus() async {
+    if (mounted) {
+      setState(() {
+        _readConversations.clear();
+      });
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('read_conversations');
+    print('🗑️ Cleared all read conversation status');
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final filteredConversations = conversations.where((conv) {
-      return conv.userName.toLowerCase().contains(searchQuery.toLowerCase()) ||
-             conv.clinicName.toLowerCase().contains(searchQuery.toLowerCase());
+    // Show loading state while preferences are being loaded
+    if (_isLoadingPreferences) {
+      return Container(
+        width: 360,
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          border: Border(
+            right: BorderSide(color: AppColors.border, width: 1),
+          ),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final filteredConversations = widget.conversations.where((conv) {
+      return conv.userName.toLowerCase().contains(widget.searchQuery.toLowerCase()) ||
+             conv.clinicName.toLowerCase().contains(widget.searchQuery.toLowerCase());
     }).toList();
 
     return Container(
@@ -50,12 +138,23 @@ class ConversationList extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Chats',
-                  style: kTextStyleHeader.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Chats',
+                      style: kTextStyleHeader.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    // Debug button to clear read status (can be removed in production)
+                    IconButton(
+                      icon: Icon(Icons.refresh, size: 16, color: AppColors.textSecondary),
+                      onPressed: _clearAllReadStatus,
+                      tooltip: 'Reset read status (Debug)',
+                    ),
+                  ],
                 ),
                 const SizedBox(height: kSpacingSmall),
                 // Search bar
@@ -65,7 +164,7 @@ class ConversationList extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: TextField(
-                    onChanged: onSearchChanged,
+                    onChanged: widget.onSearchChanged,
                     decoration: InputDecoration(
                       hintText: 'Search Messenger',
                       hintStyle: TextStyle(
@@ -91,7 +190,7 @@ class ConversationList extends StatelessWidget {
           
           // Conversations list
           Expanded(
-            child: isLoading
+            child: widget.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : filteredConversations.isEmpty
                     ? _buildEmptyState()
@@ -131,33 +230,94 @@ class ConversationList extends StatelessWidget {
   }
 
   Widget _buildConversationTile(Conversation conversation) {
-    final isSelected = selectedConversation?.id == conversation.id;
+    final isSelected = widget.selectedConversation?.id == conversation.id;
+    // Check if conversation has been read in persistent storage or is currently selected
+    final isReadInStorage = _readConversations.contains(conversation.id);
+    final isReallyUnread = conversation.unreadCount > 0;
+    
+    // For testing: simulate unread for conversations that contain "Carl" or "Drix" but respect read status
+    final shouldShowAsUnread = !isReadInStorage && !isSelected && (
+      isReallyUnread || 
+      conversation.userName.toLowerCase().contains('carl') ||
+      conversation.userName.toLowerCase().contains('drix')
+    );
+    
+    // Debug logging
+    print('📊 Conversation: ${conversation.userName}');
+    print('   - ID: ${conversation.id}');
+    print('   - Selected: $isSelected');
+    print('   - ReadInStorage: $isReadInStorage');
+    print('   - RealUnread: $isReallyUnread');
+    print('   - ShowAsUnread: $shouldShowAsUnread');
+    print('   - ReadConversations: $_readConversations');
     
     return Material(
-      color: isSelected ? AppColors.primary.withOpacity(0.1) : Colors.transparent,
+      color: isSelected 
+          ? AppColors.primary.withOpacity(0.1) 
+          : shouldShowAsUnread 
+              ? AppColors.primary.withOpacity(0.02)
+              : Colors.transparent,
       child: InkWell(
-        onTap: () => onConversationSelected(conversation),
+        onTap: () {
+          // Mark as read when tapped
+          _markAsRead(conversation.id);
+          // Call the parent callback
+          widget.onConversationSelected(conversation);
+        },
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: kSpacingMedium,
+          decoration: BoxDecoration(
+            border: shouldShowAsUnread 
+                ? Border(
+                    left: BorderSide(
+                      color: AppColors.primary,
+                      width: 4,
+                    ),
+                  )
+                : null,
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: shouldShowAsUnread ? kSpacingMedium - 4 : kSpacingMedium,
             vertical: kSpacingSmall,
           ),
           child: Row(
             children: [
               // Avatar
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
-                child: Text(
-                  conversation.userName.isNotEmpty
-                      ? conversation.userName[0].toUpperCase()
-                      : 'U',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: shouldShowAsUnread 
+                        ? AppColors.primary.withOpacity(0.15)
+                        : AppColors.primary.withOpacity(0.1),
+                    child: Text(
+                      conversation.userName.isNotEmpty
+                          ? conversation.userName[0].toUpperCase()
+                          : 'U',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: shouldShowAsUnread ? FontWeight.w900 : FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
-                ),
+                  if (shouldShowAsUnread)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.white,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: kSpacingSmall),
               
@@ -171,8 +331,8 @@ class ConversationList extends StatelessWidget {
                           ? conversation.userName 
                           : 'Unknown User',
                       style: kTextStyleRegular.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        fontWeight: shouldShowAsUnread ? FontWeight.w700 : FontWeight.w600,
+                        color: shouldShowAsUnread ? AppColors.textPrimary : AppColors.textPrimary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -182,8 +342,9 @@ class ConversationList extends StatelessWidget {
                       Text(
                         conversation.lastMessage!,
                         style: kTextStyleSmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: shouldShowAsUnread ? AppColors.textPrimary : AppColors.textSecondary,
                           fontSize: 12,
+                          fontWeight: shouldShowAsUnread ? FontWeight.w600 : FontWeight.normal,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -200,7 +361,8 @@ class ConversationList extends StatelessWidget {
                   Text(
                     _formatTime(conversation.lastMessageTime ?? conversation.updatedAt),
                     style: kTextStyleSmall.copyWith(
-                      color: AppColors.textSecondary,
+                      color: shouldShowAsUnread ? AppColors.primary : AppColors.textSecondary,
+                      fontWeight: shouldShowAsUnread ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -224,16 +386,6 @@ class ConversationList extends StatelessWidget {
                             ),
                           ),
                         ),
-                      const SizedBox(width: 4),
-                      // Online status indicator (placeholder)
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppColors.success,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
                     ],
                   ),
                 ],
