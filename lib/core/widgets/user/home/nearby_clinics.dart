@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
-import 'package:pawsense/pages/mobile/clinic/clinic_details.dart';
+import 'package:pawsense/pages/mobile/clinic/clinic_details_page.dart';
 import 'package:pawsense/pages/mobile/clinic/clinic_list_page.dart';
 import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
