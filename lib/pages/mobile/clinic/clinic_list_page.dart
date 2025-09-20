@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/services/messaging/messaging_service.dart';
+import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
-import 'conversation_page.dart';
-import 'package:pawsense/core/models/messaging/conversation_model.dart';
+import 'clinic_details_page.dart';
 
-class ClinicSelectionPage extends StatefulWidget {
-  const ClinicSelectionPage({super.key});
+class ClinicListPage extends StatefulWidget {
+  const ClinicListPage({super.key});
 
   @override
-  State<ClinicSelectionPage> createState() => _ClinicSelectionPageState();
+  State<ClinicListPage> createState() => _ClinicListPageState();
 }
 
-class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
+class _ClinicListPageState extends State<ClinicListPage> {
   List<Map<String, dynamic>> _clinics = [];
   List<Map<String, dynamic>> _filteredClinics = [];
-  List<String> _existingConversationClinicIds = [];
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
 
@@ -34,28 +32,10 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
 
   Future<void> _loadClinics() async {
     try {
+      final clinics = await ClinicListService.getAllActiveClinics();
       setState(() {
-        _isLoading = true;
-      });
-
-      // Get existing conversations to filter out clinics
-      final conversationsStream = MessagingService.getUserConversations();
-      await for (final conversations in conversationsStream.take(1)) {
-        _existingConversationClinicIds = conversations.map((conv) => conv.clinicId).toList();
-        break;
-      }
-
-      // Get all approved clinics
-      final allClinics = await MessagingService.getApprovedClinics();
-      
-      // Filter out clinics that already have conversations
-      final availableClinics = allClinics.where((clinic) {
-        return !_existingConversationClinicIds.contains(clinic['id']);
-      }).toList();
-
-      setState(() {
-        _clinics = availableClinics;
-        _filteredClinics = availableClinics;
+        _clinics = clinics;
+        _filteredClinics = clinics;
         _isLoading = false;
       });
     } catch (e) {
@@ -83,47 +63,41 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
     });
   }
 
-  void _startConversation(Map<String, dynamic> clinic) {
-    // Create a temporary conversation for navigation
-    final tempConversation = Conversation(
-      id: 'temp_${clinic['id']}_${DateTime.now().millisecondsSinceEpoch}', // Temporary ID
-      userId: '', // Will be populated when actual conversation is created
-      userName: '', // Will be populated when actual conversation is created
-      clinicId: clinic['id'],
-      clinicName: clinic['name'],
-      lastMessageTime: DateTime.now(),
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-
-    // Navigate to conversation page
+  void _navigateToClinicDetails(Map<String, dynamic> clinic) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ConversationPage(
-          conversation: tempConversation,
-        ),
+        builder: (context) => ClinicDetailsPage(clinicId: clinic['id']),
       ),
     );
+  }
+
+  void _handleBackNavigation() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacementNamed(context, '/home');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.white,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.white),
+          onPressed: _handleBackNavigation,
+        ),
         title: const Text(
-          'Available Clinics',
+          'Vet Clinics',
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            fontSize: 16,
+            fontSize: 18,
             color: AppColors.white,
           ),
-        ),
-        iconTheme: const IconThemeData(
-          color: AppColors.white,
         ),
         elevation: 0,
       ),
@@ -136,7 +110,7 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search clinics...',
+                hintText: 'Search clinics by name or location...',
                 hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
                 prefixIcon: const Icon(
                   Icons.search,
@@ -156,7 +130,7 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
                   borderSide: const BorderSide(color: AppColors.primary),
                 ),
                 filled: true,
-                fillColor: AppColors.background,
+                fillColor: AppColors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
@@ -183,7 +157,7 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
                             const SizedBox(height: 16),
                             Text(
                               _clinics.isEmpty
-                                  ? 'No new clinics available'
+                                  ? 'No clinics available'
                                   : 'No clinics match your search',
                               style: TextStyle(
                                 color: AppColors.textSecondary,
@@ -191,15 +165,14 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            if (_clinics.isEmpty) ...[
+                            if (_searchController.text.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Text(
-                                'All available clinics already have active conversations',
+                                'Try searching with different keywords',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontSize: 14,
                                 ),
-                                textAlign: TextAlign.center,
                               ),
                             ],
                           ],
@@ -226,115 +199,132 @@ class _ClinicSelectionPageState extends State<ClinicSelectionPage> {
         color: AppColors.white,
         borderRadius: kMobileBorderRadiusSmallPreset,
         elevation: 1,
-        shadowColor: AppColors.textSecondary.withValues(alpha: 0.1),
+        shadowColor: AppColors.textSecondary.withValues(alpha: 0.15),
         child: InkWell(
-          onTap: () => _startConversation(clinic),
+          onTap: () => _navigateToClinicDetails(clinic),
           borderRadius: kMobileBorderRadiusSmallPreset,
-          child: Padding(
-            padding: const EdgeInsets.all(kMobilePaddingSmall),
-            child: Row(
-              children: [
-                // Clinic avatar
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                  child: Icon(
-                    Icons.local_hospital,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: kMobileBorderRadiusSmallPreset,
+              border: Border.all(
+                color: AppColors.border,
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.textSecondary.withValues(alpha: 0.08),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                const SizedBox(width: kMobileSizedBoxLarge),
-                
-                // Clinic details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        clinic['name'].toString(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: AppColors.textPrimary,
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(kMobilePaddingSmall),
+              child: Row(
+                children: [
+                  // Clinic avatar - smaller and more compact
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                    child: Icon(
+                      Icons.local_hospital,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: kMobileSizedBoxLarge),
+                  
+                  // Clinic details - more compact layout
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          clinic['name'].toString(),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              clinic['address'].toString(),
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (clinic['phone'] != null && clinic['phone'].toString().isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Row(
                           children: [
                             const Icon(
-                              Icons.phone,
+                              Icons.location_on,
                               size: 12,
                               color: AppColors.textSecondary,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              clinic['phone'].toString(),
-                              style: const TextStyle(
+                            Expanded(
+                              child: Text(
+                                clinic['address'].toString(),
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (clinic['phone'] != null && clinic['phone'].toString().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.phone,
+                                size: 12,
                                 color: AppColors.textSecondary,
-                                fontSize: 11,
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (clinic['isVerified'] == true) ...[
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.verified,
-                              size: 12,
-                              color: AppColors.success,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Verified',
-                              style: TextStyle(
+                              const SizedBox(width: 4),
+                              Text(
+                                clinic['phone'].toString(),
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (clinic['isVerified'] == true) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.verified,
+                                size: 12,
                                 color: AppColors.success,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-                          ],
-                        ),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'Verified',
+                                style: TextStyle(
+                                  color: AppColors.success,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                
-                // Arrow icon
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: AppColors.textSecondary,
-                  size: 14,
-                ),
-              ],
+                  
+                  // Arrow icon
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    color: AppColors.textSecondary,
+                    size: 14,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

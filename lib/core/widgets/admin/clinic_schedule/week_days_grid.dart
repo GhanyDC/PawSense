@@ -1,39 +1,167 @@
 import 'package:flutter/material.dart';
+import 'package:pawsense/core/models/clinic/clinic_schedule_model.dart';
+import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
 import 'day_card.dart';
 
-class WeekDaysGrid extends StatelessWidget {
+class WeekDaysGrid extends StatefulWidget {
   final String selectedDay;
   final Function(String) onDaySelected;
+  final String? clinicId;
 
   const WeekDaysGrid({
     super.key,
     required this.selectedDay,
     required this.onDaySelected,
+    this.clinicId,
   });
 
   @override
+  State<WeekDaysGrid> createState() => _WeekDaysGridState();
+}
+
+class _WeekDaysGridState extends State<WeekDaysGrid> {
+  Map<String, Map<String, dynamic>>? _weeklyAvailability;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadScheduleWithAvailability();
+  }
+
+  @override
+  void didUpdateWidget(WeekDaysGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload schedule if clinic ID changed
+    if (oldWidget.clinicId != widget.clinicId) {
+      _loadScheduleWithAvailability();
+    }
+  }
+
+  void _loadScheduleWithAvailability() async {
+    if (widget.clinicId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Get current week's availability data
+      final weeklyData = await ClinicScheduleService.getWeeklyScheduleWithAvailability(
+        widget.clinicId!,
+        DateTime.now(),
+      );
+      
+      setState(() {
+        _weeklyAvailability = weeklyData;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading schedule availability: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final days = [
-      DayData('Monday', '15 appointments', true),
-      DayData('Tuesday', '18 appointments', true),
-      DayData('Wednesday', '12 appointments', true),
-      DayData('Thursday', '8 appointments', true),
-      DayData('Friday', '22 appointments', true),
-      DayData('Saturday', '6 appointments', true),
-      DayData('Sunday', '4 appointments', true),
-    ];
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_weeklyAvailability == null || _weeklyAvailability!.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.orange.shade600),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'No operating days configured. Please configure your clinic schedule first.',
+                style: TextStyle(color: Colors.orange),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Get only open days from the schedule with availability data
+    final openDays = <DayData>[];
+    for (final day in WeeklySchedule.daysOfWeek) {
+      final dayData = _weeklyAvailability![day];
+      if (dayData != null && dayData['schedule'] != null) {
+        final schedule = dayData['schedule'] as ClinicScheduleModel;
+        if (schedule.isOpen) {
+          final totalSlots = dayData['totalSlots'] as int;
+          final bookedSlots = dayData['bookedSlots'] as int;
+          final availableSlots = dayData['availableSlots'] as int;
+          final utilization = dayData['utilization'] as int;
+          
+          final appointmentText = totalSlots > 0 
+              ? '$availableSlots/$totalSlots slots available'
+              : 'No slots configured';
+              
+          openDays.add(DayData(
+            day,
+            appointmentText,
+            true,
+            slotsInfo: '$totalSlots slots (${schedule.slotsPerHour}/hour)',
+            openTime: schedule.openTime,
+            closeTime: schedule.closeTime,
+            bookedSlots: bookedSlots,
+            utilization: utilization,
+          ));
+        }
+      }
+    }
+
+    if (openDays.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.orange.shade600),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'No operating days configured. Please configure your clinic schedule first.',
+                style: TextStyle(color: Colors.orange),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Row(
-      children: days.asMap().entries.map((entry) {
+      children: openDays.asMap().entries.map((entry) {
         final index = entry.key;
         final day = entry.value;
         return Expanded(
           child: Padding(
-            padding: EdgeInsets.only(right: index == days.length - 1 ? 0 : 12),
+            padding: EdgeInsets.only(right: index == openDays.length - 1 ? 0 : 12),
             child: DayCard(
               day: day,
-              isSelected: selectedDay == day.name,
-              onTap: () => onDaySelected(day.name),
+              isSelected: widget.selectedDay == day.name,
+              onTap: () => widget.onDaySelected(day.name),
             ),
           ),
         );
@@ -47,11 +175,21 @@ class DayData {
   final String appointments;
   final bool hasData;
   final bool isDisabled;
+  final String? slotsInfo;
+  final String? openTime;
+  final String? closeTime;
+  final int? bookedSlots;
+  final int? utilization;
 
   DayData(
     this.name,
     this.appointments,
     this.hasData, {
     this.isDisabled = false,
+    this.slotsInfo,
+    this.openTime,
+    this.closeTime,
+    this.bookedSlots,
+    this.utilization,
   });
 }

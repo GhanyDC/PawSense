@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/models/clinic/clinic_schedule_model.dart';
 import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
+import 'package:pawsense/core/utils/app_colors.dart';
 
 class ScheduleSettingsModal extends StatefulWidget {
   final void Function(Map<String, dynamic> settings)? onSave;
@@ -24,9 +24,12 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
   final Map<String, TimeOfDay?> _closeTimeMap = {};
   final Map<String, List<BreakTime>> _breakTimesMap = {};
   final Map<String, TextEditingController> _notesControllers = {};
+  final Map<String, int> _slotsPerHourMap = {}; // New: slots per hour configuration
+  final Map<String, int> _slotDurationMap = {}; // New: slot duration in minutes
   
   // Holiday management
   final List<DateTime> _specialHolidays = [];
+  final TextEditingController _holidayController = TextEditingController();
   
   bool _isLoading = false;
   String? _successMessage;
@@ -44,6 +47,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
     for (final controller in _notesControllers.values) {
       controller.dispose();
     }
+    _holidayController.dispose();
     super.dispose();
   }
 
@@ -51,11 +55,14 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
     for (final day in WeeklySchedule.daysOfWeek) {
       _notesControllers[day] = TextEditingController();
       _breakTimesMap[day] = [];
+      _slotsPerHourMap[day] = 3; // Default 3 slots per hour
+      _slotDurationMap[day] = 20; // Default 20 minutes per slot
     }
   }
 
   void _loadSchedule() {
     if (widget.clinicId == null) {
+      // Use default clinic ID or handle appropriately
       _weeklyScheduleFuture = Future.value(WeeklySchedule(schedules: {}));
       return;
     }
@@ -74,11 +81,15 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
               : null;
           _breakTimesMap[day] = List.from(daySchedule.breakTimes);
           _notesControllers[day]?.text = daySchedule.notes ?? '';
+          _slotsPerHourMap[day] = daySchedule.slotsPerHour;
+          _slotDurationMap[day] = daySchedule.slotDurationMinutes;
         } else {
           _isOpenMap[day] = day != 'Saturday' && day != 'Sunday';
           _openTimeMap[day] = const TimeOfDay(hour: 9, minute: 0);
           _closeTimeMap[day] = const TimeOfDay(hour: 17, minute: 0);
           _breakTimesMap[day] = [];
+          _slotsPerHourMap[day] = 3; // Default 3 slots per hour
+          _slotDurationMap[day] = 20; // Default 20 minutes
         }
       }
       setState(() {});
@@ -192,7 +203,35 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
     });
   }
 
-  // Updated save schedule with validation
+  // Calculate total capacity for a day
+  int _calculateDayCapacity(String day) {
+    final openTime = _openTimeMap[day];
+    final closeTime = _closeTimeMap[day];
+    final slotsPerHour = _slotsPerHourMap[day] ?? 3;
+    final breakTimes = _breakTimesMap[day] ?? [];
+    
+    if (openTime == null || closeTime == null) return 0;
+    
+    final openMinutes = openTime.hour * 60 + openTime.minute;
+    final closeMinutes = closeTime.hour * 60 + closeTime.minute;
+    final totalMinutes = closeMinutes - openMinutes;
+    
+    // Subtract break time minutes
+    int breakMinutes = 0;
+    for (final breakTime in breakTimes) {
+      final breakStart = breakTime.startTime.split(':');
+      final breakEnd = breakTime.endTime.split(':');
+      final breakStartMinutes = int.parse(breakStart[0]) * 60 + int.parse(breakStart[1]);
+      final breakEndMinutes = int.parse(breakEnd[0]) * 60 + int.parse(breakEnd[1]);
+      breakMinutes += (breakEndMinutes - breakStartMinutes);
+    }
+    
+    final workingMinutes = totalMinutes - breakMinutes;
+    final workingHours = workingMinutes / 60;
+    return (workingHours * slotsPerHour).floor();
+  }
+
+  // Updated save schedule with slots per hour
   Future<void> _saveSchedule() async {
     // Validate schedule before saving
     final validationError = _validateSchedule();
@@ -231,6 +270,8 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
           notes: _notesControllers[day]?.text.trim().isEmpty == true 
               ? null 
               : _notesControllers[day]?.text.trim(),
+          slotsPerHour: _slotsPerHourMap[day] ?? 3,
+          slotDurationMinutes: _slotDurationMap[day] ?? 20,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -274,137 +315,63 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
 
   // Operating Days Section with clickable chips
   Widget _buildOperatingDaysSection() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.white,
-            AppColors.bgsecond.withOpacity(0.3),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Operating Days',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF2C5F2D),
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.calendar_today, color: AppColors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Operating Days',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Select which days your clinic is open:',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: WeeklySchedule.daysOfWeek.map((day) {
-                final isOpen = _isOpenMap[day] ?? false;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isOpenMap[day] = !isOpen;
-                      if (!isOpen) {
-                        // Clear times and breaks when day is closed
-                        _openTimeMap[day] = null;
-                        _closeTimeMap[day] = null;
-                        _breakTimesMap[day] = [];
-                        _notesControllers[day]?.clear();
-                      } else {
-                        // Set default times when day is opened
-                        _openTimeMap[day] = const TimeOfDay(hour: 9, minute: 0);
-                        _closeTimeMap[day] = const TimeOfDay(hour: 17, minute: 0);
-                      }
-                    });
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      gradient: isOpen 
-                        ? LinearGradient(
-                            colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
-                          )
-                        : LinearGradient(
-                            colors: [AppColors.white, AppColors.bgsecond.withOpacity(0.5)],
-                          ),
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(
-                        color: isOpen ? AppColors.primary : AppColors.primary.withOpacity(0.3),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isOpen 
-                            ? AppColors.primary.withOpacity(0.3)
-                            : AppColors.textSecondary.withOpacity(0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            isOpen ? Icons.check_circle : Icons.radio_button_unchecked,
-                            color: isOpen ? AppColors.white : AppColors.primary,
-                            size: 18,
-                            key: ValueKey(isOpen),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          day,
-                          style: TextStyle(
-                            color: isOpen ? AppColors.white : AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
         ),
-      ),
+        const SizedBox(height: 12),
+        const Text(
+          'Select which days your clinic is open:',
+          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: WeeklySchedule.daysOfWeek.map((day) {
+            final isOpen = _isOpenMap[day] ?? false;
+            return FilterChip(
+              label: Text(
+                day,
+                style: TextStyle(
+                  color: isOpen ? Colors.white : AppColors.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              selected: isOpen,
+              onSelected: (selected) {
+                setState(() {
+                  _isOpenMap[day] = selected;
+                  if (!selected) {
+                    // Clear times and breaks when day is closed
+                    _openTimeMap[day] = null;
+                    _closeTimeMap[day] = null;
+                    _breakTimesMap[day] = [];
+                    _notesControllers[day]?.clear();
+                  } else {
+                    // Set default times when day is opened
+                    _openTimeMap[day] = const TimeOfDay(hour: 9, minute: 0);
+                    _closeTimeMap[day] = const TimeOfDay(hour: 17, minute: 0);
+                  }
+                });
+              },
+              selectedColor: AppColors.primary,
+              checkmarkColor: Colors.white,
+              backgroundColor: AppColors.background,
+              side: BorderSide(
+                color: isOpen ? AppColors.primary : AppColors.border,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -416,33 +383,18 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.warning.withOpacity(0.1),
-              AppColors.warning.withOpacity(0.05),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange.shade200),
         ),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppColors.warning,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(Icons.info_outline, color: AppColors.white, size: 16),
-            ),
-            const SizedBox(width: 12),
+            Icon(Icons.info_outline, color: Colors.orange.shade600),
+            const SizedBox(width: 8),
             const Expanded(
               child: Text(
                 'Please select at least one operating day to set opening hours.',
-                style: TextStyle(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: Colors.orange),
               ),
             ),
           ],
@@ -450,58 +402,20 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.white,
-            AppColors.bgsecond.withOpacity(0.3),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Operating Hours',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF2C5F2D),
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.access_time, color: AppColors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Operating Hours',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...openDays.map((day) => _buildDayTimeSettings(day)),
-          ],
         ),
-      ),
+        const SizedBox(height: 16),
+        ...openDays.map((day) => _buildDayTimeSettings(day)),
+      ],
     );
   }
 
@@ -511,62 +425,22 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
     final breakTimes = _breakTimesMap[day] ?? [];
     final hasTimeError = !_isOpenTimeBeforeCloseTime(day);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.white,
-            AppColors.bgsecond.withOpacity(0.2),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: hasTimeError ? AppColors.error : AppColors.primary.withOpacity(0.2),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: hasTimeError 
-              ? AppColors.error.withOpacity(0.1)
-              : AppColors.primary.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Day header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.today,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  day,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ],
+            Text(
+              day,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
             ),
             const SizedBox(height: 12),
             
@@ -574,37 +448,19 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             if (hasTimeError)
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.error.withOpacity(0.1),
-                      AppColors.error.withOpacity(0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.red.shade200),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.error_outline, color: AppColors.white, size: 14),
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Opening time must be before closing time',
-                        style: TextStyle(
-                          color: AppColors.error,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    Icon(Icons.error_outline, color: Colors.red.shade600, size: 16),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Opening time must be before closing time',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
                     ),
                   ],
                 ),
@@ -622,7 +478,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.textPrimary,
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -643,10 +499,10 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: hasTimeError ? AppColors.error : AppColors.border,
+                              color: hasTimeError ? Colors.red.shade300 : Colors.grey.shade300,
                             ),
                             borderRadius: BorderRadius.circular(6),
-                            color: AppColors.white,
+                            color: Colors.white,
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -655,10 +511,10 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                                 openTime?.format(context) ?? 'Select',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: openTime != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                  color: openTime != null ? Colors.black87 : Colors.grey.shade600,
                                 ),
                               ),
-                              Icon(Icons.access_time, size: 16, color: AppColors.textSecondary),
+                              Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
                             ],
                           ),
                         ),
@@ -676,7 +532,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.textPrimary,
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -697,10 +553,10 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: hasTimeError ? AppColors.error : AppColors.border,
+                              color: hasTimeError ? Colors.red.shade300 : Colors.grey.shade300,
                             ),
                             borderRadius: BorderRadius.circular(6),
-                            color: AppColors.white,
+                            color: Colors.white,
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -709,10 +565,10 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                                 closeTime?.format(context) ?? 'Select',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: closeTime != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                  color: closeTime != null ? Colors.black87 : Colors.grey.shade600,
                                 ),
                               ),
-                              Icon(Icons.access_time, size: 16, color: AppColors.textSecondary),
+                              Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
                             ],
                           ),
                         ),
@@ -721,6 +577,123 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                   ),
                 ),
               ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Slots per hour configuration
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.bgsecond.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.schedule, color: AppColors.primary, size: 16),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Appointment Capacity',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Slots per Hour',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppColors.border),
+                                borderRadius: BorderRadius.circular(6),
+                                color: AppColors.white,
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  value: _slotsPerHourMap[day] ?? 3,
+                                  isExpanded: true,
+                                  items: [1, 2, 3, 4, 5, 6].map((slots) {
+                                    return DropdownMenuItem<int>(
+                                      value: slots,
+                                      child: Text(
+                                        '$slots slots per hour',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        _slotsPerHourMap[day] = value;
+                                        // Calculate duration automatically for backend compatibility
+                                        _slotDurationMap[day] = (60 / value).round();
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Total Capacity',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                '${_calculateDayCapacity(day)} appointments',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             
             const SizedBox(height: 12),
@@ -734,7 +707,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
+                    color: Colors.black87,
                   ),
                 ),
                 TextButton.icon(
@@ -742,7 +715,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                   icon: const Icon(Icons.add, size: 14),
                   label: const Text('Add', style: TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
+                    foregroundColor: const Color(0xFF2C5F2D),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   ),
                 ),
@@ -762,20 +735,20 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: (!isBreakValid || !isWithinHours) 
-                        ? AppColors.error.withOpacity(0.1) 
-                        : AppColors.background,
+                        ? Colors.red.shade50 
+                        : Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: (!isBreakValid || !isWithinHours) 
-                          ? AppColors.error.withOpacity(0.3) 
-                          : AppColors.border,
+                          ? Colors.red.shade200 
+                          : Colors.grey.shade200,
                     ),
                   ),
                   child: Column(
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.coffee, color: AppColors.textSecondary, size: 16),
+                          Icon(Icons.coffee, color: Colors.grey.shade600, size: 16),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
@@ -786,16 +759,15 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
-                                    color: AppColors.textPrimary,
                                   ),
                                 ),
                                 if (breakTime.label != null) ...[
                                   const SizedBox(height: 1),
                                   Text(
                                     breakTime.label!,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: AppColors.textSecondary,
+                                      color: Colors.grey.shade600,
                                     ),
                                   ),
                                 ],
@@ -806,7 +778,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                             onPressed: () => _removeBreakTime(day, index),
                             icon: const Icon(Icons.delete_outline),
                             iconSize: 16,
-                            color: AppColors.error,
+                            color: Colors.red.shade400,
                             tooltip: 'Remove break time',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
@@ -818,15 +790,15 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.error_outline, color: AppColors.error, size: 12),
+                            Icon(Icons.error_outline, color: Colors.red.shade600, size: 12),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 !isBreakValid 
                                     ? 'Break start time must be before end time'
                                     : 'Break time must be within operating hours',
-                                style: const TextStyle(
-                                  color: AppColors.error,
+                                style: TextStyle(
+                                  color: Colors.red.shade600,
                                   fontSize: 11,
                                 ),
                               ),
@@ -855,13 +827,13 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            color: Color(0xFF2C5F2D),
           ),
         ),
         const SizedBox(height: 12),
-        Text(
+        const Text(
           'Add special holidays when your clinic will be closed:',
-          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 14, color: Colors.grey),
         ),
         const SizedBox(height: 16),
         
@@ -873,8 +845,8 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             icon: const Icon(Icons.add_circle_outline),
             label: const Text('Add Holiday Date'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
+              foregroundColor: const Color(0xFF2C5F2D),
+              side: const BorderSide(color: Color(0xFF2C5F2D)),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -888,9 +860,8 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: Colors.grey.shade300),
               borderRadius: BorderRadius.circular(8),
-              color: AppColors.white,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -900,7 +871,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -909,23 +880,22 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                     margin: const EdgeInsets.only(bottom: 4),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppColors.error.withOpacity(0.1),
+                      color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                      border: Border.all(color: Colors.red.shade200),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.event_busy, color: AppColors.error, size: 16),
+                            Icon(Icons.event_busy, color: Colors.red.shade600, size: 16),
                             const SizedBox(width: 8),
                             Text(
                               '${date.day}/${date.month}/${date.year}',
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
                               ),
                             ),
                           ],
@@ -934,7 +904,7 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
                           onPressed: () => _removeHoliday(date),
                           icon: const Icon(Icons.delete_outline),
                           iconSize: 16,
-                          color: AppColors.error,
+                          color: Colors.red.shade400,
                           tooltip: 'Remove holiday',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
@@ -951,18 +921,18 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.background,
+              color: Colors.grey.shade50,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: Colors.grey.shade200),
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: AppColors.textSecondary, size: 16),
+                Icon(Icons.info_outline, color: Colors.grey.shade600, size: 16),
                 const SizedBox(width: 8),
                 const Text(
                   'No special holidays added',
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: Colors.grey,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -1015,99 +985,32 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         width: 700,
         height: 750,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.white,
-              AppColors.bgsecond.withOpacity(0.3),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with violet accent
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary.withOpacity(0.1),
-                    AppColors.bgsecond.withOpacity(0.5),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Clinic Schedule Settings',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C5F2D),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.schedule,
-                          color: AppColors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Clinic Schedule Settings',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          Text(
-                            'Configure your clinic operating hours and holidays',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.white.withOpacity(0.8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             
@@ -1115,35 +1018,20 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             if (_successMessage != null)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.success.withOpacity(0.1),
-                      AppColors.success.withOpacity(0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.success.withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AppColors.success,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.check, color: AppColors.white, size: 16),
-                    ),
-                    const SizedBox(width: 12),
+                    Icon(Icons.check_circle, color: AppColors.success),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _successMessage!,
-                        style: const TextStyle(
-                          color: AppColors.success,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: AppColors.success),
                       ),
                     ),
                   ],
@@ -1153,35 +1041,20 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             if (_errorMessage != null)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.error.withOpacity(0.1),
-                      AppColors.error.withOpacity(0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.error_outline, color: AppColors.white, size: 16),
-                    ),
-                    const SizedBox(width: 12),
+                    Icon(Icons.error, color: Colors.red.shade600),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _errorMessage!,
-                        style: const TextStyle(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(color: Colors.red.shade800),
                       ),
                     ),
                   ],
@@ -1216,104 +1089,33 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
             
             // Action Buttons
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.bgsecond.withOpacity(0.3),
-                    AppColors.white,
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
                 ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-                    ),
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.close, color: AppColors.textSecondary, size: 18),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _saveSchedule,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
-                      ),
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _saveSchedule,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: AppColors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
-                              ),
-                            )
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.save, size: 18),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'Save Schedule',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                ],
-              ),
+                        )
+                      : const Text('Save Schedule'),
+                ),
+              ],
             ),
           ],
         ),
@@ -1386,12 +1188,11 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.white,
       title: Row(
         children: [
-          const Icon(Icons.coffee, color: AppColors.primary),
+          const Icon(Icons.coffee, color: Color(0xFF2C5F2D)),
           const SizedBox(width: 8),
-          Text('Add Break Time - ${widget.day}', style: const TextStyle(color: AppColors.textPrimary)),
+          Text('Add Break Time - ${widget.day}'),
         ],
       ),
       content: Column(
@@ -1403,18 +1204,18 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: Colors.red.shade50,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.shade200),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: AppColors.error, size: 16),
+                  Icon(Icons.error_outline, color: Colors.red.shade600, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: AppColors.error, fontSize: 12),
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 12),
                     ),
                   ),
                 ],
@@ -1427,18 +1228,18 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.info.withOpacity(0.1),
+                color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.info.withOpacity(0.3)),
+                border: Border.all(color: Colors.blue.shade200),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppColors.info, size: 16),
+                  Icon(Icons.info_outline, color: Colors.blue.shade600, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Operating hours: ${widget.openTime!.format(context)} - ${widget.closeTime!.format(context)}',
-                      style: const TextStyle(color: AppColors.info, fontSize: 12),
+                      style: TextStyle(color: Colors.blue.shade700, fontSize: 12),
                     ),
                   ),
                 ],
@@ -1462,9 +1263,8 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
-                color: AppColors.white,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1472,10 +1272,10 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
                   Text(
                     _startTime?.format(context) ?? 'Select start time',
                     style: TextStyle(
-                      color: _startTime != null ? AppColors.textPrimary : AppColors.textSecondary,
+                      color: _startTime != null ? Colors.black87 : Colors.grey.shade600,
                     ),
                   ),
-                  const Icon(Icons.access_time, color: AppColors.textSecondary),
+                  const Icon(Icons.access_time),
                 ],
               ),
             ),
@@ -1500,9 +1300,8 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
-                color: AppColors.white,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1510,10 +1309,10 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
                   Text(
                     _endTime?.format(context) ?? 'Select end time',
                     style: TextStyle(
-                      color: _endTime != null ? AppColors.textPrimary : AppColors.textSecondary,
+                      color: _endTime != null ? Colors.black87 : Colors.grey.shade600,
                     ),
                   ),
-                  const Icon(Icons.access_time, color: AppColors.textSecondary),
+                  const Icon(Icons.access_time),
                 ],
               ),
             ),
@@ -1524,19 +1323,11 @@ class _AddBreakTimeDialogState extends State<_AddBreakTimeDialog> {
           // Label field
           TextField(
             controller: _labelController,
-            style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Label (optional)',
               hintText: 'e.g., Lunch Break',
-              labelStyle: const TextStyle(color: AppColors.textSecondary),
-              hintStyle: const TextStyle(color: AppColors.textTertiary),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.primary),
               ),
             ),
           ),

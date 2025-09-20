@@ -35,6 +35,11 @@ class StatusBadge extends StatelessWidget {
         textColor = AppColors.error;
         text = 'Cancelled';
         break;
+      case AppointmentStatus.noShow:
+        backgroundColor = AppColors.textSecondary.withOpacity(0.1);
+        textColor = AppColors.textSecondary;
+        text = 'No Show';
+        break;
     }
 
     return IntrinsicWidth(
