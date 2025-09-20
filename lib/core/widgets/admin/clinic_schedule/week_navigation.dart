@@ -54,17 +54,17 @@ class WeekNavigation extends StatelessWidget {
   }
 
   String _formatWeekRange(DateTime date) {
-    // Assume week starts on Sunday and ends on Saturday
-    final weekday = date.weekday % 7; // DateTime.weekday: Mon=1..Sun=7
-    final sunday = date.subtract(Duration(days: weekday));
-    final saturday = sunday.add(Duration(days: 6));
+    // Week starts on Monday and ends on Sunday
+    final weekday = date.weekday; // DateTime.weekday: Mon=1..Sun=7
+    final monday = date.subtract(Duration(days: weekday - 1));
+    final sunday = monday.add(Duration(days: 6));
 
     String fmt(DateTime d) {
       final month = _monthAbbrev(d.month);
       return '$month ${d.day}';
     }
 
-    return '${fmt(sunday)} - ${fmt(saturday)}, ${saturday.year}';
+    return '${fmt(monday)} - ${fmt(sunday)}, ${sunday.year}';
   }
 
   String _monthAbbrev(int month) {
