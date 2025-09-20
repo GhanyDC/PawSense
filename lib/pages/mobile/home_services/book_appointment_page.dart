@@ -8,8 +8,6 @@ import 'package:pawsense/core/services/user/pet_service.dart';
 import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/services/clinic/appointment_service.dart';
 import 'package:pawsense/core/models/user/pet_model.dart';
-import 'package:pawsense/core/models/clinic/clinic_service_model.dart';
-import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
 
 class BookAppointmentPage extends StatefulWidget {
