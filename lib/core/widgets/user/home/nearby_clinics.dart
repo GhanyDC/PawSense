@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
-import 'package:pawsense/pages/mobile/clinic_details.dart';
+import 'package:pawsense/pages/mobile/clinic/clinic_details.dart';
+import 'package:pawsense/pages/mobile/clinic/clinic_list_page.dart';
 import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
 import 'package:pawsense/core/services/messaging/messaging_service.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
-import 'package:pawsense/pages/mobile/messaging/clinic_selection_page.dart';
 
 class ClinicInfo {
   final String id;
@@ -346,7 +346,7 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const ClinicSelectionPage(),
+                      builder: (context) => const ClinicListPage(),
                     ),
                   );
                 },
