@@ -37,6 +37,7 @@ class RoleManager {
         RouteInfo('/admin/patient-records', 'Patient Records', Icons.folder_open),
         RouteInfo('/admin/clinic-schedule', 'Clinic Schedule', Icons.schedule),
         RouteInfo('/admin/vet-profile', 'Vet Profile & Services', Icons.person_outline),
+        RouteInfo('/admin/messaging', 'Messages', Icons.message_outlined),
         RouteInfo('/admin/notifications', 'Notifications', Icons.notifications_outlined),
         RouteInfo('/admin/support', 'Support', Icons.help_outline),
         RouteInfo('/admin/settings', 'Settings', Icons.settings_outlined),
