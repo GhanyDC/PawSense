@@ -1,7 +1,38 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Users collection
     match /users/{userId} {
+      allow read, write: if true;
+    }
+    
+    // Conversations collection
+    match /conversations/{conversationId} {
+      allow read, write: if true;
+    }
+    
+    // Messages collection  
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+    
+    // Clinics collection
+    match /clinics/{clinicId} {
+      allow read, write: if true;
+    }
+    
+    // Pets collection
+    match /pets/{petId} {
+      allow read, write: if true;
+    }
+    
+    // Appointments collection
+    match /appointments/{appointmentId} {
+      allow read, write: if true;
+    }
+    
+    // AI History collection
+    match /ai_history/{historyId} {
       allow read, write: if true;
     }
   }

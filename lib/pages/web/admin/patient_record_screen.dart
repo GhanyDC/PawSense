@@ -195,10 +195,6 @@ class _PatientRecordsScreenState extends State<PatientRecordsScreen> {
               child: SingleChildScrollView(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    double cardWidth = constraints.maxWidth < 900
-                        ? constraints.maxWidth
-                        : 500;
-
                     // Filter patients by type and optionally by status
                     List<PatientData> filteredPatients = _patients.where((p) {
                       final matchesType =
