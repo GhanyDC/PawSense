@@ -24,6 +24,7 @@ class _AdminShellState extends State<AdminShell> {
   bool _isLoading = true;
   String _userName = 'User';
   String _userInitials = 'U';
+  String _clinicName = 'Veterinary Clinic';
 
   @override
   void initState() {
@@ -66,6 +67,11 @@ class _AdminShellState extends State<AdminShell> {
           _isLoading = false;
         });
 
+        // Load clinic information for admin users
+        if (_userRole == 'admin') {
+          await _loadClinicInfo();
+        }
+
         // Redirect to appropriate dashboard if on wrong role path
         _redirectIfNeeded();
       }
@@ -73,6 +79,25 @@ class _AdminShellState extends State<AdminShell> {
       if (mounted) {
         context.go('/web_login');
       }
+    }
+  }
+
+  Future<void> _loadClinicInfo() async {
+    try {
+      final authService = AuthService();
+      final clinic = await authService.getUserClinic();
+      
+      if (clinic != null && mounted) {
+        setState(() {
+          _clinicName = clinic.clinicName;
+        });
+        print('✅ Loaded clinic info: ${clinic.clinicName}');
+      } else {
+        print('⚠️ No clinic found for admin user');
+      }
+    } catch (e) {
+      print('❌ Error loading clinic info: $e');
+      // Keep default clinic name if error occurs
     }
   }
 
@@ -105,7 +130,16 @@ class _AdminShellState extends State<AdminShell> {
     final routes = AppRouter.getRoutesForRole(_userRole);
     
     for (int i = 0; i < routes.length; i++) {
-      if (routes[i].path == currentLocation) {
+      final routePath = routes[i].path;
+      
+      // Check for exact match first
+      if (routePath == currentLocation) {
+        return i;
+      }
+      
+      // Check if current location starts with the route path (for parameterized routes)
+      // For example: '/admin/messaging' should match '/admin/messaging/conversationId'
+      if (currentLocation.startsWith(routePath + '/') || currentLocation.startsWith(routePath)) {
         return i;
       }
     }
@@ -175,7 +209,9 @@ class _AdminShellState extends State<AdminShell> {
                   key: ValueKey('topnav_$_userRole'), // Prevent unnecessary rebuilds
                   clinicTitle: _userRole == 'super_admin' 
                       ? 'Super Administrator Dashboard'
-                      : 'Veterinary Clinic Administator Dashboard',
+                      : _clinicName.isNotEmpty 
+                          ? '$_clinicName'
+                          : 'Veterinary Clinic Dashboard',
                   userInitials: _userInitials,
                   userName: _userName,
                   userRole: RoleManager.getRoleDisplayName(_userRole),
