@@ -152,6 +152,7 @@ class _ClinicScheduleScreenState extends State<ClinicScheduleScreen> {
                       key: ValueKey('schedule_$_scheduleRefreshKey'), // Add refresh key
                       selectedDay: selectedDay,
                       clinicId: _actualClinicId, // Use actual clinic ID
+                      selectedDate: selectedDate, // Add the required selectedDate parameter
                       onDaySelected: (day) {
                         setState(() {
                           selectedDay = day;
