@@ -161,13 +161,28 @@ class MessagingService {
       // Add message to messages collection
       await messageRef.set(message.toMap());
 
-      // Update conversation with last message info
-      await _firestore.collection('conversations').doc(conversationId).update({
+      // Prepare conversation update data
+      Map<String, dynamic> updateData = {
         'lastMessage': content,
         'lastMessageTime': Timestamp.fromDate(DateTime.now()),
         'lastMessageSenderId': currentUser.uid,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
-      });
+      };
+
+      // If the sender is not an admin, increment unread count for admin
+      if (currentUser.role != 'admin') {
+        // Get current conversation to get current unread count
+        final conversationDoc = await _firestore.collection('conversations').doc(conversationId).get();
+        if (conversationDoc.exists) {
+          final currentData = conversationDoc.data() as Map<String, dynamic>;
+          final currentUnreadCount = currentData['unreadCount'] ?? 0;
+          updateData['unreadCount'] = currentUnreadCount + 1;
+          print('📈 Incrementing unread count to ${currentUnreadCount + 1} for conversation $conversationId');
+        }
+      }
+
+      // Update conversation with last message info and possibly unread count
+      await _firestore.collection('conversations').doc(conversationId).update(updateData);
 
       return true;
     } catch (e) {

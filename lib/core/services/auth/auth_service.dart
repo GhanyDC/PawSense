@@ -6,6 +6,7 @@ import '../../models/clinic/clinic_model.dart';
 import '../../guards/auth_guard.dart';
 import 'token_manager.dart';
 import '../cloudinary/cloudinary_service.dart';
+import '../messaging/messaging_preferences_service.dart';
 
 /// Comprehensive authentication service that integrates with all models
 class AuthService {
@@ -134,6 +135,14 @@ class AuthService {
   /// Sign out current user
   Future<void> signOut() async {
     _tokenManager.clearToken();
+    
+    // Clear session data but keep user-specific preferences stored
+    try {
+      await MessagingPreferencesService.instance.clearSessionData();
+    } catch (e) {
+      print('Warning: Failed to clear messaging session data: $e');
+    }
+    
     await _auth.signOut();
   }
 
@@ -160,6 +169,14 @@ class AuthService {
         
         if (userData.role == 'admin') {
           await _validateClinicApprovalStatus(result.user!.uid);
+        }
+        
+        // Initialize messaging preferences after successful login with user ID
+        try {
+          await MessagingPreferencesService.instance.initialize(userId: result.user!.uid);
+        } catch (e) {
+          print('Warning: Failed to initialize messaging preferences: $e');
+          // Don't fail login if messaging preferences fail to load
         }
         
         return AuthResult(

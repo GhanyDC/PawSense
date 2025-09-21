@@ -34,7 +34,10 @@ class _TopNavBarState extends State<TopNavBar> {
 
   @override
   void dispose() {
-    _closeMenu();
+    // Clean up overlay without setState during disposal
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    _isMenuOpen = false;
     super.dispose();
   }
 
@@ -86,7 +89,10 @@ class _TopNavBarState extends State<TopNavBar> {
                       // Navigate to help & support will be handled by the modal
                     },
                     onSignOut: () {
-                      _closeMenu();
+                      // Clean up overlay immediately without setState
+                      _overlayEntry?.remove();
+                      _overlayEntry = null;
+                      _isMenuOpen = false;
                       widget.onSignOut?.call();
                     },
                   ),
@@ -105,9 +111,11 @@ class _TopNavBarState extends State<TopNavBar> {
   }
 
   void _closeMenu() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    if (mounted) {
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+    }
+    if (mounted && _isMenuOpen) {
       setState(() {
         _isMenuOpen = false;
       });
