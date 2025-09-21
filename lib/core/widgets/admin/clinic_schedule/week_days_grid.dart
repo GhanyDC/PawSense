@@ -7,14 +7,14 @@ class WeekDaysGrid extends StatefulWidget {
   final String selectedDay;
   final Function(String) onDaySelected;
   final String? clinicId;
-  final DateTime selectedDate;
+  final DateTime selectedDate; // Add selected date parameter
 
   const WeekDaysGrid({
     super.key,
     required this.selectedDay,
     required this.onDaySelected,
     this.clinicId,
-    required this.selectedDate,
+    required this.selectedDate, // Make it required
   });
 
   @override
@@ -34,9 +34,14 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
   @override
   void didUpdateWidget(WeekDaysGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reload schedule if clinic ID changed or selected date changed
+    // Reload schedule if clinic ID changed OR if selected date changed
     if (oldWidget.clinicId != widget.clinicId || 
         oldWidget.selectedDate != widget.selectedDate) {
+      print('WeekDaysGrid: Date changed, reloading data for ${widget.selectedDate.toString().split(' ')[0]}');
+      setState(() {
+        _weeklyAvailability = null; // Clear old data
+        _hasLoaded = false; // Reset loading state
+      });
       _loadScheduleWithAvailability();
     }
   }
@@ -50,12 +55,14 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
     }
 
     try {
-      // Get current week's availability data using the selected date
+      print('WeekDaysGrid: Loading data for week starting ${widget.selectedDate.toString().split(' ')[0]}');
+      // Get weekly availability data for the selected week
       final weeklyData = await ClinicScheduleService.getWeeklyScheduleWithAvailability(
         widget.clinicId!,
-        widget.selectedDate,
+        widget.selectedDate, // Use the selected date instead of DateTime.now()
       );
       
+      print('WeekDaysGrid: Loaded data for ${weeklyData.keys.length} days');
       setState(() {
         _weeklyAvailability = weeklyData;
         _hasLoaded = true;

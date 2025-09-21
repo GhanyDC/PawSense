@@ -294,26 +294,19 @@ class _AppointmentEditModalState extends State<AppointmentEditModal> {
   Future<void> _reAcceptAppointment() async {
     setState(() => _isLoading = true);
     
-    final result = await AppointmentService.reAcceptAppointment(widget.appointment.id);
+    final success = await AppointmentService.reAcceptAppointment(widget.appointment.id);
     
     setState(() => _isLoading = false);
     
-    if (result['success']) {
+    if (success) {
       widget.onUpdate();
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Re-accepted ${widget.appointment.pet.name}\'s appointment'),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text('Re-accepted ${widget.appointment.pet.name}\'s appointment')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 4),
-        ),
+        const SnackBar(content: Text('Failed to re-accept appointment')),
       );
     }
   }

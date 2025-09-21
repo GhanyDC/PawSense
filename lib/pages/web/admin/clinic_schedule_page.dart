@@ -146,6 +146,7 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
   }
 
   Future<void> _onDateChanged(DateTime newDate) async {
+    print('Date changed from ${selectedDate.toString().split(' ')[0]} to ${newDate.toString().split(' ')[0]}');
     setState(() {
       selectedDate = newDate;
     });
@@ -265,7 +266,7 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
                       selectedDay: selectedDay,
                       clinicId: _actualClinicId,
                       onDaySelected: _onDaySelected,
-                      selectedDate: selectedDate,
+                      selectedDate: selectedDate, // Pass the selected date
                     ),
                     SizedBox(height: kSpacingLarge),
                     

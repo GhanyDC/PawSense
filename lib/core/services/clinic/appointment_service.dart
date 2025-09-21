@@ -386,6 +386,7 @@ class AppointmentService {
       final slotIndex = minute ~/ slotDuration;
 
       // Get all confirmed appointments for this clinic on this date
+      // Split the query to avoid composite index requirement
       final startOfDay = DateTime(date.year, date.month, date.day);
       final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
@@ -394,12 +395,17 @@ class AppointmentService {
           .where('clinicId', isEqualTo: clinicId)
           .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
           .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
-          .where('status', isEqualTo: 'confirmed')
           .get();
+
+      // Filter for confirmed appointments in code to avoid composite index
+      final confirmedAppointments = existingAppointments.docs.where((doc) {
+        final data = doc.data();
+        return data['status'] == 'confirmed';
+      }).toList();
 
       // Count appointments in the same time slot
       int sameSlotCount = 0;
-      for (final doc in existingAppointments.docs) {
+      for (final doc in confirmedAppointments) {
         final data = doc.data();
         final existingTime = data['appointmentTime'] as String;
         final existingTimeParts = existingTime.split(':');
@@ -456,7 +462,8 @@ class AppointmentService {
       // Determine which slot within the hour this appointment belongs to
       final slotIndex = appointmentMinute ~/ slotDuration;
 
-      // Get all confirmed appointments for this clinic on this date
+      // Get all appointments for this clinic on this date
+      // Split the query to avoid composite index requirement
       final startOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day);
       final endOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day, 23, 59, 59);
 
@@ -465,17 +472,21 @@ class AppointmentService {
           .where('clinicId', isEqualTo: clinicId)
           .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
           .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
-          .where('status', isEqualTo: 'confirmed')
           .get();
 
-      // Count appointments in the same time slot, EXCLUDING the current appointment
+      // Filter for confirmed appointments in code to avoid composite index
+      final confirmedAppointments = existingAppointments.docs.where((doc) {
+        final data = doc.data();
+        return data['status'] == 'confirmed';
+      }).toList();
+
+      // Count appointments in the same time slot
       int sameSlotCount = 0;
-      for (final doc in existingAppointments.docs) {
-        // Skip the current appointment being checked
-        if (doc.id == appointmentId) {
-          continue;
-        }
-        
+      print('Checking slot availability for $appointmentTime on ${appointmentDate.day}/${appointmentDate.month}');
+      print('Slot index: $slotIndex (duration: ${slotDuration}min)');
+      print('Found ${confirmedAppointments.length} confirmed appointments on this day');
+      
+      for (final doc in confirmedAppointments) {
         final data = doc.data();
         final existingTime = data['appointmentTime'] as String;
         final existingTimeParts = existingTime.split(':');
@@ -485,18 +496,24 @@ class AppointmentService {
         // Check if it's in the same hour and same time slot
         if (existingHour == appointmentHour) {
           final existingSlotIndex = existingMinute ~/ slotDuration;
+          print('Existing appointment at $existingTime (slot index: $existingSlotIndex)');
           if (existingSlotIndex == slotIndex) {
             sameSlotCount++;
+            print('CONFLICT: Same slot index $slotIndex');
           }
         }
       }
 
+      print('Same slot count: $sameSlotCount');
+      
       // Check if we have capacity
       // Each time slot should allow only 1 appointment (unless configured otherwise)
       if (sameSlotCount >= 1) {
+        print('Slot is occupied, cannot accept');
         return false; // Time slot is already occupied
       }
       
+      print('Slot is available');
       return true; // Slot is available
     } catch (e) {
       print('Error checking appointment slot availability: $e');
@@ -585,49 +602,18 @@ class AppointmentService {
   }
 
   /// Re-accept a cancelled appointment (change status back to confirmed and clear cancel data)
-  /// Re-accept a previously cancelled/rejected appointment with slot validation
-  /// Returns a map with 'success' boolean and 'message' string
-  static Future<Map<String, dynamic>> reAcceptAppointment(String appointmentId) async {
+  static Future<bool> reAcceptAppointment(String appointmentId) async {
     try {
-      // Get appointment details for better error messages
-      final appointmentDoc = await _firestore.collection(_collection).doc(appointmentId).get();
-      if (!appointmentDoc.exists) {
-        return {
-          'success': false,
-          'message': 'Appointment not found'
-        };
-      }
-
-      final appointmentData = appointmentDoc.data()!;
-      final appointmentTime = appointmentData['appointmentTime'] as String;
-      final appointmentDate = (appointmentData['appointmentDate'] as Timestamp).toDate();
-      
-      // Check if the appointment can be accepted without exceeding slot capacity
-      final canAccept = await _canAcceptAppointment(appointmentId);
-      if (!canAccept) {
-        return {
-          'success': false,
-          'message': 'Cannot re-accept appointment: Time slot $appointmentTime on ${appointmentDate.day}/${appointmentDate.month}/${appointmentDate.year} is already occupied'
-        };
-      }
-
       await _firestore.collection(_collection).doc(appointmentId).update({
         'status': AppointmentModels.AppointmentStatus.confirmed.toString().split('.').last,
         'cancelReason': FieldValue.delete(),
         'cancelledAt': FieldValue.delete(),
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
-      
-      return {
-        'success': true,
-        'message': 'Appointment re-accepted successfully'
-      };
+      return true;
     } catch (e) {
       print('Error re-accepting appointment: $e');
-      return {
-        'success': false,
-        'message': 'Failed to re-accept appointment: ${e.toString()}'
-      };
+      return false;
     }
   }
 
