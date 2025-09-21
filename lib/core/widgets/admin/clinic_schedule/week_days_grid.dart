@@ -102,6 +102,7 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
     final openDays = <DayData>[];
     for (final day in WeeklySchedule.daysOfWeek) {
       final dayData = _weeklyAvailability![day];
+      
       if (dayData != null && dayData['schedule'] != null) {
         final schedule = dayData['schedule'] as ClinicScheduleModel;
         if (schedule.isOpen) {

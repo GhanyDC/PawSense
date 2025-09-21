@@ -3,7 +3,7 @@ import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/schedule_settings_modal_new.dart' as new_modal;
 import 'package:pawsense/core/widgets/admin/clinic_schedule/stats_card.dart';
-import 'package:pawsense/core/widgets/admin/clinic_schedule/time_slot_list.dart';
+import 'package:pawsense/core/widgets/admin/clinic_schedule/appointment_time_slots.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/week_days_grid.dart';
 import 'package:pawsense/core/widgets/admin/clinic_schedule/week_navigation.dart';
 import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
@@ -86,7 +86,7 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
       setState(() {
         selectedDay = currentDayName;
       });
-      
+
       // Calculate statistics for the currently selected day
       _calculateDayStats();
       
@@ -97,9 +97,7 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
         _isLoading = false;
       });
     }
-  }
-
-  String _getCurrentDayName() {
+  }  String _getCurrentDayName() {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     return days[selectedDate.weekday - 1];
   }
@@ -117,6 +115,7 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
 
     // Get the current selected day's data
     final currentDayData = _weekData[selectedDay];
+    
     if (currentDayData != null) {
       final bookedSlots = currentDayData['bookedSlots'] ?? 0;
       final totalSlots = currentDayData['totalSlots'] ?? 0;
@@ -158,6 +157,26 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
       selectedDay = day;
     });
     _calculateDayStats();
+  }
+
+  DateTime _getDateForSelectedDay() {
+    // Get the Monday of the current selected week
+    final weekday = selectedDate.weekday;
+    final monday = selectedDate.subtract(Duration(days: weekday - 1));
+    
+    // Map day names to weekday numbers (1-7, Monday=1)
+    const dayToWeekday = {
+      'Monday': 1,
+      'Tuesday': 2,
+      'Wednesday': 3,
+      'Thursday': 4,
+      'Friday': 5,
+      'Saturday': 6,
+      'Sunday': 7,
+    };
+    
+    final targetWeekday = dayToWeekday[selectedDay] ?? 1;
+    return monday.add(Duration(days: targetWeekday - 1));
   }
 
   @override
@@ -251,12 +270,24 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
                     
                     // Dynamic Schedule Statistics
                     if (_isLoading) ...[
-                      Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                          ),
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Loading schedule data...',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ] else ...[
@@ -309,7 +340,15 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
               ),
             ),
             SizedBox(height: kSpacingLarge),
-            TimeSlotList(selectedDay: selectedDay),
+            
+            // Only show appointments section when schedule data is loaded
+            if (!_isLoading) ...[
+              AppointmentTimeSlots(
+                selectedDay: selectedDay,
+                clinicId: _actualClinicId,
+                selectedDate: _getDateForSelectedDay(),
+              ),
+            ],
           ],
         ),
       ),
