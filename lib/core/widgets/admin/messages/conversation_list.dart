@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
+import 'package:pawsense/core/services/messaging/messaging_preferences_service.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
 import '../../../models/messaging/conversation_model.dart';
+import 'user_avatar.dart';
+import 'dart:async';
 
 class ConversationList extends StatefulWidget {
   final List<Conversation> conversations;
@@ -27,76 +30,96 @@ class ConversationList extends StatefulWidget {
 }
 
 class _ConversationListState extends State<ConversationList> {
-  // Track which conversations have been read (persistent storage)
-  final Set<String> _readConversations = <String>{};
-  bool _isLoadingPreferences = true;
+  final MessagingPreferencesService _preferencesService = MessagingPreferencesService.instance;
+  StreamSubscription<Set<String>>? _readConversationsSubscription;
+  Map<String, int> _previousUnreadCounts = {}; // Track previous unread counts
 
   @override
   void initState() {
     super.initState();
-    _loadReadConversations();
+    _initializePreferences();
   }
 
-  // Load read conversations from SharedPreferences
-  Future<void> _loadReadConversations() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final readConversationsJson = prefs.getStringList('read_conversations') ?? [];
-      if (mounted) {
-        setState(() {
-          _readConversations.clear();
-          _readConversations.addAll(readConversationsJson);
-          _isLoadingPreferences = false;
-        });
-        print('📖 Loaded ${_readConversations.length} read conversations from storage: $_readConversations');
-      }
-    } catch (e) {
-      print('❌ Error loading read conversations: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingPreferences = false;
-        });
-      }
-    }
+  @override
+  void didUpdateWidget(ConversationList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Check for new messages when conversations update
+    _checkForNewMessages(oldWidget.conversations, widget.conversations);
   }
 
-  // Save read conversations to SharedPreferences
-  Future<void> _saveReadConversations() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('read_conversations', _readConversations.toList());
-      print('💾 Saved ${_readConversations.length} read conversations to storage');
-    } catch (e) {
-      print('❌ Error saving read conversations: $e');
+  @override
+  void dispose() {
+    _readConversationsSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _initializePreferences() async {
+    if (!mounted) return; // Check if widget is still mounted
+    
+    // Listen to changes in read conversations
+    _readConversationsSubscription = _preferencesService.readConversationsStream.listen(
+      (readConversations) {
+        if (mounted) { // Always check mounted before setState
+          setState(() {
+            // Trigger rebuild when read status changes
+          });
+        }
+      },
+      onError: (error) {
+        print('Error in read conversations stream: $error');
+      },
+    );
+
+    // If not initialized, try to initialize with current user
+    if (!_preferencesService.isInitialized && !_preferencesService.isLoading) {
+      try {
+        final user = await AuthGuard.getCurrentUser();
+        if (mounted && user != null) { // Check mounted after async call
+          await _preferencesService.reinitializeForUser(user.uid);
+        } else if (mounted) {
+          await _preferencesService.initialize();
+        }
+      } catch (e) {
+        print('Warning: Could not initialize messaging preferences: $e');
+      }
     }
   }
 
   void _markAsRead(String conversationId) {
-    if (mounted) {
-      setState(() {
-        _readConversations.add(conversationId);
-      });
-      _saveReadConversations(); // Persist to storage
-      print('✅ Marked conversation $conversationId as read. Total read: ${_readConversations.length}');
-    }
+    if (!mounted) return; // Ensure widget is still mounted
+    
+    _preferencesService.markConversationAsRead(conversationId);
+    print('✅ Marked conversation $conversationId as read via centralized service');
   }
 
-  // Optional: Method to clear all read status (for testing/debugging)
-  Future<void> _clearAllReadStatus() async {
-    if (mounted) {
-      setState(() {
-        _readConversations.clear();
-      });
+  void _checkForNewMessages(List<Conversation> oldConversations, List<Conversation> newConversations) {
+    // Create map for easier comparison
+    final oldConversationMap = {for (var conv in oldConversations) conv.id: conv};
+
+    // Check each conversation for increased unread count
+    for (final newConv in newConversations) {
+      final oldConv = oldConversationMap[newConv.id];
+      
+      // If this conversation had fewer unread messages before, or didn't exist, 
+      // it means there are new messages - clear read status
+      if (oldConv == null || newConv.unreadCount > oldConv.unreadCount) {
+        // Only clear read status if conversation is not currently selected
+        final isCurrentlySelected = widget.selectedConversation?.id == newConv.id;
+        if (!isCurrentlySelected && newConv.unreadCount > 0) {
+          _preferencesService.markConversationAsUnread(newConv.id);
+          print('🆕 New messages detected in conversation ${newConv.id}, marked as unread');
+        }
+      }
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('read_conversations');
-    print('🗑️ Cleared all read conversation status');
+
+    // Update the previous unread counts for next comparison
+    _previousUnreadCounts = {for (var conv in newConversations) conv.id: conv.unreadCount};
   }
 
   @override
   Widget build(BuildContext context) {
     // Show loading state while preferences are being loaded
-    if (_isLoadingPreferences) {
+    if (_preferencesService.isLoading) {
       return Container(
         width: 360,
         decoration: BoxDecoration(
@@ -148,11 +171,12 @@ class _ConversationListState extends State<ConversationList> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    // Debug button to clear read status (can be removed in production)
-                    IconButton(
-                      icon: Icon(Icons.refresh, size: 16, color: AppColors.textSecondary),
-                      onPressed: _clearAllReadStatus,
-                      tooltip: 'Reset read status (Debug)',
+                    Text(
+                      '${widget.conversations.length}',
+                      style: kTextStyleSmall.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -222,7 +246,16 @@ class _ConversationListState extends State<ConversationList> {
             'No conversations found',
             style: kTextStyleRegular.copyWith(
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          const SizedBox(height: kSpacingSmall),
+          Text(
+            'Patient conversations for your clinic will appear here',
+            style: kTextStyleSmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -232,26 +265,14 @@ class _ConversationListState extends State<ConversationList> {
   Widget _buildConversationTile(Conversation conversation) {
     final isSelected = widget.selectedConversation?.id == conversation.id;
     // Check if conversation has been read in persistent storage or is currently selected
-    final isReadInStorage = _readConversations.contains(conversation.id);
-    final isReallyUnread = conversation.unreadCount > 0;
+    final isReadInStorage = _preferencesService.isConversationRead(conversation.id);
+    final hasUnreadMessages = conversation.unreadCount > 0;
     
-    // For testing: simulate unread for conversations that contain "Carl" or "Drix" but respect read status
-    final shouldShowAsUnread = !isReadInStorage && !isSelected && (
-      isReallyUnread || 
-      conversation.userName.toLowerCase().contains('carl') ||
-      conversation.userName.toLowerCase().contains('drix')
-    );
-    
-    // Debug logging
-    print('📊 Conversation: ${conversation.userName}');
-    print('   - ID: ${conversation.id}');
-    print('   - Selected: $isSelected');
-    print('   - ReadInStorage: $isReadInStorage');
-    print('   - RealUnread: $isReallyUnread');
-    print('   - ShowAsUnread: $shouldShowAsUnread');
-    print('   - ReadConversations: $_readConversations');
+    // Show as unread if: has unread messages AND not read in storage AND not currently selected
+    final shouldShowAsUnread = hasUnreadMessages && !isReadInStorage && !isSelected;
     
     return Material(
+      key: ValueKey('conversation_${conversation.id}'),
       color: isSelected 
           ? AppColors.primary.withOpacity(0.1) 
           : shouldShowAsUnread 
@@ -282,42 +303,11 @@ class _ConversationListState extends State<ConversationList> {
           child: Row(
             children: [
               // Avatar
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: shouldShowAsUnread 
-                        ? AppColors.primary.withOpacity(0.15)
-                        : AppColors.primary.withOpacity(0.1),
-                    child: Text(
-                      conversation.userName.isNotEmpty
-                          ? conversation.userName[0].toUpperCase()
-                          : 'U',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: shouldShowAsUnread ? FontWeight.w900 : FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  if (shouldShowAsUnread)
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.white,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              UserAvatar(
+                userId: conversation.userId,
+                userName: conversation.userName,
+                radius: 24,
+                showUnreadIndicator: shouldShowAsUnread,
               ),
               const SizedBox(width: kSpacingSmall),
               
@@ -369,8 +359,8 @@ class _ConversationListState extends State<ConversationList> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Unread count indicator
-                      if (conversation.unreadCount > 0)
+                      // Unread count indicator - only show if conversation should show as unread
+                      if (shouldShowAsUnread && conversation.unreadCount > 0)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(

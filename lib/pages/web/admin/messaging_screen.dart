@@ -132,9 +132,8 @@ class _MessagingScreenState extends State<MessagingScreen> {
   void _selectConversation(Conversation conversation) {
     if (!mounted) return;
     
-    // Update the URL to include the conversation ID
-    GoRouter.of(context).go('/admin/messaging/${conversation.id}');
-    
+    // Just update the state without changing the URL
+    // This avoids route matching conflicts
     setState(() {
       _selectedConversation = conversation;
     });
@@ -182,6 +181,10 @@ class _MessagingScreenState extends State<MessagingScreen> {
         _selectedConversation!.id,
         content.trim(),
       );
+      
+      // Mark conversation as read when admin replies (clears unread indicators)
+      await _messagingService.markConversationAsRead(_selectedConversation!.id, 'admin');
+      
       _scrollToBottom();
     } catch (e) {
       _showErrorSnackBar('Failed to send message: $e');
@@ -342,6 +345,8 @@ class _MessagingScreenState extends State<MessagingScreen> {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
+
+
   void _onAttachPressed() {
     _showSuccessSnackBar('File attachment feature coming soon!');
   }
@@ -358,6 +363,7 @@ class _MessagingScreenState extends State<MessagingScreen> {
         children: [
           // Conversations sidebar
           ConversationList(
+            key: const ValueKey('conversation_list'),
             conversations: _conversations,
             selectedConversation: _selectedConversation,
             onConversationSelected: _selectConversation,
@@ -369,6 +375,7 @@ class _MessagingScreenState extends State<MessagingScreen> {
           // Chat area
           Expanded(
             child: Container(
+              key: const ValueKey('chat_area'),
               decoration: BoxDecoration(
                 color: AppColors.white,
               ),

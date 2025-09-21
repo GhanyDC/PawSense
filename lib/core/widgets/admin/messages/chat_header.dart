@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import '../../../models/messaging/conversation_model.dart';
+import 'user_avatar.dart';
 
 class ChatHeader extends StatelessWidget {
   final Conversation? conversation;
@@ -51,19 +52,11 @@ class ChatHeader extends StatelessWidget {
       child: Row(
         children: [
           // User avatar and info
-          CircleAvatar(
+          UserAvatar(
+            userId: conversation!.userId,
+            userName: conversation!.userName,
             radius: 20,
-            backgroundColor: AppColors.primary.withOpacity(0.1),
-            child: Text(
-              conversation!.userName.isNotEmpty
-                  ? conversation!.userName[0].toUpperCase()
-                  : 'U',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
+            showUnreadIndicator: false,
           ),
           const SizedBox(width: kSpacingSmall),
           
