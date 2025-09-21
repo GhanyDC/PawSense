@@ -363,17 +363,194 @@ class AppointmentService {
     }
   }
 
-  /// Accept an appointment (change status to confirmed)
-  static Future<bool> acceptAppointment(String appointmentId) async {
+  /// Public method to check slot availability for a specific time
+  /// Useful for UI to show available slots or warn about conflicts
+  static Future<bool> isTimeSlotAvailable(String clinicId, DateTime date, String time) async {
     try {
+      // Get the day of week for the date
+      final dayOfWeek = _getDayOfWeek(date.weekday);
+
+      // Get clinic schedule for this day
+      final schedule = await ClinicScheduleService.getScheduleForDay(clinicId, dayOfWeek);
+      if (schedule == null || !schedule.isOpen) {
+        return false; // Clinic is closed on this day
+      }
+
+      // Parse time to determine the time slot
+      final timeParts = time.split(':');
+      final hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+
+      // Calculate the slot based on slotDurationMinutes
+      final slotDuration = schedule.slotDurationMinutes;
+      final slotIndex = minute ~/ slotDuration;
+
+      // Get all confirmed appointments for this clinic on this date
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+      final existingAppointments = await _firestore
+          .collection(_collection)
+          .where('clinicId', isEqualTo: clinicId)
+          .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+          .where('status', isEqualTo: 'confirmed')
+          .get();
+
+      // Count appointments in the same time slot
+      int sameSlotCount = 0;
+      for (final doc in existingAppointments.docs) {
+        final data = doc.data();
+        final existingTime = data['appointmentTime'] as String;
+        final existingTimeParts = existingTime.split(':');
+        final existingHour = int.parse(existingTimeParts[0]);
+        final existingMinute = int.parse(existingTimeParts[1]);
+
+        // Check if it's in the same hour and same time slot
+        if (existingHour == hour) {
+          final existingSlotIndex = existingMinute ~/ slotDuration;
+          if (existingSlotIndex == slotIndex) {
+            sameSlotCount++;
+          }
+        }
+      }
+
+      return sameSlotCount < 1; // Only allow 1 appointment per time slot
+    } catch (e) {
+      print('Error checking time slot availability: $e');
+      return false;
+    }
+  }
+
+  /// Check if accepting an appointment would exceed slot capacity
+  static Future<bool> _canAcceptAppointment(String appointmentId) async {
+    try {
+      // Get the appointment details
+      final appointmentDoc = await _firestore.collection(_collection).doc(appointmentId).get();
+      if (!appointmentDoc.exists) {
+        return false;
+      }
+
+      final appointmentData = appointmentDoc.data()!;
+      final clinicId = appointmentData['clinicId'] as String;
+      final appointmentDate = (appointmentData['appointmentDate'] as Timestamp).toDate();
+      final appointmentTime = appointmentData['appointmentTime'] as String;
+
+      // Get the day of week for the appointment
+      final dayOfWeek = _getDayOfWeek(appointmentDate.weekday);
+
+      // Get clinic schedule for this day
+      final schedule = await ClinicScheduleService.getScheduleForDay(clinicId, dayOfWeek);
+      if (schedule == null || !schedule.isOpen) {
+        return false; // Clinic is closed on this day
+      }
+
+      // Parse appointment time to determine the time slot
+      final timeParts = appointmentTime.split(':');
+      final appointmentHour = int.parse(timeParts[0]);
+      final appointmentMinute = int.parse(timeParts[1]);
+
+      // Calculate the slot based on slotDurationMinutes
+      final slotDuration = schedule.slotDurationMinutes;
+      
+      // Determine which slot within the hour this appointment belongs to
+      final slotIndex = appointmentMinute ~/ slotDuration;
+
+      // Get all confirmed appointments for this clinic on this date
+      final startOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day);
+      final endOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day, 23, 59, 59);
+
+      final existingAppointments = await _firestore
+          .collection(_collection)
+          .where('clinicId', isEqualTo: clinicId)
+          .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+          .where('status', isEqualTo: 'confirmed')
+          .get();
+
+      // Count appointments in the same time slot, EXCLUDING the current appointment
+      int sameSlotCount = 0;
+      for (final doc in existingAppointments.docs) {
+        // Skip the current appointment being checked
+        if (doc.id == appointmentId) {
+          continue;
+        }
+        
+        final data = doc.data();
+        final existingTime = data['appointmentTime'] as String;
+        final existingTimeParts = existingTime.split(':');
+        final existingHour = int.parse(existingTimeParts[0]);
+        final existingMinute = int.parse(existingTimeParts[1]);
+
+        // Check if it's in the same hour and same time slot
+        if (existingHour == appointmentHour) {
+          final existingSlotIndex = existingMinute ~/ slotDuration;
+          if (existingSlotIndex == slotIndex) {
+            sameSlotCount++;
+          }
+        }
+      }
+
+      // Check if we have capacity
+      // Each time slot should allow only 1 appointment (unless configured otherwise)
+      if (sameSlotCount >= 1) {
+        return false; // Time slot is already occupied
+      }
+      
+      return true; // Slot is available
+    } catch (e) {
+      print('Error checking appointment slot availability: $e');
+      return false;
+    }
+  }
+
+  /// Helper method to get day of week string
+  static String _getDayOfWeek(int weekday) {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    return days[weekday - 1];
+  }
+
+  /// Accept an appointment (change status to confirmed) with slot validation
+  /// Returns a map with 'success' boolean and 'message' string
+  static Future<Map<String, dynamic>> acceptAppointment(String appointmentId) async {
+    try {
+      // Get appointment details for better error messages
+      final appointmentDoc = await _firestore.collection(_collection).doc(appointmentId).get();
+      if (!appointmentDoc.exists) {
+        return {
+          'success': false,
+          'message': 'Appointment not found'
+        };
+      }
+
+      final appointmentData = appointmentDoc.data()!;
+      final appointmentTime = appointmentData['appointmentTime'] as String;
+      final appointmentDate = (appointmentData['appointmentDate'] as Timestamp).toDate();
+      
+      // Check if the appointment can be accepted without exceeding slot capacity
+      final canAccept = await _canAcceptAppointment(appointmentId);
+      if (!canAccept) {
+        return {
+          'success': false,
+          'message': 'Cannot accept appointment: Time slot $appointmentTime on ${appointmentDate.day}/${appointmentDate.month}/${appointmentDate.year} is already occupied'
+        };
+      }
+
       await _firestore.collection(_collection).doc(appointmentId).update({
         'status': AppointmentModels.AppointmentStatus.confirmed.toString().split('.').last,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
-      return true;
+      
+      return {
+        'success': true,
+        'message': 'Appointment accepted successfully'
+      };
     } catch (e) {
       print('Error accepting appointment: $e');
-      return false;
+      return {
+        'success': false,
+        'message': 'Failed to accept appointment: ${e.toString()}'
+      };
     }
   }
 
@@ -408,27 +585,53 @@ class AppointmentService {
   }
 
   /// Re-accept a cancelled appointment (change status back to confirmed and clear cancel data)
-  static Future<bool> reAcceptAppointment(String appointmentId) async {
+  /// Re-accept a previously cancelled/rejected appointment with slot validation
+  /// Returns a map with 'success' boolean and 'message' string
+  static Future<Map<String, dynamic>> reAcceptAppointment(String appointmentId) async {
     try {
+      // Get appointment details for better error messages
+      final appointmentDoc = await _firestore.collection(_collection).doc(appointmentId).get();
+      if (!appointmentDoc.exists) {
+        return {
+          'success': false,
+          'message': 'Appointment not found'
+        };
+      }
+
+      final appointmentData = appointmentDoc.data()!;
+      final appointmentTime = appointmentData['appointmentTime'] as String;
+      final appointmentDate = (appointmentData['appointmentDate'] as Timestamp).toDate();
+      
+      // Check if the appointment can be accepted without exceeding slot capacity
+      final canAccept = await _canAcceptAppointment(appointmentId);
+      if (!canAccept) {
+        return {
+          'success': false,
+          'message': 'Cannot re-accept appointment: Time slot $appointmentTime on ${appointmentDate.day}/${appointmentDate.month}/${appointmentDate.year} is already occupied'
+        };
+      }
+
       await _firestore.collection(_collection).doc(appointmentId).update({
         'status': AppointmentModels.AppointmentStatus.confirmed.toString().split('.').last,
         'cancelReason': FieldValue.delete(),
         'cancelledAt': FieldValue.delete(),
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
-      return true;
+      
+      return {
+        'success': true,
+        'message': 'Appointment re-accepted successfully'
+      };
     } catch (e) {
       print('Error re-accepting appointment: $e');
-      return false;
+      return {
+        'success': false,
+        'message': 'Failed to re-accept appointment: ${e.toString()}'
+      };
     }
   }
 
   // Helper methods
-  static String _getDayOfWeek(int weekday) {
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    return days[weekday - 1];
-  }
-
   static TimeOfDay? _parseTimeString(String? timeString) {
     if (timeString == null) return null;
     try {

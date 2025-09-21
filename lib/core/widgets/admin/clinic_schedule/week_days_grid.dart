@@ -7,12 +7,14 @@ class WeekDaysGrid extends StatefulWidget {
   final String selectedDay;
   final Function(String) onDaySelected;
   final String? clinicId;
+  final DateTime selectedDate;
 
   const WeekDaysGrid({
     super.key,
     required this.selectedDay,
     required this.onDaySelected,
     this.clinicId,
+    required this.selectedDate,
   });
 
   @override
@@ -21,7 +23,7 @@ class WeekDaysGrid extends StatefulWidget {
 
 class _WeekDaysGridState extends State<WeekDaysGrid> {
   Map<String, Map<String, dynamic>>? _weeklyAvailability;
-  bool _isLoading = true;
+  bool _hasLoaded = false;
 
   @override
   void initState() {
@@ -32,8 +34,9 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
   @override
   void didUpdateWidget(WeekDaysGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reload schedule if clinic ID changed
-    if (oldWidget.clinicId != widget.clinicId) {
+    // Reload schedule if clinic ID changed or selected date changed
+    if (oldWidget.clinicId != widget.clinicId || 
+        oldWidget.selectedDate != widget.selectedDate) {
       _loadScheduleWithAvailability();
     }
   }
@@ -41,40 +44,38 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
   void _loadScheduleWithAvailability() async {
     if (widget.clinicId == null) {
       setState(() {
-        _isLoading = false;
+        _hasLoaded = true;
       });
       return;
     }
 
     try {
-      setState(() {
-        _isLoading = true;
-      });
-      
-      // Get current week's availability data
+      // Get current week's availability data using the selected date
       final weeklyData = await ClinicScheduleService.getWeeklyScheduleWithAvailability(
         widget.clinicId!,
-        DateTime.now(),
+        widget.selectedDate,
       );
       
       setState(() {
         _weeklyAvailability = weeklyData;
-        _isLoading = false;
+        _hasLoaded = true;
       });
     } catch (e) {
       print('Error loading schedule availability: $e');
       setState(() {
-        _isLoading = false;
+        _hasLoaded = true;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+    // Show empty container while loading (no message)
+    if (!_hasLoaded) {
+      return Container();
     }
-
+    
+    // Only show "no operating days" message after loading is complete
     if (_weeklyAvailability == null || _weeklyAvailability!.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(20),

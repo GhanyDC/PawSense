@@ -224,16 +224,23 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
                     return AppointmentTable(
                       appointments: filteredAppointments,
                       onAccept: (appointment) async {
-                        final success = await AppointmentService.acceptAppointment(appointment.id);
+                        final result = await AppointmentService.acceptAppointment(appointment.id);
                         
-                        if (success) {
+                        if (result['success']) {
                           _refreshAppointments();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Accepted appointment for ${appointment.pet.name}')),
+                            SnackBar(
+                              content: Text('Accepted appointment for ${appointment.pet.name}'),
+                              backgroundColor: Colors.green,
+                            ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to accept appointment')),
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 4), // Longer duration for error messages
+                            ),
                           );
                         }
                       },

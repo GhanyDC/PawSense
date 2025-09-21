@@ -265,6 +265,7 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
                       selectedDay: selectedDay,
                       clinicId: _actualClinicId,
                       onDaySelected: _onDaySelected,
+                      selectedDate: selectedDate,
                     ),
                     SizedBox(height: kSpacingLarge),
                     
