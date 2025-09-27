@@ -207,7 +207,7 @@ class _UserHomePageState extends State<UserHomePage> {
       if (result.detectionResults.isEmpty) {
         // If no detection results at all, still show the assessment
         final aiHistoryItem = AIHistoryData(
-          id: '${result.id}_no_detections',
+          id: result.id ?? '${result.createdAt.millisecondsSinceEpoch}',
           title: 'Assessment completed',
           subtitle: _formatTimestamp(result.createdAt),
           type: AIDetectionType.mange, // Default type
@@ -220,44 +220,47 @@ class _UserHomePageState extends State<UserHomePage> {
         continue;
       }
       
-      for (int i = 0; i < result.detectionResults.length; i++) {
-        final detectionResult = result.detectionResults[i];
-        print('DEBUG: Detection result $i has ${detectionResult.detections.length} detections');
+      // Find the highest confidence detection across ALL images in this assessment
+      double highestConfidence = 0.0;
+      String bestDetectionLabel = '';
+      String? firstImageUrl;
+      
+      for (final detectionResult in result.detectionResults) {
+        // Use the first available image URL
+        if (firstImageUrl == null && detectionResult.imageUrl.isNotEmpty) {
+          firstImageUrl = detectionResult.imageUrl;
+        }
         
-        if (detectionResult.detections.isNotEmpty) {
-          // Use the highest confidence detection for each image
-          final topDetection = detectionResult.detections
-              .reduce((a, b) => a.confidence > b.confidence ? a : b);
-          
-          print('DEBUG: Top detection: ${topDetection.label} with confidence ${topDetection.confidence}');
-          
-          final aiHistoryItem = AIHistoryData(
-            id: '${result.id}_$i',
-            title: _formatDetectionTitle(topDetection.label, topDetection.confidence),
-            subtitle: _formatTimestamp(result.createdAt),
-            type: _getAIDetectionType(topDetection.label),
-            timestamp: result.createdAt,
-            confidence: topDetection.confidence,
-            imageUrl: detectionResult.imageUrl.isNotEmpty ? detectionResult.imageUrl : null,
-          );
-          
-          aiHistoryList.add(aiHistoryItem);
-          print('DEBUG: Added AI history item: ${aiHistoryItem.title}');
-        } else {
-          // If detection result exists but has no detections, show "No conditions detected"
-          final aiHistoryItem = AIHistoryData(
-            id: '${result.id}_$i',
-            title: 'No conditions detected',
-            subtitle: _formatTimestamp(result.createdAt),
-            type: AIDetectionType.mange, // Default type
-            timestamp: result.createdAt,
-            confidence: 0.0,
-            imageUrl: detectionResult.imageUrl.isNotEmpty ? detectionResult.imageUrl : null,
-          );
-          aiHistoryList.add(aiHistoryItem);
-          print('DEBUG: Added detection result with no detections');
+        for (final detection in detectionResult.detections) {
+          if (detection.confidence > highestConfidence) {
+            highestConfidence = detection.confidence;
+            bestDetectionLabel = detection.label;
+          }
         }
       }
+      
+      // Create a single history item for the entire assessment
+      final String title;
+      if (bestDetectionLabel.isNotEmpty) {
+        title = _formatDetectionTitle(bestDetectionLabel, highestConfidence);
+        print('DEBUG: Best detection across all images: $bestDetectionLabel with confidence $highestConfidence');
+      } else {
+        title = 'No conditions detected';
+        print('DEBUG: No detections found across all images');
+      }
+      
+      final aiHistoryItem = AIHistoryData(
+        id: result.id ?? '${result.createdAt.millisecondsSinceEpoch}',
+        title: title,
+        subtitle: _formatTimestamp(result.createdAt),
+        type: bestDetectionLabel.isNotEmpty ? _getAIDetectionType(bestDetectionLabel) : AIDetectionType.mange,
+        timestamp: result.createdAt,
+        confidence: highestConfidence,
+        imageUrl: firstImageUrl,
+      );
+      
+      aiHistoryList.add(aiHistoryItem);
+      print('DEBUG: Added single AI history item for assessment: ${aiHistoryItem.title}');
     }
     
     // Sort by timestamp (newest first)
