@@ -1,6 +1,7 @@
 // Export all models
 export 'user/user_model.dart';
 export 'user/pet_model.dart';
+export 'user/assessment_result_model.dart';
 export 'clinic/clinic_model.dart';
 export 'clinic/clinic_details_model.dart';
 export 'clinic/clinic_service_model.dart';
