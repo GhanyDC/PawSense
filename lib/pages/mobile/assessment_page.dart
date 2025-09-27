@@ -468,8 +468,8 @@ class _AssessmentPageState extends State<AssessmentPage> {
     _showLoading();
     
     try {
-      // Simulate processing time (remove this in production)
-      await Future.delayed(const Duration(seconds: 1));
+      // Brief processing time for UI feedback
+      await Future.delayed(const Duration(milliseconds: 500));
       
       // Hide loading
       _hideLoading();
@@ -477,15 +477,16 @@ class _AssessmentPageState extends State<AssessmentPage> {
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Assessment completed successfully!'),
+          content: const Text('Assessment completed! You can now download the PDF report.'),
           backgroundColor: AppColors.success,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
           behavior: SnackBarBehavior.floating,
         ),
       );
 
-      // Navigate to home with query parameter to show history tab
-      context.go('/home?tab=history');
+      // Note: The actual assessment saving and PDF generation is handled
+      // by the "Download as PDF" button in AssessmentStepThree
+      
     } catch (e) {
       // Hide loading on error
       _hideLoading();
