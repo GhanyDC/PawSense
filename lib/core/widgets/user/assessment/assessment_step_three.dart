@@ -295,12 +295,32 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
     // Convert detection results
     final detectionResultModels = detectionResults.map((result) {
       final detections = (result['detections'] as List<dynamic>? ?? []).map((detection) {
+        // Extract bounding box from YOLO detection format
+        List<double>? boundingBox;
+        if (detection['box'] != null) {
+          // YOLO returns [x1, y1, x2, y2] format
+          final box = detection['box'] as List<dynamic>;
+          if (box.length >= 4) {
+            boundingBox = [
+              box[0].toDouble(), // x1
+              box[1].toDouble(), // y1
+              box[2].toDouble(), // x2
+              box[3].toDouble(), // y2
+            ];
+            print('✅ Extracted bounding box for ${detection['label']}: $boundingBox');
+          }
+        } else if (detection['boundingBox'] != null) {
+          // Fallback for legacy format
+          boundingBox = List<double>.from(detection['boundingBox']);
+          print('✅ Using legacy bounding box format: $boundingBox');
+        } else {
+          print('⚠️ No bounding box found for detection: ${detection['label']}');
+        }
+        
         return Detection(
           label: detection['label'] ?? '',
           confidence: detection['confidence']?.toDouble() ?? 0.0,
-          boundingBox: detection['boundingBox'] != null 
-              ? List<double>.from(detection['boundingBox'])
-              : null,
+          boundingBox: boundingBox,
         );
       }).toList();
 
