@@ -77,68 +77,60 @@ class PetDetectionService {
         Uri.parse('$baseUrl/detect/$petType'),
       );
       
-      // Determine correct MIME type based on file extension
-      String mimeType = 'image/jpeg'; // default
-      switch (fileExtension) {
-        case 'jpg':
-        case 'jpeg':
-          mimeType = 'image/jpeg';
-          break;
-        case 'png':
-          mimeType = 'image/png';
-          break;
-        case 'bmp':
-          mimeType = 'image/bmp';
-          break;
-        case 'tiff':
-        case 'tif':
-          mimeType = 'image/tiff';
-          break;
-        default:
-          mimeType = 'image/jpeg';
-      }
-      
-      // Read file bytes to ensure the file is valid
+      // Read file bytes and strictly validate image format
       final List<int> fileBytes = await imageFile.readAsBytes();
       print('📊 File bytes read successfully: ${fileBytes.length} bytes');
       
-      // Validate the file is actually an image by checking magic bytes
-      if (fileBytes.isNotEmpty) {
-        final String magicBytes = fileBytes.take(4).map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
-        print('📷 File magic bytes: $magicBytes');
-        
-        // Check for common image formats
-        bool isValidImage = false;
-        if (fileBytes.length >= 2 && fileBytes[0] == 0xFF && fileBytes[1] == 0xD8) {
-          print('✅ Detected JPEG image');
-          isValidImage = true;
-        } else if (fileBytes.length >= 8 && 
-                  fileBytes[0] == 0x89 && fileBytes[1] == 0x50 && 
-                  fileBytes[2] == 0x4E && fileBytes[3] == 0x47) {
-          print('✅ Detected PNG image');
-          isValidImage = true;
-        } else if (fileBytes.length >= 2 && fileBytes[0] == 0x42 && fileBytes[1] == 0x4D) {
-          print('✅ Detected BMP image');
-          isValidImage = true;
-        }
-        
-        if (!isValidImage) {
-          print('⚠️ Warning: File may not be a valid image format');
-        }
+      // Strict magic bytes validation for allowed formats
+      bool isValidImage = false;
+      String detectedType = '';
+      if (fileBytes.length >= 2 && fileBytes[0] == 0xFF && fileBytes[1] == 0xD8) {
+        isValidImage = true;
+        detectedType = 'JPEG';
+      } else if (fileBytes.length >= 8 && fileBytes[0] == 0x89 && fileBytes[1] == 0x50 && fileBytes[2] == 0x4E && fileBytes[3] == 0x47) {
+        isValidImage = true;
+        detectedType = 'PNG';
+      } else if (fileBytes.length >= 2 && fileBytes[0] == 0x42 && fileBytes[1] == 0x4D) {
+        isValidImage = true;
+        detectedType = 'BMP';
+      } else if (fileBytes.length >= 4 && fileBytes[0] == 0x49 && fileBytes[1] == 0x49 && fileBytes[2] == 0x2A && fileBytes[3] == 0x00) {
+        isValidImage = true;
+        detectedType = 'TIFF (little endian)';
+      } else if (fileBytes.length >= 4 && fileBytes[0] == 0x4D && fileBytes[1] == 0x4D && fileBytes[2] == 0x00 && fileBytes[3] == 0x2A) {
+        isValidImage = true;
+        detectedType = 'TIFF (big endian)';
+      }
+
+      print('📷 Detected image type: $detectedType');
+      if (!isValidImage) {
+        throw Exception('Selected file is not a valid image. Allowed formats: JPEG, PNG, BMP, TIFF.');
       }
       
-      // Add file from bytes with explicit MIME type and filename
-      final multipartFile = http.MultipartFile.fromBytes(
-        'file', // Field name must be exactly "file"
-        fileBytes,
-        filename: 'image.$fileExtension',
-        contentType: MediaType.parse(mimeType),
+      // Add file from bytes with content type based on detected format
+      String contentTypeString = 'image/jpeg';
+      
+      if (detectedType == 'PNG') {
+        contentTypeString = 'image/png';
+      } else if (detectedType == 'BMP') {
+        contentTypeString = 'image/bmp';
+      } else if (detectedType.contains('TIFF')) {
+        contentTypeString = 'image/tiff';
+      }
+      
+      // Try using original image path instead of scaled version if possible
+      // The issue might be with Flutter's image scaling/compression
+      
+      final multipartFile = await http.MultipartFile.fromPath(
+        'file', // Field name must be exactly "file"  
+        imageFile.path,
+        contentType: MediaType.parse(contentTypeString),
       );
       request.files.add(multipartFile);
       
-      // Add headers (Accept header is required)
+      // Add headers - do NOT set Content-Type manually, let http package handle it
       request.headers.addAll({
         'Accept': 'application/json',
+        'User-Agent': 'PawSense-Flutter/1.0',
       });
       
       print('🚀 Sending request to: $baseUrl/detect/$petType');
@@ -146,6 +138,7 @@ class PetDetectionService {
       print('📋 Request headers: ${request.headers}');
       print('📂 File field name: ${multipartFile.field}');
       print('📝 File filename: ${multipartFile.filename}');
+      print('📏 File size being sent: ${await imageFile.length()} bytes');
       
       // Send request with timeout
       final streamedResponse = await request.send().timeout(
