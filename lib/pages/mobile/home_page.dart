@@ -19,6 +19,8 @@ import 'package:pawsense/core/widgets/user/home/appointment_history_list.dart';
 import 'package:pawsense/core/widgets/user/shared/modals/pet_assessment_modal.dart';
 import 'package:pawsense/core/services/user/assessment_result_service.dart';
 import 'package:pawsense/core/models/user/assessment_result_model.dart';
+import 'package:pawsense/core/models/clinic/appointment_booking_model.dart' as booking;
+import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/utils/data_cache.dart';
 
 class UserHomePage extends StatefulWidget {
@@ -45,27 +47,12 @@ class _UserHomePageState extends State<UserHomePage> {
   List<AIHistoryData> _aiHistory = [];
   bool _historyLoading = false;
   final AssessmentResultService _assessmentService = AssessmentResultService();
+  
+  // Dynamic appointment history data from database
+  List<AppointmentHistoryData> _appointmentHistory = [];
+  bool _appointmentHistoryLoading = false;
+  
   final DataCache _cache = DataCache();
-
-  // Sample appointment history data
-  final List<AppointmentHistoryData> _appointmentHistory = [
-    AppointmentHistoryData(
-      id: 'apt_001',
-      title: 'Confirmed',
-      subtitle: 'Sep 20 • 11:00 AM',
-      status: AppointmentStatus.confirmed,
-      timestamp: DateTime.now().add(const Duration(days: 14)),
-      clinicName: 'Happy Paws Vet',
-    ),
-    AppointmentHistoryData(
-      id: 'apt_002',
-      title: 'Pending',
-      subtitle: 'Oct 02 • 2:30 PM',
-      status: AppointmentStatus.pending,
-      timestamp: DateTime.now().add(const Duration(days: 26)),
-      clinicName: 'Downtown Animal Care',
-    ),
-  ];
 
   @override
   void initState() {
@@ -96,7 +83,7 @@ class _UserHomePageState extends State<UserHomePage> {
           
           // Set history subtab based on parameter
           if (subtabParam == 'assessment') {
-            _currentHistorySubtabIndex = 0; // AI History contains assessments
+            _currentHistorySubtabIndex = 0; // Assessment History
           } else if (subtabParam == 'appointments') {
             _currentHistorySubtabIndex = 1; // Appointment History
           }
@@ -131,6 +118,7 @@ class _UserHomePageState extends State<UserHomePage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _userModel != null) {
           _fetchAssessmentHistory();
+          _fetchAppointmentHistory();
         }
       });
     }
@@ -162,6 +150,17 @@ class _UserHomePageState extends State<UserHomePage> {
     _fetchAssessmentHistory(forceRefresh: forceRefresh);
   }
 
+  // Public method to refresh appointment history (can be called after booking appointment)
+  void refreshAppointmentHistory({bool forceRefresh = true}) {
+    // When called externally (like after booking), usually want fresh data
+    if (_userModel != null) {
+      // Invalidate cache when new appointment is booked
+      final cacheKey = 'user_appointments_${_userModel!.uid}';
+      _cache.invalidate(cacheKey);
+    }
+    _fetchAppointmentHistory(forceRefresh: forceRefresh);
+  }
+
   Future<void> _fetchUser() async {
     try {
       final userModel = await AuthGuard.getCurrentUser();
@@ -186,6 +185,9 @@ class _UserHomePageState extends State<UserHomePage> {
         
         // Fetch assessment history after user is loaded
         _fetchAssessmentHistory();
+        
+        // Fetch appointment history after user is loaded
+        _fetchAppointmentHistory();
       } else {
         if (mounted) {
           setState(() {
@@ -270,6 +272,120 @@ class _UserHomePageState extends State<UserHomePage> {
           _historyLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _fetchAppointmentHistory({bool forceRefresh = false}) async {
+    if (_userModel == null) {
+      print('DEBUG: User model is null, cannot fetch appointment history');
+      return;
+    }
+    
+    print('DEBUG: Fetching appointment history for user: ${_userModel!.uid}, forceRefresh: $forceRefresh');
+    
+    final cacheKey = 'user_appointments_${_userModel!.uid}';
+    
+    // Try to get cached data first (unless forcing refresh)
+    if (!forceRefresh) {
+      final cachedAppointments = _cache.get<List<booking.AppointmentBooking>>(cacheKey);
+      if (cachedAppointments != null) {
+        print('DEBUG: Using cached appointments (${cachedAppointments.length} appointments)');
+        
+        final appointmentHistoryData = _convertAppointmentsToHistoryData(cachedAppointments);
+        
+        if (mounted) {
+          setState(() {
+            _appointmentHistory = appointmentHistoryData;
+            _appointmentHistoryLoading = false;
+          });
+        }
+        return;
+      }
+    }
+    
+    // Show loading only if we don't have data yet
+    final showLoading = _appointmentHistory.isEmpty;
+    
+    if (mounted && showLoading) {
+      setState(() {
+        _appointmentHistoryLoading = true;
+      });
+    }
+
+    try {
+      print('DEBUG: Fetching appointments from API');
+      final appointments = await AppointmentBookingService.getUserAppointments(_userModel!.uid);
+      print('DEBUG: Fetched ${appointments.length} appointments from API');
+      
+      // Cache the fresh data (3 minutes TTL)
+      _cache.put(cacheKey, appointments, ttl: const Duration(minutes: 3));
+      
+      final appointmentHistoryData = _convertAppointmentsToHistoryData(appointments);
+      print('DEBUG: Converted to ${appointmentHistoryData.length} appointment history items');
+      
+      if (mounted) {
+        setState(() {
+          _appointmentHistory = appointmentHistoryData;
+          _appointmentHistoryLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching appointment history: $e');
+      if (mounted) {
+        setState(() {
+          _appointmentHistoryLoading = false;
+        });
+      }
+    }
+  }
+
+  List<AppointmentHistoryData> _convertAppointmentsToHistoryData(List<booking.AppointmentBooking> appointments) {
+    return appointments.map((appointment) {
+      // Convert booking AppointmentStatus to history AppointmentStatus
+      AppointmentStatus historyStatus;
+      switch (appointment.status) {
+        case booking.AppointmentStatus.pending:
+          historyStatus = AppointmentStatus.pending;
+          break;
+        case booking.AppointmentStatus.confirmed:
+          historyStatus = AppointmentStatus.confirmed;
+          break;
+        case booking.AppointmentStatus.completed:
+          historyStatus = AppointmentStatus.completed;
+          break;
+        case booking.AppointmentStatus.cancelled:
+        case booking.AppointmentStatus.rescheduled:
+          historyStatus = AppointmentStatus.cancelled;
+          break;
+      }
+      
+      // Format the subtitle with date and time
+      final dateStr = '${appointment.appointmentDate.day}/${appointment.appointmentDate.month}';
+      final subtitle = '$dateStr • ${appointment.appointmentTime}';
+      
+      return AppointmentHistoryData(
+        id: appointment.id ?? '',
+        title: _getStatusTitle(appointment.status),
+        subtitle: subtitle,
+        status: historyStatus,
+        timestamp: appointment.appointmentDate,
+        clinicName: appointment.serviceName, // Use service name as clinic info
+      );
+    }).toList();
+  }
+  
+  String _getStatusTitle(booking.AppointmentStatus status) {
+    switch (status) {
+      case booking.AppointmentStatus.pending:
+        return 'Pending';
+      case booking.AppointmentStatus.confirmed:
+        return 'Confirmed';
+      case booking.AppointmentStatus.completed:
+        return 'Completed';
+      case booking.AppointmentStatus.cancelled:
+        return 'Cancelled';
+      case booking.AppointmentStatus.rescheduled:
+        return 'Rescheduled';
     }
   }
 
@@ -642,6 +758,7 @@ class _UserHomePageState extends State<UserHomePage> {
       aiHistory: _aiHistory,
       appointmentHistory: _appointmentHistory,
       isHistoryLoading: _historyLoading,
+      isAppointmentHistoryLoading: _appointmentHistoryLoading,
       initialSubtabIndex: _currentHistorySubtabIndex,
       onViewAllPressed: () {
         // Handle view all history

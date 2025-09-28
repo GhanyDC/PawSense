@@ -69,8 +69,12 @@ class AppointmentHistoryList extends StatelessWidget {
 
   Widget _buildEmptyState() {
     return Container(
+      width: double.infinity,
+      height: 120,
       padding: const EdgeInsets.symmetric(vertical: kMobilePaddingLarge),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             Icons.calendar_today,
@@ -83,6 +87,7 @@ class AppointmentHistoryList extends StatelessWidget {
             style: kMobileTextStyleSubtitle.copyWith(
               color: AppColors.textSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
