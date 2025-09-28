@@ -33,6 +33,7 @@ class _UserHomePageState extends State<UserHomePage> {
   bool _loading = true;
   int _currentNavIndex = 0;
   int _currentTabIndex = 0;
+  int _currentHistorySubtabIndex = 0; // For history subtabs: 0=Assessment History, 1=Appointment History
   final GlobalKey<PetInfoCardState> _petCardKey = GlobalKey<PetInfoCardState>();
   bool _hasInitiallyLoaded = false; // Track if initial load is complete
   bool _isInternalTabSwitch = false; // Track if this is just a tab switch
@@ -85,12 +86,20 @@ class _UserHomePageState extends State<UserHomePage> {
     // Check for query parameters to set initial tab
     final uri = GoRouterState.of(context).uri;
     final tabParam = uri.queryParameters['tab'];
+    final subtabParam = uri.queryParameters['subtab'];
     final refreshParam = uri.queryParameters['refresh'];
     
     if (tabParam == 'history') {
       if (mounted) {
         setState(() {
           _currentTabIndex = 1; // History tab index
+          
+          // Set history subtab based on parameter
+          if (subtabParam == 'assessment') {
+            _currentHistorySubtabIndex = 0; // AI History contains assessments
+          } else if (subtabParam == 'appointments') {
+            _currentHistorySubtabIndex = 1; // Appointment History
+          }
         });
       }
     }
@@ -633,6 +642,7 @@ class _UserHomePageState extends State<UserHomePage> {
       aiHistory: _aiHistory,
       appointmentHistory: _appointmentHistory,
       isHistoryLoading: _historyLoading,
+      initialSubtabIndex: _currentHistorySubtabIndex,
       onViewAllPressed: () {
         // Handle view all history
       },

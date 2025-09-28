@@ -9,6 +9,7 @@ class HistorySection extends StatefulWidget {
   final List<AIHistoryData> aiHistory;
   final List<AppointmentHistoryData> appointmentHistory;
   final bool isHistoryLoading;
+  final int initialSubtabIndex;
   final VoidCallback? onViewAllPressed;
 
   const HistorySection({
@@ -16,6 +17,7 @@ class HistorySection extends StatefulWidget {
     required this.aiHistory,
     required this.appointmentHistory,
     this.isHistoryLoading = false,
+    this.initialSubtabIndex = 0,
     this.onViewAllPressed,
   });
 
@@ -24,7 +26,13 @@ class HistorySection extends StatefulWidget {
 }
 
 class _HistorySectionState extends State<HistorySection> {
-  int _selectedTabIndex = 0;
+  late int _selectedTabIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTabIndex = widget.initialSubtabIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +85,7 @@ class _HistorySectionState extends State<HistorySection> {
                 _selectedTabIndex = index;
               });
             },
-            tabs: const ['AI History', 'Appointment History'],
+            tabs: const ['Assessment History', 'Appointment History'],
           ),
 
           const SizedBox(height: kMobileSizedBoxXLarge),

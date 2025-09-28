@@ -6,7 +6,8 @@ import 'package:pawsense/pages/mobile/auth/verify_email_page.dart';
 import 'package:pawsense/pages/mobile/home_page.dart';
 import 'package:pawsense/pages/mobile/assessment_page.dart';
 import 'package:pawsense/pages/mobile/alerts_page.dart';
-import 'package:pawsense/pages/mobile/alerts_details_page.dart';
+import 'package:pawsense/pages/mobile/alerts/alerts_details_page.dart';
+import 'package:pawsense/pages/mobile/appointments/appointment_details_page.dart';
 import 'package:pawsense/pages/mobile/edit_profile_page.dart';
 import 'package:pawsense/pages/mobile/history/ai_history_detail_page.dart';
 import 'package:pawsense/pages/mobile/history/appointment_history_detail_page.dart';
@@ -95,6 +96,13 @@ class AppRouter {
         builder: (context, state) {
           final notificationId = state.pathParameters['notificationId']!;
           return AlertDetailsPage(notificationId: notificationId);
+        },
+      ),
+      GoRoute(
+        path: '/appointments/details/:appointmentId',
+        builder: (context, state) {
+          final appointmentId = state.pathParameters['appointmentId']!;
+          return AppointmentDetailsPage(appointmentId: appointmentId);
         },
       ),
       GoRoute(
