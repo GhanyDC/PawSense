@@ -8,6 +8,7 @@ import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
 import 'package:pawsense/core/services/messaging/messaging_service.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
 
 class ClinicInfo {
   final String id;
@@ -71,6 +72,7 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
   List<ClinicInfo> _clinics = [];
   bool _isLoading = true;
   String? _errorMessage;
+  final DataCache _cache = DataCache();
 
   @override
   void initState() {
@@ -78,9 +80,47 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
     _loadClinics();
   }
 
-  Future<void> _loadClinics() async {
+  @override
+  void dispose() {
+    // Clean up any resources here if needed
+    super.dispose();
+  }
+
+  // Public method to refresh clinics
+  void refreshClinics({bool forceRefresh = false}) {
+    if (mounted) {
+      print('DEBUG: refreshClinics called - forceRefresh: $forceRefresh');
+      _loadClinics(forceRefresh: forceRefresh);
+    }
+  }
+
+  Future<void> _loadClinics({bool forceRefresh = false}) async {
+    print('DEBUG: NearbyClinics _loadClinics called - current clinics: ${_clinics.length}, forceRefresh: $forceRefresh');
+    
+    final cacheKey = CacheKeys.clinics();
+    
+    // Try to get cached data first (unless forcing refresh)
+    if (!forceRefresh) {
+      final cachedClinics = _cache.get<List<ClinicInfo>>(cacheKey);
+      if (cachedClinics != null) {
+        print('DEBUG: NearbyClinics - Using cached clinics (${cachedClinics.length} clinics)');
+        if (mounted) {
+          setState(() {
+            _clinics = cachedClinics;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
+        return;
+      }
+    }
+    
+    // Don't show loading spinner if we already have data and are just refreshing
+    final showLoading = _clinics.isEmpty;
+    print('DEBUG: NearbyClinics - showLoading: $showLoading');
+    
     try {
-      if (mounted) {
+      if (mounted && showLoading) {
         setState(() {
           _isLoading = true;
           _errorMessage = null;
@@ -88,6 +128,7 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
       }
 
       // Get all available clinics to show accurate count
+      print('DEBUG: NearbyClinics - Fetching clinics from API');
       final clinicsData = await ClinicListService.getAllActiveClinics();
       
       final List<ClinicInfo> clinics = [];
@@ -100,14 +141,21 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
           continue;
         }
       }
+      
+      print('DEBUG: NearbyClinics loaded ${clinics.length} clinics from API');
+      
+      // Cache the fresh data (10 minutes TTL since clinics don't change often)
+      _cache.put(cacheKey, clinics, ttl: const Duration(minutes: 10));
 
       if (mounted) {
         setState(() {
           _clinics = clinics;
           _isLoading = false;
+          _errorMessage = null;
         });
       }
     } catch (e) {
+      print('Error loading clinics: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -182,16 +230,18 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
   }
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -292,7 +342,11 @@ class _NearbyClinicsWidgetState extends State<NearbyClinicsWidget> {
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: _loadClinics,
+              onPressed: () {
+                if (mounted) {
+                  _loadClinics(forceRefresh: true);
+                }
+              },
               child: const Text(
                 'Retry',
                 style: TextStyle(

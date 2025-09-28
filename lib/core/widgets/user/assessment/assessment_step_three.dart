@@ -343,15 +343,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       await assessmentService.saveAssessmentResult(assessmentResult);
 
       print('✅ Assessment saved to Firebase successfully');
-      
-      // Show success toast
-      Fluttertoast.showToast(
-        msg: 'Assessment saved successfully!',
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: AppColors.success,
-        textColor: Colors.white,
-      );
+    
 
     } catch (e) {
       print('❌ Error saving assessment: $e');

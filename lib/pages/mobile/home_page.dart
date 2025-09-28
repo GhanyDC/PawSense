@@ -19,6 +19,7 @@ import 'package:pawsense/core/widgets/user/home/appointment_history_list.dart';
 import 'package:pawsense/core/widgets/user/shared/modals/pet_assessment_modal.dart';
 import 'package:pawsense/core/services/user/assessment_result_service.dart';
 import 'package:pawsense/core/models/user/assessment_result_model.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
 
 class UserHomePage extends StatefulWidget {
   const UserHomePage({super.key});
@@ -32,8 +33,9 @@ class _UserHomePageState extends State<UserHomePage> {
   bool _loading = true;
   int _currentNavIndex = 0;
   int _currentTabIndex = 0;
-  Key _petCardKey = UniqueKey(); // Add this to force refresh
+  final GlobalKey<PetInfoCardState> _petCardKey = GlobalKey<PetInfoCardState>();
   bool _hasInitiallyLoaded = false; // Track if initial load is complete
+  bool _isInternalTabSwitch = false; // Track if this is just a tab switch
 
   // Dynamic health data generated from AI history
   List<HealthData> _healthData = [];
@@ -42,6 +44,7 @@ class _UserHomePageState extends State<UserHomePage> {
   List<AIHistoryData> _aiHistory = [];
   bool _historyLoading = false;
   final AssessmentResultService _assessmentService = AssessmentResultService();
+  final DataCache _cache = DataCache();
 
   // Sample appointment history data
   final List<AppointmentHistoryData> _appointmentHistory = [
@@ -70,6 +73,12 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   @override
+  void dispose() {
+    // Clean up any resources here if needed
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     
@@ -79,26 +88,34 @@ class _UserHomePageState extends State<UserHomePage> {
     final refreshParam = uri.queryParameters['refresh'];
     
     if (tabParam == 'history') {
-      setState(() {
-        _currentTabIndex = 1; // History tab index
-      });
+      if (mounted) {
+        setState(() {
+          _currentTabIndex = 1; // History tab index
+        });
+      }
     }
     
-    // Refresh pet card on initial load or when explicitly requested
-    final shouldRefresh = !_hasInitiallyLoaded || refreshParam == 'pets';
+    // Only refresh pet card on initial load or when explicitly requested via refresh param
+    // Don't refresh on internal tab switches
+    final shouldRefresh = (!_hasInitiallyLoaded || refreshParam == 'pets') && !_isInternalTabSwitch;
     
     if (shouldRefresh) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _refreshPetCard();
           if (!_hasInitiallyLoaded) {
-            setState(() {
-              _hasInitiallyLoaded = true;
-            });
+            if (mounted) {
+              setState(() {
+                _hasInitiallyLoaded = true;
+              });
+            }
           }
         }
       });
     }
+    
+    // Reset the internal tab switch flag
+    _isInternalTabSwitch = false;
     
     // Also refresh assessment history when tab is history
     if (tabParam == 'history') {
@@ -111,10 +128,13 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   void _refreshPetCard() {
-    print('DEBUG: Refreshing pet card');
-    setState(() {
-      _petCardKey = UniqueKey();
-    });
+    print('DEBUG: _refreshPetCard called');
+    if (mounted && _petCardKey.currentState != null) {
+      print('DEBUG: Calling refreshPets with forceRefresh=false (using cache)');
+      _petCardKey.currentState!.refreshPets(forceRefresh: false);
+    } else {
+      print('DEBUG: Pet card widget not available for refresh');
+    }
   }
 
   // Public method to refresh pets (can be called when returning from pets page)
@@ -123,8 +143,14 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   // Public method to refresh assessment history (can be called after completing assessment)
-  void refreshAssessmentHistory() {
-    _fetchAssessmentHistory();
+  void refreshAssessmentHistory({bool forceRefresh = true}) {
+    // When called externally (like after assessment), usually want fresh data
+    if (_userModel != null) {
+      // Invalidate cache when new assessment is added
+      final cacheKey = CacheKeys.userAssessments(_userModel!.uid);
+      _cache.invalidate(cacheKey);
+    }
+    _fetchAssessmentHistory(forceRefresh: forceRefresh);
   }
 
   Future<void> _fetchUser() async {
@@ -142,39 +168,77 @@ class _UserHomePageState extends State<UserHomePage> {
           // Don't block the UI for preferences initialization error
         }
         
-        setState(() {
-          _userModel = userModel;
-          _loading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _userModel = userModel;
+            _loading = false;
+          });
+        }
         
         // Fetch assessment history after user is loaded
         _fetchAssessmentHistory();
       } else {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _loading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _loading = false;
-      });
     }
   }
 
-  Future<void> _fetchAssessmentHistory() async {
+  Future<void> _fetchAssessmentHistory({bool forceRefresh = false}) async {
     if (_userModel == null) {
       print('DEBUG: User model is null, cannot fetch assessment history');
       return;
     }
     
-    print('DEBUG: Fetching assessment history for user: ${_userModel!.uid}');
-    setState(() {
-      _historyLoading = true;
-    });
+    print('DEBUG: Fetching assessment history for user: ${_userModel!.uid}, forceRefresh: $forceRefresh');
+    
+    final cacheKey = CacheKeys.userAssessments(_userModel!.uid);
+    
+    // Try to get cached data first (unless forcing refresh)
+    if (!forceRefresh) {
+      final cachedAssessments = _cache.get<List<AssessmentResult>>(cacheKey);
+      if (cachedAssessments != null) {
+        print('DEBUG: Using cached assessments (${cachedAssessments.length} assessments)');
+        
+        final aiHistoryData = _convertAssessmentResultsToAIHistory(cachedAssessments);
+        final healthData = _generateHealthDataFromAssessments(cachedAssessments);
+        
+        if (mounted) {
+          setState(() {
+            _aiHistory = aiHistoryData;
+            _healthData = healthData;
+            _historyLoading = false;
+          });
+        }
+        return;
+      }
+    }
+    
+    // Show loading only if we don't have data yet
+    final showLoading = _aiHistory.isEmpty;
+    
+    if (mounted && showLoading) {
+      setState(() {
+        _historyLoading = true;
+      });
+    }
 
     try {
+      print('DEBUG: Fetching assessments from API');
       final assessmentResults = await _assessmentService.getAssessmentResultsByUserId(_userModel!.uid);
-      print('DEBUG: Fetched ${assessmentResults.length} assessment results');
+      print('DEBUG: Fetched ${assessmentResults.length} assessment results from API');
+      
+      // Cache the fresh data (3 minutes TTL)
+      _cache.put(cacheKey, assessmentResults, ttl: const Duration(minutes: 3));
       
       final aiHistoryData = _convertAssessmentResultsToAIHistory(assessmentResults);
       print('DEBUG: Converted to ${aiHistoryData.length} AI history items');
@@ -183,16 +247,20 @@ class _UserHomePageState extends State<UserHomePage> {
       final healthData = _generateHealthDataFromAssessments(assessmentResults);
       print('DEBUG: Generated ${healthData.length} health data items');
       
-      setState(() {
-        _aiHistory = aiHistoryData;
-        _healthData = healthData;
-        _historyLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _aiHistory = aiHistoryData;
+          _healthData = healthData;
+          _historyLoading = false;
+        });
+      }
     } catch (e) {
       print('Error fetching assessment history: $e');
-      setState(() {
-        _historyLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _historyLoading = false;
+        });
+      }
     }
   }
 
@@ -412,11 +480,14 @@ class _UserHomePageState extends State<UserHomePage> {
             // Navigate to alerts page
             context.push('/alerts');
           } else {
-            setState(() {
-              _currentNavIndex = index;
-            });
-            // Refresh pet card when home tab is selected
-            if (index == 0) {
+            if (mounted) {
+              setState(() {
+                _currentNavIndex = index;
+              });
+            }
+            // Only refresh pet card when home tab is selected AND we're coming from a different nav index
+            // This prevents unnecessary refreshes when already on home tab
+            if (index == 0 && _currentNavIndex != 0) {
               _refreshPetCard();
             }
           }
@@ -472,9 +543,13 @@ class _UserHomePageState extends State<UserHomePage> {
               child: TabToggle(
                 selectedIndex: _currentTabIndex,
                 onTabChanged: (index) {
-                  setState(() {
-                    _currentTabIndex = index;
-                  });
+                  if (mounted) {
+                    // Set flag to indicate this is an internal tab switch
+                    _isInternalTabSwitch = true;
+                    setState(() {
+                      _currentTabIndex = index;
+                    });
+                  }
                 },
                 tabs: const ['Dashboard', 'History'],
               ),
@@ -497,9 +572,11 @@ class _UserHomePageState extends State<UserHomePage> {
                           
                           // If user data was updated, refresh the page
                           if (updatedUser != null && updatedUser is UserModel) {
-                            setState(() {
-                              _userModel = updatedUser;
-                            });
+                            if (mounted) {
+                              setState(() {
+                                _userModel = updatedUser;
+                              });
+                            }
                           } else {
                             // Fallback: refresh user data from server
                             _fetchUser();
@@ -511,7 +588,6 @@ class _UserHomePageState extends State<UserHomePage> {
                         key: _petCardKey,
                         nextAppointmentDate: null, // No appointment
                         nextAppointmentTime: null, // No appointment
-                        refreshKey: _petCardKey,
                       ),
 
                       // Add space between pets and health snapshot

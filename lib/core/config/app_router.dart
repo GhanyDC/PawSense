@@ -87,7 +87,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/alerts',
-        builder: (context, state) => const AlertsPage(),
+        builder: (context, state) => AlertsPage(key: alertsPageKey),
       ),
       GoRoute(
         path: '/assessment',

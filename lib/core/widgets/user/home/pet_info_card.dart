@@ -6,72 +6,65 @@ import 'package:pawsense/core/models/user/pet_model.dart';
 import 'package:pawsense/core/services/user/pet_service.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
 import 'package:pawsense/core/widgets/user/pets/pet_avatar.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
 
 class PetInfoCard extends StatefulWidget {
   final String? nextAppointmentDate;
   final String? nextAppointmentTime;
-  final Key? refreshKey; // Add this to force refresh
 
   const PetInfoCard({
     super.key,
     this.nextAppointmentDate,
     this.nextAppointmentTime,
-    this.refreshKey,
   });
 
   @override
-  State<PetInfoCard> createState() => _PetInfoCardState();
+  State<PetInfoCard> createState() => PetInfoCardState();
 }
 
-class _PetInfoCardState extends State<PetInfoCard> {
+class PetInfoCardState extends State<PetInfoCard> {
   List<Pet> _pets = [];
   bool _loading = true;
   String? _error;
+  final DataCache _cache = DataCache();
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
+    print('DEBUG: PetInfoCard initState - widget created');
     _loadPets();
   }
 
   @override
-  void didUpdateWidget(PetInfoCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Refresh pets when widget updates or refreshKey changes
-    if (widget.refreshKey != oldWidget.refreshKey) {
-      _loadPets();
-    }
+  void dispose() {
+    // Clean up any resources here if needed
+    super.dispose();
   }
 
   // Public method to refresh pets
-  void refreshPets() {
+  void refreshPets({bool forceRefresh = false}) {
     if (mounted) {
-      _loadPets();
+      print('DEBUG: refreshPets called - forceRefresh: $forceRefresh');
+      _loadPets(forceRefresh: forceRefresh);
     }
   }
 
-  Future<void> _loadPets() async {
-    print('DEBUG: PetInfoCard loading pets...');
-    // Don't show loading if we already have data and are just refreshing
-    final showLoading = _pets.isEmpty;
+  // Method to invalidate cache when pets are added/updated
+  void invalidatePetsCache() {
+    if (_currentUserId != null) {
+      final cacheKey = CacheKeys.userPets(_currentUserId!);
+      _cache.invalidate(cacheKey);
+      print('DEBUG: Pets cache invalidated for user: $_currentUserId');
+    }
+  }
+
+  Future<void> _loadPets({bool forceRefresh = false}) async {
+    print('DEBUG: PetInfoCard _loadPets called - current pets count: ${_pets.length}, forceRefresh: $forceRefresh');
     
     try {
-      setState(() {
-        _loading = showLoading;
-        _error = null;
-      });
-
       final user = await AuthGuard.getCurrentUser();
-      if (user != null) {
-        final pets = await PetService.getUserPets(user.uid);
-        print('DEBUG: PetInfoCard loaded ${pets.length} pets');
-        if (mounted) {
-          setState(() {
-            _pets = pets;
-            _loading = false;
-          });
-        }
-      } else {
+      if (user == null) {
         print('DEBUG: PetInfoCard user not found');
         if (mounted) {
           setState(() {
@@ -79,6 +72,54 @@ class _PetInfoCardState extends State<PetInfoCard> {
             _loading = false;
           });
         }
+        return;
+      }
+
+      _currentUserId = user.uid;
+      final cacheKey = CacheKeys.userPets(user.uid);
+      
+      // Try to get cached data first (unless forcing refresh)
+      if (!forceRefresh) {
+        final cachedPets = _cache.get<List<Pet>>(cacheKey);
+        if (cachedPets != null) {
+          print('DEBUG: PetInfoCard - Using cached pets (${cachedPets.length} pets)');
+          if (mounted) {
+            setState(() {
+              _pets = cachedPets;
+              _loading = false;
+              _error = null;
+            });
+          }
+          return;
+        }
+      }
+
+      // Show loading only if we don't have any data yet
+      final showLoading = _pets.isEmpty;
+      print('DEBUG: PetInfoCard - showLoading: $showLoading');
+      
+      if (mounted && showLoading) {
+        print('DEBUG: PetInfoCard - Setting loading state to true');
+        setState(() {
+          _loading = true;
+          _error = null;
+        });
+      }
+
+      // Fetch fresh data from API
+      print('DEBUG: PetInfoCard - Fetching pets from API');
+      final pets = await PetService.getUserPets(user.uid);
+      print('DEBUG: PetInfoCard loaded ${pets.length} pets from API');
+      
+      // Cache the fresh data (5 minutes TTL)
+      _cache.put(cacheKey, pets, ttl: const Duration(minutes: 5));
+      
+      if (mounted) {
+        setState(() {
+          _pets = pets;
+          _loading = false;
+          _error = null;
+        });
       }
     } catch (e) {
       print('Error loading pets: $e');
@@ -135,7 +176,11 @@ class _PetInfoCardState extends State<PetInfoCard> {
             ),
             const SizedBox(height: kMobileSizedBoxMedium),
             ElevatedButton(
-              onPressed: _loadPets,
+              onPressed: () {
+                if (mounted) {
+                  _loadPets(forceRefresh: true);
+                }
+              },
               child: const Text('Retry'),
             ),
           ],
@@ -172,8 +217,9 @@ class _PetInfoCardState extends State<PetInfoCard> {
                     try {
                       await context.push('/pets');
                       print('DEBUG: Navigation to /pets completed, refreshing pets');
-                      // Refresh pets when returning from View All page
-                      _loadPets();
+                      // Invalidate cache and refresh when returning from pets page
+                      invalidatePetsCache();
+                      _loadPets(forceRefresh: true);
                     } catch (e) {
                       print('DEBUG: Navigation error: $e');
                     }
@@ -265,9 +311,10 @@ class _PetInfoCardState extends State<PetInfoCard> {
               try {
                 final result = await context.push('/add-pet');
                 print('DEBUG: Navigation to /add-pet completed, result: $result');
-                // Refresh pets when returning from Add Pet page if pet was added
+                // Invalidate cache and refresh when returning from Add Pet page if pet was added
                 if (result == true) {
-                  _loadPets();
+                  invalidatePetsCache();
+                  _loadPets(forceRefresh: true);
                 }
               } catch (e) {
                 print('DEBUG: Navigation error: $e');
@@ -328,8 +375,9 @@ class _PetInfoCardState extends State<PetInfoCard> {
                         try {
                           await context.push('/pets');
                           print('DEBUG: Navigation to /pets completed, refreshing pets');
-                          // Refresh pets when returning from View All page
-                          _loadPets();
+                          // Invalidate cache and refresh when returning from pets page
+                          invalidatePetsCache();
+                          _loadPets(forceRefresh: true);
                         } catch (e) {
                           print('DEBUG: Navigation error: $e');
                         }

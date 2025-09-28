@@ -64,21 +64,6 @@ class _HistorySectionState extends State<HistorySection> {
                   ),
                 ],
               ),
-              if (widget.onViewAllPressed != null)
-                TextButton(
-                  onPressed: widget.onViewAllPressed,
-                  style: TextButton.styleFrom(
-                    padding: kMobileButtonPadding,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'View All',
-                    style: kMobileTextStyleViewAll.copyWith(
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
             ],
           ),
 
