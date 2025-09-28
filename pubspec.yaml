@@ -22,6 +22,7 @@ dependencies:
   googleapis: ^13.2.0
   googleapis_auth: ^1.6.0
   http: ^1.2.2
+  http_parser: ^4.0.2
   image_picker: ^1.1.2
   fl_chart: ^0.69.0
   flutter_dotenv: ^5.1.0

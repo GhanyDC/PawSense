@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 /// Service for communicating with YOLO detection backend API
 class PetDetectionService {
@@ -58,10 +59,16 @@ class PetDetectionService {
       final int fileSize = await imageFile.length();
       print('📊 Image size: ${_formatFileSize(fileSize)}');
       
-      // Check file size (limit to 10MB)
-      const maxSizeBytes = 10 * 1024 * 1024; // 10MB
+      // Check file size (exact limit: 10,485,760 bytes)
+      const maxSizeBytes = AppConfig.maxImageSizeBytes;
       if (fileSize > maxSizeBytes) {
         throw Exception('Image file too large. Maximum size: ${_formatFileSize(maxSizeBytes)}');
+      }
+
+      // Validate file type and determine MIME type
+      final String fileExtension = imageFile.path.split('.').last.toLowerCase();
+      if (!AppConfig.supportedImageTypes.contains(fileExtension)) {
+        throw Exception('Unsupported image type: $fileExtension. Supported types: ${AppConfig.supportedImageTypes.join(', ')}');
       }
 
       // Create multipart request
@@ -70,20 +77,75 @@ class PetDetectionService {
         Uri.parse('$baseUrl/detect/$petType'),
       );
       
-      // Add file to request
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          imageFile.path,
-        ),
-      );
+      // Determine correct MIME type based on file extension
+      String mimeType = 'image/jpeg'; // default
+      switch (fileExtension) {
+        case 'jpg':
+        case 'jpeg':
+          mimeType = 'image/jpeg';
+          break;
+        case 'png':
+          mimeType = 'image/png';
+          break;
+        case 'bmp':
+          mimeType = 'image/bmp';
+          break;
+        case 'tiff':
+        case 'tif':
+          mimeType = 'image/tiff';
+          break;
+        default:
+          mimeType = 'image/jpeg';
+      }
       
-      // Add headers
+      // Read file bytes to ensure the file is valid
+      final List<int> fileBytes = await imageFile.readAsBytes();
+      print('📊 File bytes read successfully: ${fileBytes.length} bytes');
+      
+      // Validate the file is actually an image by checking magic bytes
+      if (fileBytes.isNotEmpty) {
+        final String magicBytes = fileBytes.take(4).map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
+        print('📷 File magic bytes: $magicBytes');
+        
+        // Check for common image formats
+        bool isValidImage = false;
+        if (fileBytes.length >= 2 && fileBytes[0] == 0xFF && fileBytes[1] == 0xD8) {
+          print('✅ Detected JPEG image');
+          isValidImage = true;
+        } else if (fileBytes.length >= 8 && 
+                  fileBytes[0] == 0x89 && fileBytes[1] == 0x50 && 
+                  fileBytes[2] == 0x4E && fileBytes[3] == 0x47) {
+          print('✅ Detected PNG image');
+          isValidImage = true;
+        } else if (fileBytes.length >= 2 && fileBytes[0] == 0x42 && fileBytes[1] == 0x4D) {
+          print('✅ Detected BMP image');
+          isValidImage = true;
+        }
+        
+        if (!isValidImage) {
+          print('⚠️ Warning: File may not be a valid image format');
+        }
+      }
+      
+      // Add file from bytes with explicit MIME type and filename
+      final multipartFile = http.MultipartFile.fromBytes(
+        'file', // Field name must be exactly "file"
+        fileBytes,
+        filename: 'image.$fileExtension',
+        contentType: MediaType.parse(mimeType),
+      );
+      request.files.add(multipartFile);
+      
+      // Add headers (Accept header is required)
       request.headers.addAll({
         'Accept': 'application/json',
       });
       
       print('🚀 Sending request to: $baseUrl/detect/$petType');
+      print('📄 File type: ${multipartFile.contentType}');
+      print('📋 Request headers: ${request.headers}');
+      print('📂 File field name: ${multipartFile.field}');
+      print('📝 File filename: ${multipartFile.filename}');
       
       // Send request with timeout
       final streamedResponse = await request.send().timeout(
@@ -94,6 +156,7 @@ class PetDetectionService {
       final response = await http.Response.fromStream(streamedResponse);
       
       print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body length: ${response.body.length}');
       
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
@@ -108,9 +171,11 @@ class PetDetectionService {
     } on TimeoutException {
       throw Exception('Request timed out after $timeoutSeconds seconds. Please check your internet connection.');
     } on SocketException {
-      throw Exception('Unable to connect to detection server. Please ensure the server is running and accessible.');
+      throw Exception('Unable to connect to Railway backend server. Server may be sleeping or unavailable.');
     } on HttpException {
       throw Exception('HTTP error occurred. Please check your network connection.');
+    } on FormatException catch (e) {
+      throw Exception('Invalid response format from server: $e');
     } catch (e) {
       print('❌ Detection error: $e');
       rethrow;
@@ -120,9 +185,11 @@ class PetDetectionService {
   /// Parse error message from response
   String _parseErrorMessage(http.Response response) {
     try {
+      print('📥 Raw response body: ${response.body}');
       final Map<String, dynamic> errorData = json.decode(response.body);
       return errorData['detail'] ?? errorData['message'] ?? 'Unknown error';
     } catch (e) {
+      print('📥 Failed to parse error JSON: $e');
       return response.body.isNotEmpty ? response.body : 'Unknown error';
     }
   }
@@ -139,12 +206,16 @@ class PetDetectionService {
 class HealthStatus {
   final String status;
   final String message;
+  final List<String> modelsLoaded;
+  final List<String> availableModels;
   final String? version;
   final DateTime? timestamp;
 
   HealthStatus({
     required this.status,
-    required this.message,
+    this.message = '',
+    this.modelsLoaded = const [],
+    this.availableModels = const [],
     this.version,
     this.timestamp,
   });
@@ -153,6 +224,12 @@ class HealthStatus {
     return HealthStatus(
       status: map['status'] ?? 'unknown',
       message: map['message'] ?? '',
+      modelsLoaded: (map['models_loaded'] as List<dynamic>? ?? [])
+          .map((model) => model.toString())
+          .toList(),
+      availableModels: (map['available_models'] as List<dynamic>? ?? [])
+          .map((model) => model.toString())
+          .toList(),
       version: map['version'],
       timestamp: map['timestamp'] != null 
           ? DateTime.tryParse(map['timestamp']) 
@@ -204,30 +281,31 @@ class ModelInfo {
   final String author;
   final String version;
   final String task;
-  final Map<String, String> names;
+  final Map<String, String>? names;
 
   ModelInfo({
     required this.description,
     required this.author,
     required this.version,
     required this.task,
-    required this.names,
+    this.names,
   });
 
   factory ModelInfo.fromMap(Map<String, dynamic> map) {
-    final namesMap = <String, String>{};
-    final names = map['names'] ?? {};
-    if (names is Map) {
+    Map<String, String>? namesMap;
+    final names = map['names'];
+    if (names != null && names is Map) {
+      namesMap = <String, String>{};
       names.forEach((key, value) {
-        namesMap[key.toString()] = value.toString();
+        namesMap![key.toString()] = value.toString();
       });
     }
 
     return ModelInfo(
-      description: map['description'] ?? '',
-      author: map['author'] ?? '',
-      version: map['version'] ?? '',
-      task: map['task'] ?? '',
+      description: map['description'] ?? 'Pet skin condition detection model',
+      author: map['author'] ?? 'PawSense Team',
+      version: map['version'] ?? '1.0.0',
+      task: map['task'] ?? 'detection',
       names: namesMap,
     );
   }
@@ -238,7 +316,7 @@ class ModelInfo {
       'author': author,
       'version': version,
       'task': task,
-      'names': names,
+      if (names != null) 'names': names,
     };
   }
 }
@@ -353,7 +431,12 @@ class PetAssessment {
 class AppConfig {
   static const String apiBaseUrl = 'https://pawsensebackend-production.up.railway.app';
   static const int maxImagesPerAssessment = 5;
-  static const int maxImageSizeBytes = 10 * 1024 * 1024; // 10MB
-  static const List<String> supportedImageTypes = ['jpg', 'jpeg', 'png'];
+  static const int maxImageSizeBytes = 10 * 1024 * 1024; // 10MB (10,485,760 bytes)
+  static const List<String> supportedImageTypes = ['jpg', 'jpeg', 'png', 'bmp', 'tiff'];
   static const List<String> supportedPetTypes = ['cats', 'dogs'];
+  
+  // API Endpoints
+  static const String healthEndpoint = '/health';
+  static const String detectCatsEndpoint = '/detect/cats';
+  static const String detectDogsEndpoint = '/detect/dogs';
 }
