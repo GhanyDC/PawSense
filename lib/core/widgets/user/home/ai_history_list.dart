@@ -71,6 +71,7 @@ class AIHistoryList extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: kMobilePaddingLarge),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             Icons.pets,
@@ -83,6 +84,7 @@ class AIHistoryList extends StatelessWidget {
             style: kMobileTextStyleSubtitle.copyWith(
               color: AppColors.textSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

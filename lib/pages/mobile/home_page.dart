@@ -35,13 +35,8 @@ class _UserHomePageState extends State<UserHomePage> {
   Key _petCardKey = UniqueKey(); // Add this to force refresh
   bool _hasInitiallyLoaded = false; // Track if initial load is complete
 
-  // Sample data - in a real app, this would come from your backend
-  final List<HealthData> _healthData = [
-    HealthData(condition: 'Mange', count: 1, color: const Color(0xFFFF9500)),
-    HealthData(condition: 'Ringworm', count: 3, color: const Color(0xFF007AFF)),
-    HealthData(condition: 'Flea Allergy', count: 2, color: const Color(0xFF8E44AD)),
-    HealthData(condition: 'Pyoderma', count: 1, color: const Color(0xFFE74C3C)),
-  ];
+  // Dynamic health data generated from AI history
+  List<HealthData> _healthData = [];
 
   // Dynamic AI history data from database
   List<AIHistoryData> _aiHistory = [];
@@ -184,8 +179,13 @@ class _UserHomePageState extends State<UserHomePage> {
       final aiHistoryData = _convertAssessmentResultsToAIHistory(assessmentResults);
       print('DEBUG: Converted to ${aiHistoryData.length} AI history items');
       
+      // Generate health data from assessment results
+      final healthData = _generateHealthDataFromAssessments(assessmentResults);
+      print('DEBUG: Generated ${healthData.length} health data items');
+      
       setState(() {
         _aiHistory = aiHistoryData;
+        _healthData = healthData;
         _historyLoading = false;
       });
     } catch (e) {
@@ -318,6 +318,74 @@ class _UserHomePageState extends State<UserHomePage> {
       default:
         return AIDetectionType.mange; // Default fallback
     }
+  }
+
+  List<HealthData> _generateHealthDataFromAssessments(List<AssessmentResult> assessmentResults) {
+    if (assessmentResults.isEmpty) return [];
+    
+    // Filter assessments from the last week
+    final oneWeekAgo = DateTime.now().subtract(const Duration(days: 7));
+    final recentAssessments = assessmentResults
+        .where((assessment) => assessment.createdAt.isAfter(oneWeekAgo))
+        .toList();
+    
+    if (recentAssessments.isEmpty) return [];
+    
+    // Count detections by condition from recent assessments
+    final Map<String, int> conditionCounts = {};
+    
+    for (final assessment in recentAssessments) {
+      for (final detectionResult in assessment.detectionResults) {
+        if (detectionResult.detections.isNotEmpty) {
+          // Get only the highest confidence detection per image (matching our display logic)
+          final sortedDetections = List<Detection>.from(detectionResult.detections);
+          sortedDetections.sort((a, b) => b.confidence.compareTo(a.confidence));
+          final highestDetection = sortedDetections.first;
+          
+          final condition = _formatConditionForSnapshot(highestDetection.label);
+          conditionCounts[condition] = (conditionCounts[condition] ?? 0) + 1;
+        }
+      }
+    }
+    
+    // Convert to HealthData objects with colors
+    final colors = [
+      const Color(0xFFFF9500), // Orange
+      const Color(0xFF007AFF), // Blue
+      const Color(0xFF8E44AD), // Purple
+      const Color(0xFFE74C3C), // Red
+      const Color(0xFF2ECC71), // Green
+      const Color(0xFFF39C12), // Orange variant
+      const Color(0xFF9B59B6), // Purple variant
+      const Color(0xFF1ABC9C), // Teal
+    ];
+    
+    final healthDataList = <HealthData>[];
+    int colorIndex = 0;
+    
+    // Sort by count (highest first) and take top conditions
+    final sortedConditions = conditionCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    for (final entry in sortedConditions.take(6)) {
+      healthDataList.add(HealthData(
+        condition: entry.key,
+        count: entry.value,
+        color: colors[colorIndex % colors.length],
+      ));
+      colorIndex++;
+    }
+    
+    return healthDataList;
+  }
+  
+  String _formatConditionForSnapshot(String condition) {
+    // Format condition names for display
+    return condition
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
+        .join(' ');
   }
 
   @override
