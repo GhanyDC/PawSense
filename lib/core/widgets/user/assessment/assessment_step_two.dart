@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:typed_data';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/widgets/shared/buttons/primary_button.dart';
-import 'package:pawsense/core/services/yolo_service.dart';
+import 'package:pawsense/core/services/pet_detection_service.dart';
 
 class AssessmentStepTwo extends StatefulWidget {
   final Map<String, dynamic> assessmentData;
@@ -30,12 +28,13 @@ class AssessmentStepTwo extends StatefulWidget {
 
 class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
   final ImagePicker _picker = ImagePicker();
-  final YoloService _yoloService = YoloService();
+  final PetDetectionService _detectionService = PetDetectionService();
   List<XFile> _selectedImages = [];
   List<Map<String, dynamic>> _detectionResults = [];
   bool _isLoading = false;
   bool _isAnalyzing = false;
   bool _showPreparationTips = false;
+  bool _serverConnected = false;
 
   // Expose analyzing state to parent
   bool get isAnalyzing => _isAnalyzing;
@@ -55,17 +54,57 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
       _detectionResults = detectionList.cast<Map<String, dynamic>>();
     }
     
-    // Initialize YOLO service
-    _initializeYoloService();
+    // Check API server connectivity
+    _checkServerConnection();
   }
 
-  Future<void> _initializeYoloService() async {
+  Future<void> _checkServerConnection() async {
     try {
-      await _yoloService.initialize();
-      print('YoloService initialized successfully');
+      print('🔍 Checking server connection...');
+      final health = await _detectionService.checkServerHealth();
+      setState(() {
+        _serverConnected = health.isHealthy;
+      });
+      
+      if (health.isHealthy) {
+        print('✅ Detection server is healthy');
+      } else {
+        print('⚠️ Detection server is not healthy: ${health.message}');
+        _showServerConnectionWarning();
+      }
     } catch (e) {
-      print('Error initializing YoloService: $e');
+      print('❌ Server connection check failed: $e');
+      setState(() {
+        _serverConnected = false;
+      });
+      _showServerConnectionWarning();
     }
+  }
+
+  void _showServerConnectionWarning() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Cannot connect to detection server. Please ensure the API server is running.',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: _checkServerConnection,
+        ),
+      ),
+    );
   }
 
   Future<void> _takePhoto() async {
@@ -83,8 +122,8 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
         });
         widget.onDataUpdate('photos', _selectedImages);
         
-        // Run YOLO detection on the new photo
-        await _runYoloDetection(photo);
+        // Run API detection on the new photo
+        await _runAPIDetection(photo);
       }
     } catch (e) {
       _showErrorDialog('Failed to take photo: ${e.toString()}');
@@ -107,9 +146,9 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
         });
         widget.onDataUpdate('photos', _selectedImages);
         
-        // Run YOLO detection on all new photos
+        // Run API detection on all new photos
         for (final image in images) {
-          await _runYoloDetection(image);
+          await _runAPIDetection(image);
         }
       }
     } catch (e) {
@@ -119,46 +158,70 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
     }
   }
 
-  Future<void> _runYoloDetection(XFile imageFile) async {
+  Future<void> _runAPIDetection(XFile imageFile) async {
     setState(() => _isAnalyzing = true);
     
     try {
-      print('🖼️ Starting YOLO detection on: ${imageFile.path}');
+      print('🖼️ Starting API detection on: ${imageFile.path}');
       
-      // Read image bytes
-      final Uint8List bytes = await imageFile.readAsBytes();
-      print('📊 Image bytes: ${bytes.length}');
+      // Determine pet type from assessment data
+      final selectedPetType = widget.assessmentData['selectedPetType']?.toString().toLowerCase() ?? 'dogs';
+      final String apiPetType = selectedPetType == 'cat' ? PetDetectionService.CATS : PetDetectionService.DOGS;
       
-      // Get actual image dimensions
-      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
-      final ui.FrameInfo frameInfo = await codec.getNextFrame();
-      final ui.Image image = frameInfo.image;
+      print('� Pet type for API: $apiPetType');
       
-      final int imageWidth = image.width;
-      final int imageHeight = image.height;
+      // Check server connection first
+      if (!_serverConnected) {
+        await _checkServerConnection();
+        if (!_serverConnected) {
+          throw Exception('Cannot connect to detection server. Please ensure the server is running.');
+        }
+      }
       
-      print('📐 Actual image dimensions: ${imageWidth}x${imageHeight}');
+      // Convert XFile to File for API
+      final File imageFileForAPI = File(imageFile.path);
       
-      // Run detection
-      final detections = await _yoloService.detectOnImage(
-        bytes,
-        imageHeight,
-        imageWidth,
+      print('� Image file path: ${imageFile.path}');
+      print('📊 Image file size: ${await imageFile.length()} bytes');
+      
+      // Run detection via API
+      final DetectionResult result = await _detectionService.detectConditions(
+        imageFile: imageFileForAPI,
+        petType: apiPetType,
       );
       
-      print('🎯 Detection results: $detections');
-      print('🔢 Number of detections: ${detections.length}');
+      print('🎯 API Detection results: ${result.totalDetections} detections');
+      print('� Model info: ${result.modelInfo.description}');
       
-      // Log individual detections
+      // Convert API detections to the format expected by existing code
+      final List<Map<String, dynamic>> detections = result.detections
+          .map((detection) => detection.toYoloFormat())
+          .toList();
+      
+      // Log individual detections with bounding box details
       for (int i = 0; i < detections.length; i++) {
         final detection = detections[i];
-        print('Detection $i: ${detection['label']} - Confidence: ${detection['confidence']} - Box: ${detection['rect']}');
+        final bbox = detection['box'] as List<double>?;
+        print('Detection $i: ${detection['label']} - Confidence: ${detection['confidence']?.toStringAsFixed(3)} - BBox: [${bbox?.map((v) => v.toStringAsFixed(1)).join(', ')}]');
+      }
+      
+      // Find and log the highest confidence detection
+      if (detections.isNotEmpty) {
+        detections.sort((a, b) => (b['confidence'] as double).compareTo(a['confidence'] as double));
+        final topDetection = detections.first;
+        final topBbox = topDetection['box'] as List<double>?;
+        print('🏆 HIGHEST DETECTION: ${topDetection['label']} - Confidence: ${(topDetection['confidence'] * 100).toStringAsFixed(2)}%');
+        if (topBbox != null && topBbox.length >= 4) {
+          print('📍 Bounding Box: [x1=${topBbox[0].toStringAsFixed(1)}, y1=${topBbox[1].toStringAsFixed(1)}, x2=${topBbox[2].toStringAsFixed(1)}, y2=${topBbox[3].toStringAsFixed(1)}]');
+          print('📏 Box Size: width=${(topBbox[2] - topBbox[0]).toStringAsFixed(1)}, height=${(topBbox[3] - topBbox[1]).toStringAsFixed(1)}');
+        }
       }
       
       setState(() {
         _detectionResults.add({
           'imagePath': imageFile.path,
           'detections': detections,
+          'apiResult': result.toMap(), // Store original API result for reference
         });
       });
       
@@ -173,8 +236,19 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
       }
       
     } catch (e) {
-      print('❌ YOLO detection error: $e');
-      _showErrorDialog('Failed to analyze image: ${e.toString()}');
+      print('❌ API detection error: $e');
+      
+      // Show more specific error messages
+      String errorMessage = 'Failed to analyze image';
+      if (e.toString().contains('connect')) {
+        errorMessage = 'Cannot connect to detection server. Please ensure the server is running at ${PetDetectionService.baseUrl}';
+      } else if (e.toString().contains('timeout')) {
+        errorMessage = 'Detection request timed out. Please try again.';
+      } else if (e.toString().contains('too large')) {
+        errorMessage = 'Image file is too large. Please use a smaller image.';
+      }
+      
+      _showErrorDialog('$errorMessage\n\nError details: ${e.toString()}');
     } finally {
       setState(() => _isAnalyzing = false);
     }
@@ -212,16 +286,96 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
     final topDetection = detections.first;
     final String condition = topDetection['label'];
     final double confidence = topDetection['confidence'];
+    final List<double>? bbox = topDetection['box'] as List<double>?;
+    
+    String bboxInfo = '';
+    if (bbox != null && bbox.length >= 4) {
+      bboxInfo = '\nLocation: [${bbox[0].toStringAsFixed(0)}, ${bbox[1].toStringAsFixed(0)}, ${bbox[2].toStringAsFixed(0)}, ${bbox[3].toStringAsFixed(0)}]';
+    }
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Detected: $condition (${(confidence * 100).toStringAsFixed(1)}% confidence)',
-          style: const TextStyle(color: Colors.white),
+          'Detected: $condition (${(confidence * 100).toStringAsFixed(1)}% confidence)$bboxInfo\nTotal detections: ${detections.length}',
+          style: const TextStyle(fontSize: 14),
         ),
-        backgroundColor: AppColors.success,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 5),
+        backgroundColor: Colors.green,
+        action: SnackBarAction(
+          label: 'View Details',
+          textColor: Colors.white,
+          onPressed: () => _showDetailedDetectionDialog(detections),
+        ),
       ),
+    );
+  }
+
+  void _showDetailedDetectionDialog(List<Map<String, dynamic>> detections) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Detection Results (${detections.length} found)'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: detections.asMap().entries.map((entry) {
+                final int index = entry.key;
+                final Map<String, dynamic> detection = entry.value;
+                final List<double>? bbox = detection['box'] as List<double>?;
+                
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  color: index == 0 ? Colors.green.shade50 : null,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (index == 0) 
+                              const Icon(Icons.star, color: Colors.amber, size: 16),
+                            Text(
+                              '${detection['label']}',
+                              style: TextStyle(
+                                fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Confidence: ${(detection['confidence'] * 100).toStringAsFixed(1)}%',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        if (bbox != null && bbox.length >= 4) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Bounding Box: [${bbox[0].toStringAsFixed(1)}, ${bbox[1].toStringAsFixed(1)}, ${bbox[2].toStringAsFixed(1)}, ${bbox[3].toStringAsFixed(1)}]',
+                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          ),
+                          Text(
+                            'Size: ${(bbox[2] - bbox[0]).toStringAsFixed(1)} × ${(bbox[3] - bbox[1]).toStringAsFixed(1)}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -432,35 +586,75 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
                 ),
                 const SizedBox(height: kSpacingMedium),
                 
-                // Pet Type Indicator
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: kSpacingMedium,
-                    vertical: kSpacingSmall,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.warning.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.pets,
-                        color: AppColors.warning,
-                        size: 16,
+                // Pet Type and Server Status Indicators
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: kSpacingMedium,
+                        vertical: kSpacingSmall,
                       ),
-                      const SizedBox(width: kSpacingXSmall),
-                      Text(
-                        'Scanning: ${widget.assessmentData['selectedPetType'] ?? 'Dog'}',
-                        style: kMobileTextStyleServiceTitle.copyWith(
-                          color: AppColors.warning,
-                          fontWeight: FontWeight.w600,
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.pets,
+                            color: AppColors.warning,
+                            size: 16,
+                          ),
+                          const SizedBox(width: kSpacingXSmall),
+                          Text(
+                            'Scanning: ${widget.assessmentData['selectedPetType'] ?? 'Dog'}',
+                            style: kMobileTextStyleServiceTitle.copyWith(
+                              color: AppColors.warning,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: kSpacingSmall),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: kSpacingMedium,
+                        vertical: kSpacingSmall,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _serverConnected 
+                            ? Colors.green.withOpacity(0.1)
+                            : Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _serverConnected 
+                              ? Colors.green.withOpacity(0.3)
+                              : Colors.red.withOpacity(0.3)
                         ),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _serverConnected ? Icons.check_circle : Icons.error,
+                            color: _serverConnected ? Colors.green : Colors.red,
+                            size: 16,
+                          ),
+                          const SizedBox(width: kSpacingXSmall),
+                          Text(
+                            _serverConnected ? 'Server Online' : 'Server Offline',
+                            style: kMobileTextStyleServiceTitle.copyWith(
+                              color: _serverConnected ? Colors.green : Colors.red,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
