@@ -41,6 +41,7 @@ class AssessmentStepThree extends StatefulWidget {
 
 class _AssessmentStepThreeState extends State<AssessmentStepThree> {
   bool _isGeneratingPDF = false;
+  bool _isCompletingAssessment = false;
   bool _showRemedies = false;
   late List<AnalysisResult> _analysisResults;
   Set<int> _previewingImages = {}; // Track which images are showing bounding boxes
@@ -343,15 +344,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       await assessmentService.saveAssessmentResult(assessmentResult);
 
       print('✅ Assessment saved to Firebase successfully');
-      
-      // Show success toast
-      Fluttertoast.showToast(
-        msg: 'Assessment saved successfully!',
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: AppColors.success,
-        textColor: Colors.white,
-      );
+    
 
     } catch (e) {
       print('❌ Error saving assessment: $e');
@@ -369,16 +362,46 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
 
   // Complete assessment (save and navigate)
   Future<void> _completeAssessment() async {
+    if (_isCompletingAssessment) return; // Prevent multiple taps
+    
+    setState(() {
+      _isCompletingAssessment = true;
+    });
+    
     try {
+      print('DEBUG: Starting assessment completion...');
       // Save assessment first
       await saveAssessment();
+      print('DEBUG: Assessment saved successfully, waiting for propagation...');
       
-      // Navigate to home with history tab
+      // Small delay to ensure Firebase write has propagated
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Navigate to home with history tab and force refresh with timestamp
       if (mounted) {
-        context.go('/home?tab=history');
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        context.go('/home?tab=history&refresh=assessment&t=$timestamp');
+        print('DEBUG: Navigation completed to /home?tab=history&refresh=assessment&t=$timestamp');
       }
     } catch (e) {
       print('Error completing assessment: $e');
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing assessment: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompletingAssessment = false;
+        });
+      }
     }
   }
 
@@ -418,13 +441,37 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       // Show success dialog with preview and save options
       _showPDFGeneratedDialog(filePath, pdfBytes, fileName);
 
-      // Show success toast
-      Fluttertoast.showToast(
-        msg: 'PDF generated successfully!',
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: AppColors.success,
-        textColor: Colors.white,
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.check_circle,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'PDF generated successfully!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
       );
 
     } catch (e) {
@@ -440,13 +487,37 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
         () => Navigator.of(context).pop(),
       );
 
-      // Show error toast
-      Fluttertoast.showToast(
-        msg: 'Failed to generate PDF. Please try again.',
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: AppColors.error,
-        textColor: Colors.white,
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.error,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Failed to generate PDF. Please try again.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
       );
     }
   }
@@ -1015,9 +1086,18 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                 ),
                 const SizedBox(height: kSpacingMedium),
                 ElevatedButton.icon(
-                  onPressed: _completeAssessment,
-                  icon: Icon(Icons.check_circle),
-                  label: Text('Complete Assessment'),
+                  onPressed: _isCompletingAssessment ? null : _completeAssessment,
+                  icon: _isCompletingAssessment 
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Icon(Icons.check_circle),
+                  label: Text(_isCompletingAssessment ? 'Completing...' : 'Complete Assessment'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.success,
                     foregroundColor: Colors.white,

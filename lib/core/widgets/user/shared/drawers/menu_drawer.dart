@@ -113,7 +113,8 @@ class MenuDrawer extends StatelessWidget {
                     title: 'Appointments',
                     onTap: () {
                       Navigator.pop(context);
-                      // Navigate to appointments
+                      // Navigate to home page with history tab (assessment history subtab)
+                      context.go('/home?tab=history&subtab=appointments');
                     },
                   ),
                   _buildMenuItem(

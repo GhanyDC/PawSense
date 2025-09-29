@@ -469,12 +469,14 @@ class _AssessmentPageState extends State<AssessmentPage> {
     _showLoading();
     
     try {
+      print('DEBUG: Assessment completion triggered from check button...');
       // Try to access the AssessmentStepThree widget and call its save method
       final stepThreeState = _stepThreeKey.currentState;
       if (stepThreeState != null && stepThreeState.mounted) {
         // Use dynamic casting to call the save method
         final dynamic assessmentState = stepThreeState;
         if (assessmentState.saveAssessment != null) {
+          print('DEBUG: Calling saveAssessment from step three widget...');
           await assessmentState.saveAssessment();
         }
       }
@@ -492,8 +494,14 @@ class _AssessmentPageState extends State<AssessmentPage> {
         ),
       );
 
-      // Navigate to home with history tab
-      context.go('/home?tab=history');
+      print('DEBUG: Assessment saved successfully from check button, waiting for propagation...');
+      
+      // Small delay to ensure Firebase write has propagated
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Navigate to home with history tab and force refresh with timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      context.go('/home?tab=history&refresh=assessment&t=$timestamp');
       
     } catch (e) {
       // Hide loading on error

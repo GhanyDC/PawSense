@@ -45,32 +45,30 @@ class AIHistoryList extends StatelessWidget {
       return _buildEmptyState();
     }
 
-    return Column(
-      children: [
-        ...aiHistory.take(3).map((item) => AIHistoryItem(
+    // Use ListView.builder for better performance with all items
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: aiHistory.length,
+      itemBuilder: (context, index) {
+        final item = aiHistory[index];
+        return AIHistoryItem(
           data: item,
           onTap: () {
             context.push('/ai-history/${item.id}');
           },
-        )),
-        if (aiHistory.length > 3) ...[
-          const SizedBox(height: kMobileSizedBoxMedium),
-          Text(
-            '${aiHistory.length - 3} more detections',
-            style: kMobileTextStyleSubtitle.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ],
+        );
+      },
     );
   }
 
   Widget _buildEmptyState() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: kMobilePaddingLarge),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             Icons.pets,
@@ -83,6 +81,7 @@ class AIHistoryList extends StatelessWidget {
             style: kMobileTextStyleSubtitle.copyWith(
               color: AppColors.textSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -162,7 +161,7 @@ class AIHistoryItem extends StatelessWidget {
                   ),
                 ),
                 
-                // Assessment image instead of detection tag
+                // Assessment image with performance optimizations
                 if (data.imageUrl != null && data.imageUrl!.isNotEmpty)
                   Container(
                     width: 50,
@@ -176,6 +175,29 @@ class AIHistoryItem extends StatelessWidget {
                       child: Image.network(
                         data.imageUrl!,
                         fit: BoxFit.cover,
+                        // Add caching and performance optimizations
+                        cacheWidth: 150, // Optimize memory usage
+                        cacheHeight: 150,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: AppColors.border,
+                            child: Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
                             color: AppColors.border,
@@ -183,22 +205,6 @@ class AIHistoryItem extends StatelessWidget {
                               Icons.pets,
                               color: AppColors.textSecondary,
                               size: 20,
-                            ),
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            color: AppColors.border,
-                            child: Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
-                                ),
-                              ),
                             ),
                           );
                         },

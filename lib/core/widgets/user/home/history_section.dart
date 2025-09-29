@@ -9,6 +9,8 @@ class HistorySection extends StatefulWidget {
   final List<AIHistoryData> aiHistory;
   final List<AppointmentHistoryData> appointmentHistory;
   final bool isHistoryLoading;
+  final bool isAppointmentHistoryLoading;
+  final int initialSubtabIndex;
   final VoidCallback? onViewAllPressed;
 
   const HistorySection({
@@ -16,6 +18,8 @@ class HistorySection extends StatefulWidget {
     required this.aiHistory,
     required this.appointmentHistory,
     this.isHistoryLoading = false,
+    this.isAppointmentHistoryLoading = false,
+    this.initialSubtabIndex = 0,
     this.onViewAllPressed,
   });
 
@@ -24,7 +28,13 @@ class HistorySection extends StatefulWidget {
 }
 
 class _HistorySectionState extends State<HistorySection> {
-  int _selectedTabIndex = 0;
+  late int _selectedTabIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTabIndex = widget.initialSubtabIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,21 +74,6 @@ class _HistorySectionState extends State<HistorySection> {
                   ),
                 ],
               ),
-              if (widget.onViewAllPressed != null)
-                TextButton(
-                  onPressed: widget.onViewAllPressed,
-                  style: TextButton.styleFrom(
-                    padding: kMobileButtonPadding,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'View All',
-                    style: kMobileTextStyleViewAll.copyWith(
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
             ],
           ),
 
@@ -92,7 +87,7 @@ class _HistorySectionState extends State<HistorySection> {
                 _selectedTabIndex = index;
               });
             },
-            tabs: const ['AI History', 'Appointment History'],
+            tabs: const ['Assessment History', 'Appointment History'],
           ),
 
           const SizedBox(height: kMobileSizedBoxXLarge),
@@ -103,7 +98,9 @@ class _HistorySectionState extends State<HistorySection> {
                 ? _buildLoadingState()
                 : AIHistoryList(aiHistory: widget.aiHistory),
           ] else ...[
-            AppointmentHistoryList(appointmentHistory: widget.appointmentHistory),
+            widget.isAppointmentHistoryLoading
+                ? _buildAppointmentLoadingState()
+                : AppointmentHistoryList(appointmentHistory: widget.appointmentHistory),
           ],
         ],
       ),
@@ -128,6 +125,35 @@ class _HistorySectionState extends State<HistorySection> {
             const SizedBox(height: 8),
             Text(
               'Loading assessment history...',
+              style: kMobileTextStyleSubtitle.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppointmentLoadingState() {
+    return Container(
+      height: 120,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Loading appointment history...',
               style: kMobileTextStyleSubtitle.copyWith(
                 color: AppColors.textSecondary,
                 fontSize: 12,

@@ -50,7 +50,7 @@ class HealthSnapshot extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: kMobileSizedBoxXLarge),
+          const SizedBox(height: kMobileSizedBoxLarge),
           
           Row(
             children: [

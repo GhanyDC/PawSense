@@ -44,7 +44,7 @@ class AppointmentHistoryList extends StatelessWidget {
 
     return Column(
       children: [
-        ...appointmentHistory.take(3).map((item) => AppointmentHistoryItem(
+        ...appointmentHistory.map((item) => AppointmentHistoryItem(
           data: item,
           onTap: () {
             context.go('/appointment-history/${item.id}');
@@ -53,24 +53,18 @@ class AppointmentHistoryList extends StatelessWidget {
             context.go('/appointment-history/${item.id}');
           },
         )),
-        if (appointmentHistory.length > 3) ...[
-          const SizedBox(height: kMobileSizedBoxMedium),
-          Text(
-            '${appointmentHistory.length - 3} more appointments',
-            style: kMobileTextStyleSubtitle.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
-          ),
-        ],
       ],
     );
   }
 
   Widget _buildEmptyState() {
     return Container(
+      width: double.infinity,
+      height: 120,
       padding: const EdgeInsets.symmetric(vertical: kMobilePaddingLarge),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             Icons.calendar_today,
@@ -83,6 +77,7 @@ class AppointmentHistoryList extends StatelessWidget {
             style: kMobileTextStyleSubtitle.copyWith(
               color: AppColors.textSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

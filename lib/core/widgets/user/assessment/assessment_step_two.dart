@@ -281,102 +281,11 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
 
   void _showDetectionSummary(List<Map<String, dynamic>> detections) {
     // Sort detections by confidence
+    // Sort detections by confidence (highest first)
     detections.sort((a, b) => (b['confidence'] as double).compareTo(a['confidence'] as double));
     
-    final topDetection = detections.first;
-    final String condition = topDetection['label'];
-    final double confidence = topDetection['confidence'];
-    final List<double>? bbox = topDetection['box'] as List<double>?;
-    
-    String bboxInfo = '';
-    if (bbox != null && bbox.length >= 4) {
-      bboxInfo = '\nLocation: [${bbox[0].toStringAsFixed(0)}, ${bbox[1].toStringAsFixed(0)}, ${bbox[2].toStringAsFixed(0)}, ${bbox[3].toStringAsFixed(0)}]';
-    }
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Detected: $condition (${(confidence * 100).toStringAsFixed(1)}% confidence)$bboxInfo\nTotal detections: ${detections.length}',
-          style: const TextStyle(fontSize: 14),
-        ),
-        duration: const Duration(seconds: 5),
-        backgroundColor: Colors.green,
-        action: SnackBarAction(
-          label: 'View Details',
-          textColor: Colors.white,
-          onPressed: () => _showDetailedDetectionDialog(detections),
-        ),
-      ),
-    );
-  }
-
-  void _showDetailedDetectionDialog(List<Map<String, dynamic>> detections) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Detection Results (${detections.length} found)'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: detections.asMap().entries.map((entry) {
-                final int index = entry.key;
-                final Map<String, dynamic> detection = entry.value;
-                final List<double>? bbox = detection['box'] as List<double>?;
-                
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  color: index == 0 ? Colors.green.shade50 : null,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (index == 0) 
-                              const Icon(Icons.star, color: Colors.amber, size: 16),
-                            Text(
-                              '${detection['label']}',
-                              style: TextStyle(
-                                fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Confidence: ${(detection['confidence'] * 100).toStringAsFixed(1)}%',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        if (bbox != null && bbox.length >= 4) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Bounding Box: [${bbox[0].toStringAsFixed(1)}, ${bbox[1].toStringAsFixed(1)}, ${bbox[2].toStringAsFixed(1)}, ${bbox[3].toStringAsFixed(1)}]',
-                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                          ),
-                          Text(
-                            'Size: ${(bbox[2] - bbox[0]).toStringAsFixed(1)} × ${(bbox[3] - bbox[1]).toStringAsFixed(1)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
+    // Detection completed - results will be visible in the UI components
+    // Snackbar removed as requested by user
   }
 
   void _removePhoto(int index) {

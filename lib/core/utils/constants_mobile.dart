@@ -45,7 +45,7 @@ const double kMobileBorderRadiusLegend = 8.0;
 // ====================
 
 // Chart sizes
-const double kMobileDonutChartSize = 90.0;
+const double kMobileDonutChartSize = 75.0;
 
 // Icon container sizes
 const double kMobileIconContainerSize = 40.0;

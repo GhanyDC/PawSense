@@ -396,7 +396,7 @@ class PDFGenerationService {
           // Show detection results by image
           if (assessmentResult.detectionResults.isNotEmpty) ...[
             pw.Text(
-              'Detection Results by Image:',
+              'Detection Results by Image (Highest Confidence Only):',
               style: pw.TextStyle(
                 fontSize: 14,
                 fontWeight: pw.FontWeight.bold,
@@ -407,6 +407,14 @@ class PDFGenerationService {
             ...assessmentResult.detectionResults.asMap().entries.map((entry) {
               final imageIndex = entry.key;
               final detectionResult = entry.value;
+              
+              // Get only the highest confidence detection for this image
+              Detection? highestDetection;
+              if (detectionResult.detections.isNotEmpty) {
+                final sortedDetections = List<Detection>.from(detectionResult.detections);
+                sortedDetections.sort((a, b) => b.confidence.compareTo(a.confidence));
+                highestDetection = sortedDetections.first;
+              }
               
               return pw.Container(
                 margin: const pw.EdgeInsets.only(bottom: 15),
@@ -428,39 +436,53 @@ class PDFGenerationService {
                       ),
                     ),
                     pw.SizedBox(height: 8),
-                    if (detectionResult.detections.isNotEmpty) ...[
-                      ...detectionResult.detections.map((detection) =>
-                        pw.Container(
-                          margin: const pw.EdgeInsets.only(bottom: 4),
-                          child: pw.Row(
-                            children: [
-                              pw.Container(
-                                width: 4,
-                                height: 4,
-                                decoration: pw.BoxDecoration(
-                                  color: PdfColors.blue,
-                                  shape: pw.BoxShape.circle,
-                                ),
+                    if (highestDetection != null) ...[
+                      pw.Container(
+                        margin: const pw.EdgeInsets.only(bottom: 4),
+                        child: pw.Row(
+                          children: [
+                            pw.Container(
+                              width: 4,
+                              height: 4,
+                              decoration: pw.BoxDecoration(
+                                color: PdfColors.blue,
+                                shape: pw.BoxShape.circle,
                               ),
-                              pw.SizedBox(width: 8),
-                              pw.Expanded(
-                                child: pw.Text(
-                                  detection.label,
-                                  style: pw.TextStyle(fontSize: 11),
-                                ),
+                            ),
+                            pw.SizedBox(width: 8),
+                            pw.Expanded(
+                              child: pw.Text(
+                                highestDetection.label,
+                                style: pw.TextStyle(fontSize: 11),
                               ),
-                              pw.Text(
-                                '${(detection.confidence * 100).toStringAsFixed(1)}%',
+                            ),
+                            pw.Text(
+                              '${(highestDetection.confidence * 100).toStringAsFixed(1)}%',
+                              style: pw.TextStyle(
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.grey700,
+                              ),
+                            ),
+                            pw.SizedBox(width: 8),
+                            pw.Container(
+                              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: pw.BoxDecoration(
+                                color: PdfColors.blue200,
+                                borderRadius: pw.BorderRadius.circular(4),
+                              ),
+                              child: pw.Text(
+                                'Highest',
                                 style: pw.TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 9,
+                                  color: PdfColors.blue800,
                                   fontWeight: pw.FontWeight.bold,
-                                  color: PdfColors.grey700,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ).toList(),
+                      ),
                     ] else ...[
                       pw.Text(
                         'No detections found in this image',
