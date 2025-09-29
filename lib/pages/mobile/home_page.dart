@@ -117,8 +117,28 @@ class _UserHomePageState extends State<UserHomePage> {
     if (tabParam == 'history') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _userModel != null) {
-          _fetchAssessmentHistory();
+          // Force refresh if coming from assessment completion
+          final forceRefresh = refreshParam == 'assessment';
+          print('DEBUG: Navigation to history tab detected, forceRefresh: $forceRefresh, refreshParam: $refreshParam');
+          if (forceRefresh && _userModel != null) {
+            // Invalidate cache when new assessment is completed
+            final cacheKey = CacheKeys.userAssessments(_userModel!.uid);
+            _cache.invalidate(cacheKey);
+            print('DEBUG: Cache invalidated for key: $cacheKey');
+          }
+          _fetchAssessmentHistory(forceRefresh: forceRefresh);
           _fetchAppointmentHistory();
+          
+          // Add a secondary refresh after 2 seconds for assessment completions
+          // This helps ensure we get the data even if there are propagation delays
+          if (forceRefresh) {
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted && _userModel != null) {
+                print('DEBUG: Performing secondary refresh after assessment completion');
+                _fetchAssessmentHistory(forceRefresh: true);
+              }
+            });
+          }
         }
       });
     }

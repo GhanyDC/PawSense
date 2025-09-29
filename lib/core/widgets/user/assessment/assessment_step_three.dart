@@ -41,6 +41,7 @@ class AssessmentStepThree extends StatefulWidget {
 
 class _AssessmentStepThreeState extends State<AssessmentStepThree> {
   bool _isGeneratingPDF = false;
+  bool _isCompletingAssessment = false;
   bool _showRemedies = false;
   late List<AnalysisResult> _analysisResults;
   Set<int> _previewingImages = {}; // Track which images are showing bounding boxes
@@ -361,16 +362,46 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
 
   // Complete assessment (save and navigate)
   Future<void> _completeAssessment() async {
+    if (_isCompletingAssessment) return; // Prevent multiple taps
+    
+    setState(() {
+      _isCompletingAssessment = true;
+    });
+    
     try {
+      print('DEBUG: Starting assessment completion...');
       // Save assessment first
       await saveAssessment();
+      print('DEBUG: Assessment saved successfully, waiting for propagation...');
       
-      // Navigate to home with history tab
+      // Small delay to ensure Firebase write has propagated
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Navigate to home with history tab and force refresh with timestamp
       if (mounted) {
-        context.go('/home?tab=history');
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        context.go('/home?tab=history&refresh=assessment&t=$timestamp');
+        print('DEBUG: Navigation completed to /home?tab=history&refresh=assessment&t=$timestamp');
       }
     } catch (e) {
       print('Error completing assessment: $e');
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing assessment: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompletingAssessment = false;
+        });
+      }
     }
   }
 
@@ -1055,9 +1086,18 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                 ),
                 const SizedBox(height: kSpacingMedium),
                 ElevatedButton.icon(
-                  onPressed: _completeAssessment,
-                  icon: Icon(Icons.check_circle),
-                  label: Text('Complete Assessment'),
+                  onPressed: _isCompletingAssessment ? null : _completeAssessment,
+                  icon: _isCompletingAssessment 
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Icon(Icons.check_circle),
+                  label: Text(_isCompletingAssessment ? 'Completing...' : 'Complete Assessment'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.success,
                     foregroundColor: Colors.white,
