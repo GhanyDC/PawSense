@@ -9,6 +9,7 @@ import 'package:pawsense/pages/mobile/alerts_page.dart';
 import 'package:pawsense/pages/mobile/alerts/alerts_details_page.dart';
 import 'package:pawsense/pages/mobile/appointments/appointment_details_page.dart';
 import 'package:pawsense/pages/mobile/edit_profile_page.dart';
+import 'package:pawsense/pages/mobile/about_pawsense_page.dart';
 import 'package:pawsense/pages/mobile/history/ai_history_detail_page.dart';
 import 'package:pawsense/pages/mobile/history/appointment_history_detail_page.dart';
 
@@ -125,6 +126,10 @@ class AppRouter {
             user: extra['user'] as UserModel,
           );
         },
+      ),
+      GoRoute(
+        path: '/about-pawsense',
+        builder: (context, state) => const AboutPawSensePage(),
       ),
       GoRoute(
         path: '/messaging',
