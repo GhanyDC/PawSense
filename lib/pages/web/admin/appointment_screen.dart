@@ -13,6 +13,9 @@ import '../../../core/widgets/admin/appointments/appointment_filters.dart';
 import '../../../core/widgets/admin/appointments/appointment_table.dart';
 import '../../../core/widgets/admin/appointments/appointment_summary.dart';
 import '../../../core/widgets/admin/appointments/appointment_edit_modal.dart';
+import '../../../core/services/user/pdf_generation_service.dart';
+import '../../../core/services/user/assessment_result_service.dart';
+import '../../../core/models/user/user_model.dart';
 
 class AppointmentManagementScreen extends StatefulWidget {
   const AppointmentManagementScreen({Key? key}) : super(key: key ?? const PageStorageKey('appointment_management'));
@@ -28,6 +31,7 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
   bool isLoading = true;
   String? error;
   String? _cachedClinicId; // Cache clinic ID to avoid repeated lookups
+  bool _isGeneratingPDF = false; // Track PDF generation state
 
   // Services
   final _cacheService = AppointmentCacheService();
@@ -764,6 +768,40 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
                                       _buildDetailRow('Cancelled At', 
                                         '${appointment.cancelledAt!.day}/${appointment.cancelledAt!.month}/${appointment.cancelledAt!.year} ${appointment.cancelledAt!.hour}:${appointment.cancelledAt!.minute.toString().padLeft(2, '0')}'),
                                   ],
+                                  
+                                  // Add PDF Download Button if assessment data is available
+                                  if (assessmentData != null) ...[
+                                    const SizedBox(height: 24),
+                                    const Divider(),
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _isGeneratingPDF 
+                                            ? null 
+                                            : () {
+                                                Navigator.of(context).pop();
+                                                _generateAppointmentPDF(appointment);
+                                              },
+                                        icon: _isGeneratingPDF 
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                ),
+                                              )
+                                            : const Icon(Icons.download),
+                                        label: Text(_isGeneratingPDF ? 'Generating PDF...' : 'Download Assessment PDF'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -805,5 +843,118 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
         ],
       ),
     );
+  }
+
+  // Generate PDF for appointment assessment
+  Future<void> _generateAppointmentPDF(AppointmentModels.Appointment appointment) async {
+    if (_isGeneratingPDF) return;
+    
+    setState(() => _isGeneratingPDF = true);
+    
+    try {
+      // Check if appointment has assessment result
+      if (appointment.assessmentResultId == null || appointment.assessmentResultId!.isEmpty) {
+        throw Exception('No assessment data available for this appointment');
+      }
+
+      // Get assessment result
+      final assessmentService = AssessmentResultService();
+      final assessmentResult = await assessmentService.getAssessmentResultById(appointment.assessmentResultId!);
+      
+      if (assessmentResult == null) {
+        throw Exception('Assessment data not found');
+      }
+
+      // Create a simplified user model from the appointment owner
+      final userModel = UserModel(
+        uid: appointment.owner.id,
+        username: appointment.owner.name,
+        email: appointment.owner.email ?? '',
+        contactNumber: appointment.owner.phone,
+        createdAt: DateTime.now(),
+        role: 'user',
+      );
+
+      // Generate PDF
+      final pdfBytes = await PDFGenerationService.generateAssessmentPDF(
+        user: userModel,
+        assessmentResult: assessmentResult,
+      );
+
+      // Use web-compatible download
+      final fileName = 'PawSense_Assessment_${appointment.pet.name}_${DateTime.now().millisecondsSinceEpoch}';
+      await PDFGenerationService.saveWithSystemDialog(pdfBytes, fileName);
+
+      setState(() => _isGeneratingPDF = false);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.check_circle,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Assessment PDF generated successfully!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+    } catch (e) {
+      setState(() => _isGeneratingPDF = false);
+      
+      print('Error generating PDF: $e');
+      
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.error,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Failed to generate PDF: ${e.toString()}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 }
