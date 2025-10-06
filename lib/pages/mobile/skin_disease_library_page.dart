@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
@@ -6,15 +6,18 @@ import 'package:pawsense/core/services/user/skin_disease_service.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/widgets/user/shared/navigation/user_app_bar.dart';
-import 'package:pawsense/core/widgets/shared/skin_disease/skin_disease_card.dart';
-import 'package:pawsense/core/widgets/shared/skin_disease/category_chip.dart';
-import 'package:pawsense/core/widgets/shared/skin_disease/skin_disease_empty_state.dart';
+import 'package:pawsense/core/widgets/user/skin_disease/disease_info_banner.dart';
+import 'package:pawsense/core/widgets/user/skin_disease/disease_search_bar.dart';
+import 'package:pawsense/core/widgets/user/skin_disease/species_toggle.dart';
+import 'package:pawsense/core/widgets/user/skin_disease/disease_filters.dart';
+import 'package:pawsense/core/widgets/user/skin_disease/disease_card.dart';
+import 'package:pawsense/core/widgets/user/skin_disease/disease_empty_state.dart';
 import 'package:pawsense/pages/mobile/skin_disease_detail_page.dart';
 
 /// Skin Disease Information Library Page (Mobile/User)
 /// 
 /// Displays a searchable, filterable list of skin diseases
-/// Based on the design from pasted images 1 and 2
+/// Component-based architecture for clean and maintainable code
 class SkinDiseaseLibraryPage extends StatefulWidget {
   const SkinDiseaseLibraryPage({super.key});
 
@@ -45,6 +48,14 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // ==================== DATA LOADING ====================
+
   Future<void> _fetchUser() async {
     try {
       final user = await AuthGuard.getCurrentUser();
@@ -63,14 +74,7 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadData() async {
-    print('🔵 Loading data...');
     setState(() => _isLoading = true);
     
     try {
@@ -79,19 +83,14 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
         _service.getCategories(useCache: false),
       ]);
       
-      print('🔵 Data loaded: ${(results[0] as List).length} diseases, ${(results[1] as List).length} categories');
-      
       setState(() {
         _allDiseases = results[0] as List<SkinDiseaseModel>;
         _categories = results[1] as List<String>;
         _isLoading = false;
       });
       
-      print('🔵 Before filters - All diseases: ${_allDiseases.length}');
       _applyFilters();
-    } catch (e, stackTrace) {
-      print('🔴 Error loading data: $e');
-      print('🔴 Stack trace: $stackTrace');
+    } catch (e) {
       setState(() => _isLoading = false);
       
       if (mounted) {
@@ -102,20 +101,16 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
     }
   }
 
+  // ==================== FILTERING LOGIC ====================
+
   void _applyFilters() {
-    print('🔵 Applying filters...');
-    print('🔵 All diseases count: ${_allDiseases.length}');
-    print('🔵 Selected species: $_selectedSpecies');
-    print('🔵 Selected category: $_selectedCategory');
-    print('🔵 Selected detection: $_selectedDetectionMethod');
-    print('🔵 Search query: "$_searchQuery"');
-    
     setState(() {
       _filteredDiseases = _allDiseases.where((disease) {
-        // Species filter - check for both singular and plural forms
-        bool matchesSpecies = disease.species.contains(_selectedSpecies) ||
-            disease.species.contains('${_selectedSpecies}s') || // plural: cat -> cats
-            disease.species.contains('both');
+        // Species filter - case-insensitive check for both singular and plural forms
+        final speciesLower = disease.species.map((s) => s.toLowerCase()).toList();
+        bool matchesSpecies = speciesLower.contains(_selectedSpecies.toLowerCase()) ||
+            speciesLower.contains('${_selectedSpecies}s'.toLowerCase()) || // plural: cat -> cats
+            speciesLower.contains('both');
         
         // Category filter (null means show all)
         bool matchesCategory = _selectedCategory == null ||
@@ -131,27 +126,12 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
             disease.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             disease.description.toLowerCase().contains(_searchQuery.toLowerCase());
         
-        final matches = matchesSpecies && matchesCategory && matchesDetection && matchesSearch;
-        
-        if (!matches) {
-          print('🔴 "${disease.name}" filtered out:');
-          print('   Species: $matchesSpecies (disease.species=${disease.species}, looking for: "$_selectedSpecies" or "${_selectedSpecies}s")');
-          print('   Category: $matchesCategory (disease.categories=${disease.categories})');
-          print('   Detection: $matchesDetection (disease.detectionMethod=${disease.detectionMethod})');
-          print('   Search: $matchesSearch');
-        } else {
-          print('✅ "${disease.name}" PASSED all filters!');
-        }
-        
-        return matches;
+        return matchesSpecies && matchesCategory && matchesDetection && matchesSearch;
       }).toList();
-      
-      print('🟢 Filtered diseases: ${_filteredDiseases.length}');
     });
   }
 
   void _clearFilters() {
-    print('🔵 Clearing all filters');
     setState(() {
       _selectedSpecies = 'cat';
       _selectedCategory = null; // null = "All"
@@ -161,6 +141,8 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
     });
     _applyFilters();
   }
+
+  // ==================== EVENT HANDLERS ====================
 
   void _onSearchChanged(String query) {
     setState(() {
@@ -177,7 +159,6 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
   }
 
   void _onCategorySelected(String category) {
-    print('🔵 Category selected: $category');
     setState(() {
       if (category == 'All') {
         _selectedCategory = null; // null = show all categories
@@ -209,6 +190,8 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
     );
   }
 
+  // ==================== UI BUILD ====================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -220,30 +203,43 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
               onRefresh: _loadData,
               child: CustomScrollView(
                 slivers: [
-                  // Info banner
-                  SliverToBoxAdapter(
-                    child: _buildInfoBanner(),
+                  // Info banner component
+                  const SliverToBoxAdapter(
+                    child: DiseaseInfoBanner(),
                   ),
                   
-                  // Search bar
+                  // Search bar component
                   SliverToBoxAdapter(
-                    child: _buildSearchBar(),
+                    child: DiseaseSearchBar(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      hasQuery: _searchQuery.isNotEmpty,
+                    ),
                   ),
                   
-                  // Species toggle (Cats/Dogs only)
+                  // Species toggle component (Cats/Dogs)
                   SliverToBoxAdapter(
-                    child: _buildSpeciesToggle(),
+                    child: SpeciesToggle(
+                      selectedSpecies: _selectedSpecies,
+                      onSpeciesChanged: _onSpeciesChanged,
+                    ),
                   ),
                   
-                  // Filter chips (Categories + AI Detectable)
+                  // Filter chips component (Categories + AI Detectable)
                   SliverToBoxAdapter(
-                    child: _buildFilterChips(),
+                    child: DiseaseFilters(
+                      categories: _categories,
+                      selectedCategory: _selectedCategory,
+                      selectedDetectionMethod: _selectedDetectionMethod,
+                      onCategorySelected: _onCategorySelected,
+                      onDetectionMethodToggled: _onDetectionMethodToggled,
+                    ),
                   ),
                   
                   // Disease list or empty state
                   _filteredDiseases.isEmpty
                       ? SliverFillRemaining(
-                          child: SkinDiseaseEmptyState(
+                          child: DiseaseEmptyState(
                             message: _searchQuery.isNotEmpty
                                 ? 'No results found'
                                 : 'No diseases match your filters',
@@ -256,7 +252,7 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
                           sliver: SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
-                                return SkinDiseaseCard(
+                                return DiseaseCard(
                                   disease: _filteredDiseases[index],
                                   onTap: () => _navigateToDetail(_filteredDiseases[index]),
                                 );
@@ -268,276 +264,6 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _buildInfoBanner() {
-    return Container(
-      margin: const EdgeInsets.all(kMobileMarginHorizontal),
-      padding: kMobilePaddingCard,
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: kMobileBorderRadiusCardPreset,
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.2),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.info_outline,
-              color: AppColors.primary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Skin Disease Info',
-                  style: kMobileTextStyleTitle.copyWith(
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Learn about common pet skin conditions and how PawSense can help detect them.',
-                  style: kMobileTextStyleSubtitle.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: kMobileMarginHorizontal),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: kMobileCardShadowSmall,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.search,
-            color: AppColors.textSecondary,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Search skin diseases...',
-                hintStyle: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textTertiary,
-                ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          if (_searchQuery.isNotEmpty)
-            GestureDetector(
-              onTap: () {
-                _searchController.clear();
-                _onSearchChanged('');
-              },
-              child: Icon(
-                Icons.clear,
-                color: AppColors.textSecondary,
-                size: 18,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSpeciesToggle() {
-    return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: kMobileMarginHorizontal,
-        vertical: 16,
-      ),
-      child: Row(
-        children: [
-          _buildSpeciesButton('cat', '🐱 Cats'),
-          const SizedBox(width: 12),
-          _buildSpeciesButton('dog', '🐶 Dogs'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSpeciesButton(String species, String label) {
-    final isSelected = _selectedSpecies == species;
-    
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _onSpeciesChanged(species),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : AppColors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.border,
-              width: 1.5,
-            ),
-            boxShadow: kMobileCardShadowSmall,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                emoji,
-                style: const TextStyle(fontSize: 18),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? AppColors.white : AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChips() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Categories header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: kMobileMarginHorizontal),
-          child: Text(
-            'Categories',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 12),
-        
-        // Category chips in horizontal scroll (no scrollbar)
-        if (_categories.isNotEmpty)
-          SizedBox(
-            height: 38,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: kMobileMarginHorizontal),
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: _categories.length + 2, // +2 for "All" and "AI Detectable"
-              itemBuilder: (context, index) {
-                // First chip: "All"
-                if (index == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: CategoryChip(
-                      label: 'All',
-                      isSelected: _selectedCategory == null,
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = null;
-                        });
-                        _applyFilters();
-                      },
-                    ),
-                  );
-                }
-                
-                // Last chip: "AI Detectable"
-                if (index == _categories.length + 1) {
-                  return GestureDetector(
-                    onTap: _onDetectionMethodToggled,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _selectedDetectionMethod == 'ai'
-                            ? AppColors.primary
-                            : AppColors.white,
-                        border: Border.all(
-                          color: _selectedDetectionMethod == 'ai'
-                              ? AppColors.primary
-                              : AppColors.border,
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '✨',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            'AI Detectable',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _selectedDetectionMethod == 'ai'
-                                  ? AppColors.white
-                                  : AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                
-                // Category chips
-                final categoryIndex = index - 1;
-                final category = _categories[categoryIndex];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: CategoryChip(
-                    label: category,
-                    isSelected: _selectedCategory == category,
-                    onTap: () => _onCategorySelected(category),
-                  ),
-                );
-              },
-            ),
-          ),
-        
-        const SizedBox(height: 20),
-      ],
     );
   }
 }

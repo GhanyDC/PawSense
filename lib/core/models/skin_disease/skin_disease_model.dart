@@ -125,12 +125,19 @@ class SkinDiseaseModel {
     );
   }
 
-  /// Get display text for species
+  /// Get display text for species (case-insensitive)
   String get speciesDisplay {
-    if (species.contains('both')) return 'Cats & Dogs';
-    if (species.contains('cats') && species.contains('dogs')) return 'Cats & Dogs';
-    if (species.contains('cats')) return 'Cats';
-    if (species.contains('dogs')) return 'Dogs';
+    final speciesLower = species.map((s) => s.toLowerCase()).toList();
+    
+    // Check for "both" or if it has both cats and dogs
+    if (speciesLower.contains('both')) return 'Cats & Dogs';
+    
+    final hasCat = speciesLower.any((s) => s.contains('cat'));
+    final hasDog = speciesLower.any((s) => s.contains('dog'));
+    
+    if (hasCat && hasDog) return 'Cats & Dogs';
+    if (hasCat) return 'Cats';
+    if (hasDog) return 'Dogs';
     return 'All';
   }
 

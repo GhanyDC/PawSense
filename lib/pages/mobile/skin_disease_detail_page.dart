@@ -140,13 +140,7 @@ class SkinDiseaseDetailPage extends StatelessWidget {
           children: [
             // Image
             disease.imageUrl.isNotEmpty
-                ? Image.network(
-                    disease.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return _buildPlaceholderImage();
-                    },
-                  )
+                ? _buildImage()
                 : _buildPlaceholderImage(),
             
             // Gradient overlay
@@ -215,6 +209,33 @@ class SkinDiseaseDetailPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildImage() {
+    // Check if imageUrl is a network URL or a local asset filename
+    final isNetworkImage = disease.imageUrl.startsWith('http://') || 
+                           disease.imageUrl.startsWith('https://');
+    
+    if (isNetworkImage) {
+      // Use network image
+      return Image.network(
+        disease.imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildPlaceholderImage();
+        },
+      );
+    } else {
+      // Use asset image - construct path from filename
+      final assetPath = 'assets/img/skin_diseases/${disease.imageUrl}';
+      return Image.asset(
+        assetPath,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildPlaceholderImage();
+        },
+      );
+    }
   }
 
   Widget _buildPlaceholderImage() {

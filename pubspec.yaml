@@ -44,6 +44,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/img/
+    - assets/img/skin_diseases/
     - assets/fonts/
     - .env
 
