@@ -209,20 +209,22 @@ class DiseaseCard extends StatelessWidget {
 
     switch (disease.severity.toLowerCase()) {
       case 'low':
+      case 'mild':
         bgColor = AppColors.success.withValues(alpha: 0.1);
         textColor = AppColors.success;
-        label = '● Low';
+        label = '● ${disease.severity[0].toUpperCase()}${disease.severity.substring(1)}';
         break;
       case 'high':
+      case 'severe':
         bgColor = AppColors.error.withValues(alpha: 0.1);
         textColor = AppColors.error;
-        label = '● High';
+        label = '● ${disease.severity[0].toUpperCase()}${disease.severity.substring(1)}';
         break;
       case 'moderate':
       default:
         bgColor = AppColors.warning.withValues(alpha: 0.1);
         textColor = AppColors.warning;
-        label = '● Moderate';
+        label = '● ${disease.severity[0].toUpperCase()}${disease.severity.substring(1)}';
         break;
     }
 

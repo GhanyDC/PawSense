@@ -254,28 +254,70 @@ class SkinDiseaseDetailPage extends StatelessWidget {
   Widget _buildInfoBadges() {
     return Container(
       margin: const EdgeInsets.all(kMobileMarginHorizontal),
-      child: Row(
+      child: Column(
         children: [
-          // Species badge
-          Expanded(
-            child: _buildBadge(
-              icon: '🐾',
-              label: 'SPECIES',
-              value: disease.speciesDisplay,
-            ),
+          // First row: Species and Duration
+          Row(
+            children: [
+              // Species badge
+              Expanded(
+                child: _buildBadge(
+                  icon: '🐾',
+                  label: 'SPECIES',
+                  value: disease.speciesDisplay,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Duration badge
+              Expanded(
+                child: _buildBadge(
+                  icon: '⏱️',
+                  label: 'DURATION',
+                  value: disease.duration,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          // Duration badge
-          Expanded(
-            child: _buildBadge(
-              icon: '⏱️',
-              label: 'DURATION',
-              value: disease.duration,
-            ),
+          const SizedBox(height: 12),
+          // Second row: Contagious and Severity
+          Row(
+            children: [
+              // Contagious badge
+              Expanded(
+                child: _buildBadge(
+                  icon: disease.isContagious ? '⚠️' : '✅',
+                  label: 'CONTAGIOUS',
+                  value: disease.isContagious ? 'Yes' : 'No',
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Severity badge
+              Expanded(
+                child: _buildBadge(
+                  icon: _getSeverityIcon(),
+                  label: 'SEVERITY',
+                  value: '${disease.severity[0].toUpperCase()}${disease.severity.substring(1)}',
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  String _getSeverityIcon() {
+    switch (disease.severity.toLowerCase()) {
+      case 'low':
+      case 'mild':
+        return '🟢';
+      case 'high':
+      case 'severe':
+        return '🔴';
+      case 'moderate':
+      default:
+        return '🟡';
+    }
   }
 
   Widget _buildBadge({
@@ -520,8 +562,10 @@ class SkinDiseaseDetailPage extends StatelessWidget {
   Color _getSeverityColor(String severity) {
     switch (severity.toLowerCase()) {
       case 'low':
+      case 'mild':
         return AppColors.success;
       case 'high':
+      case 'severe':
         return AppColors.error;
       case 'moderate':
       default:
