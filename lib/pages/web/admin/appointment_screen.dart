@@ -13,6 +13,7 @@ import '../../../core/widgets/admin/appointments/appointment_filters.dart';
 import '../../../core/widgets/admin/appointments/appointment_table.dart';
 import '../../../core/widgets/admin/appointments/appointment_summary.dart';
 import '../../../core/widgets/admin/appointments/appointment_edit_modal.dart';
+import '../../../core/widgets/admin/appointments/appointment_completion_modal.dart';
 import '../../../core/services/user/pdf_generation_service.dart';
 import '../../../core/services/user/assessment_result_service.dart';
 import '../../../core/models/user/user_model.dart';
@@ -441,19 +442,14 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
                           );
                         }
                       },
-                      onMarkDone: (appointment) async {
-                        final success = await AppointmentService.markAppointmentCompleted(appointment.id);
-                        
-                        if (success) {
-                          _refreshAppointments();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Marked ${appointment.pet.name}\'s appointment as completed')),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to mark appointment as completed')),
-                          );
-                        }
+                      onMarkDone: (appointment) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AppointmentCompletionModal(
+                            appointment: appointment,
+                            onCompleted: _refreshAppointments,
+                          ),
+                        );
                       },
                       onReject: (appointment) async {
                         final TextEditingController reasonController = TextEditingController();
