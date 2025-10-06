@@ -14,6 +14,7 @@ import '../../../core/widgets/admin/appointments/appointment_table.dart';
 import '../../../core/widgets/admin/appointments/appointment_summary.dart';
 import '../../../core/widgets/admin/appointments/appointment_edit_modal.dart';
 import '../../../core/widgets/admin/appointments/appointment_completion_modal.dart';
+import '../../../core/widgets/admin/clinic_schedule/appointment_details_modal.dart';
 import '../../../core/services/user/pdf_generation_service.dart';
 import '../../../core/services/user/assessment_result_service.dart';
 import '../../../core/models/user/user_model.dart';
@@ -421,26 +422,34 @@ class _AppointmentManagementScreenState extends State<AppointmentManagementScree
 
                     return AppointmentTable(
                       appointments: filteredAppointments,
-                      onAccept: (appointment) async {
-                        final result = await AppointmentService.acceptAppointment(appointment.id);
-                        
-                        if (result['success']) {
-                          _refreshAppointments();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Accepted appointment for ${appointment.pet.name}'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(result['message']),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 4), // Longer duration for error messages
-                            ),
-                          );
-                        }
+                      onAccept: (appointment) {
+                        // Show appointment details modal with accept button
+                        AppointmentDetailsModal.show(
+                          context,
+                          appointment,
+                          showAcceptButton: true,
+                          onAcceptAppointment: () async {
+                            final result = await AppointmentService.acceptAppointment(appointment.id);
+                            
+                            if (result['success']) {
+                              _refreshAppointments();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Accepted appointment for ${appointment.pet.name}'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(result['message']),
+                                  backgroundColor: Colors.red,
+                                  duration: Duration(seconds: 4), // Longer duration for error messages
+                                ),
+                              );
+                            }
+                          },
+                        );
                       },
                       onMarkDone: (appointment) {
                         showDialog(
