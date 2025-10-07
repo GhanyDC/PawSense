@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -939,15 +940,10 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
 
     try {
       final emailStatus = await _authService.checkEmailStatus(email, password);
-      print('📧 Email Status Check Results:');
-      print('   Email: $email');
-      print('   Exists: ${emailStatus['exists']}');
-      print('   Verified: ${emailStatus['verified']}');
       
       if (emailStatus['exists'] == true) {
         if (emailStatus['verified'] == true) {
           // Email exists and is already verified - do not allow proceeding
-          print('❌ Blocking verified account from proceeding');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -960,7 +956,6 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           return false; // Don't allow proceeding
         } else {
           // Email exists but is not verified - allow proceeding
-          print('⚠️ Allowing unverified account to proceed');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -973,7 +968,6 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           return true; // Allow proceeding to verification step
         }
       }
-      print('✅ New email, allowing to proceed');
       return true; // Email doesn't exist, can proceed normally
     } catch (e) {
       _showErrorSnackBar(e.toString().replaceAll('Exception: ', ''));
@@ -1277,15 +1271,16 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
             label: 'Contact Number',
             hint: 'Enter your contact number',
             keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(11),
+            ],
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Contact number is required';
               }
               if (value.length != 11) {
                 return 'Contact number must be 11 digits';
-              }
-              if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
-                return 'Contact number must contain only numbers';
               }
               return null;
             },
@@ -1607,15 +1602,16 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
                   label: 'Phone Number',
                   hint: 'Enter phone number',
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Contact number is required';
                     }
                     if (value.length != 11) {
                       return 'Contact number must be 11 digits';
-                    }
-                    if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
-                      return 'Contact number must contain only numbers';
                     }
                     return null;
                   },
@@ -1883,7 +1879,10 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
                       border: OutlineInputBorder(),
                       prefixText: '₱ ',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}$')),
+                    ],
                     validator: (value) {
                       if (value?.isEmpty ?? true) return 'Required';
                       if (double.tryParse(value!) == null) return 'Enter a valid price';
@@ -2387,6 +2386,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
     Widget? suffixIcon,
     int? maxLines = 1,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2421,6 +2421,7 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
             keyboardType: keyboardType,
             obscureText: obscureText,
             maxLines: maxLines,
+            inputFormatters: inputFormatters,
             style: kTextStyleRegular.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w500,
