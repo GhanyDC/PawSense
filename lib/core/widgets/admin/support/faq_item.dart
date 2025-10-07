@@ -24,6 +24,8 @@ class FAQItem extends StatefulWidget {
 class _FAQItemState extends State<FAQItem> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
+  late Animation<double> _rotationAnimation;
+  final GlobalKey _itemKey = GlobalKey();
 
   @override
   void initState() {
@@ -36,6 +38,11 @@ class _FAQItemState extends State<FAQItem> with SingleTickerProviderStateMixin {
       parent: _animationController,
       curve: Curves.easeInOut,
     );
+    // Rotate from 0 (down) to 0.5 (180 degrees = up)
+    _rotationAnimation = Tween<double>(
+      begin: 0.0,
+      end: 0.5,
+    ).animate(_animation);
 
     if (widget.faqItem.isExpanded) {
       _animationController.value = 1.0;
@@ -54,9 +61,29 @@ class _FAQItemState extends State<FAQItem> with SingleTickerProviderStateMixin {
         _animationController.reverse();
       } else {
         _animationController.forward();
+        // Scroll to this item when expanding
+        _scrollToItem();
       }
     });
     widget.onToggleExpanded?.call();
+  }
+
+  void _scrollToItem() {
+    // Wait for animation to complete, then scroll
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      
+      final context = _itemKey.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+          alignment: 0.0, // Position at top of screen for better visibility
+          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+        );
+      }
+    });
   }
 
   Color _getCategoryColor() {
@@ -79,6 +106,7 @@ class _FAQItemState extends State<FAQItem> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: _itemKey, // Add key for scrolling
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
@@ -131,7 +159,7 @@ class _FAQItemState extends State<FAQItem> with SingleTickerProviderStateMixin {
                       ),
                       SizedBox(width: kSpacingSmall),
                       RotationTransition(
-                        turns: _animation,
+                        turns: _rotationAnimation,
                         child: Icon(
                           Icons.keyboard_arrow_down,
                           color: AppColors.textSecondary,
