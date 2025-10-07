@@ -323,6 +323,7 @@ class AuthGuard {
       '/signup',
       '/verify-email',
       '/home',
+      '/faqs', // Add FAQs as a public route
     ];
     return publicRoutes.contains(routePath);
   }
@@ -375,6 +376,7 @@ class AuthGuard {
       '/emergency-hotline', 
       '/first-aid-guide',
       '/pet-care-tips',
+      '/faqs',
     ];
     
     // Check if it's a mobile route pattern (including dynamic routes)

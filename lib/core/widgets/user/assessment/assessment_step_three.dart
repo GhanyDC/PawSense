@@ -920,7 +920,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
           
          // Analysis Results with Pie Chart
           Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
+            padding: const EdgeInsets.all(kSpacingSmall),
             decoration: BoxDecoration(
               color: AppColors.white,
               borderRadius: BorderRadius.circular(kBorderRadius),
@@ -1051,7 +1051,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
               ],
             ),
           ),
-          const SizedBox(height: kSpacingLarge),
+          const SizedBox(height: kSpacingSmall),
           
           // Visual separator
           Container(

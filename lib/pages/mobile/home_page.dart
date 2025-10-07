@@ -829,12 +829,12 @@ class _UserHomePageState extends State<UserHomePage> {
         },
       ),
       ServiceItem(
-        title: 'First Aid Guide',
-        subtitle: 'Emergency tips',
-        icon: Icons.medical_services,
+        title: 'FAQs',
+        subtitle: 'Common questions',
+        icon: Icons.help_outline,
         backgroundColor: const Color(0xFFFF9500).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/first-aid-guide');
+          context.push('/faqs');
         },
       ),
       ServiceItem(
