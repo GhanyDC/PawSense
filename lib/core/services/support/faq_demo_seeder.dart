@@ -16,7 +16,8 @@ class FAQDemoSeeder {
         return;
       }
 
-      // Super Admin FAQs (General App FAQs)
+      // Super Admin FAQs (General App FAQs) - These will be filtered out in the mobile app
+      // Only visible to Super Admins in the web dashboard
       final superAdminFAQs = [
         {
           'question': 'How do I use the AI assessment feature?',

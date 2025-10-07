@@ -24,6 +24,7 @@ import 'package:pawsense/pages/mobile/home_services/emergency_hotline_page.dart'
 import 'package:pawsense/pages/mobile/home_services/first_aid_guide_page.dart';
 import 'package:pawsense/pages/mobile/home_services/pet_care_tips_page.dart';
 import 'package:pawsense/pages/mobile/home_services/faqs_page.dart';
+import 'package:pawsense/pages/mobile/home_services/clinic_faqs_page.dart';
 
 import 'package:pawsense/pages/mobile/clinic/clinic_list_page.dart';
 import 'package:pawsense/pages/mobile/clinic/clinic_details_page.dart';
@@ -204,6 +205,17 @@ class AppRouter {
       GoRoute(
         path: '/faqs',
         builder: (context, state) => const FAQsPage(),
+      ),
+      GoRoute(
+        path: '/clinic-faqs',
+        builder: (context, state) {
+          final clinicId = state.uri.queryParameters['clinicId'] ?? '';
+          final clinicName = state.uri.queryParameters['clinicName'] ?? 'Clinic';
+          return ClinicFAQsPage(
+            clinicId: clinicId,
+            clinicName: clinicName,
+          );
+        },
       ),
 
       // Clinic routes
