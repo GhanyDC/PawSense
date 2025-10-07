@@ -23,9 +23,11 @@ import 'package:pawsense/pages/mobile/home_services/book_appointment_page.dart';
 import 'package:pawsense/pages/mobile/home_services/emergency_hotline_page.dart';
 import 'package:pawsense/pages/mobile/home_services/first_aid_guide_page.dart';
 import 'package:pawsense/pages/mobile/home_services/pet_care_tips_page.dart';
+import 'package:pawsense/pages/mobile/home_services/faqs_page.dart';
 
 import 'package:pawsense/pages/mobile/clinic/clinic_list_page.dart';
 import 'package:pawsense/pages/mobile/clinic/clinic_details_page.dart';
+import 'package:pawsense/pages/mobile/skin_disease_library_page.dart';
 
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/models/user/pet_model.dart';
@@ -199,6 +201,10 @@ class AppRouter {
         path: '/pet-care-tips',
         builder: (context, state) => const PetCareTipsPage(),
       ),
+      GoRoute(
+        path: '/faqs',
+        builder: (context, state) => const FAQsPage(),
+      ),
 
       // Clinic routes
       GoRoute(
@@ -211,6 +217,12 @@ class AppRouter {
           final clinicId = state.uri.queryParameters['id'];
           return ClinicDetailsPage(clinicId: clinicId ?? '');
         },
+      ),
+
+      // Skin Disease Library routes
+      GoRoute(
+        path: '/skin-disease-library',
+        builder: (context, state) => const SkinDiseaseLibraryPage(),
       ),
 
       // Web auth routes

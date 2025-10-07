@@ -820,21 +820,21 @@ class _UserHomePageState extends State<UserHomePage> {
         },
       ),
       ServiceItem(
-        title: 'Emergency Hotline',
-        subtitle: '24/7 support',
-        icon: Icons.phone,
+        title: 'Messages',
+        subtitle: 'Chat with vets',
+        icon: Icons.message,
         backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/emergency-hotline');
+          context.push('/messaging');
         },
       ),
       ServiceItem(
-        title: 'First Aid Guide',
-        subtitle: 'Emergency tips',
-        icon: Icons.medical_services,
+        title: 'FAQs',
+        subtitle: 'Common questions',
+        icon: Icons.help_outline,
         backgroundColor: const Color(0xFFFF9500).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/first-aid-guide');
+          context.push('/faqs');
         },
       ),
       ServiceItem(
