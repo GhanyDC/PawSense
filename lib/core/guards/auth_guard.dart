@@ -324,6 +324,7 @@ class AuthGuard {
       '/verify-email',
       '/home',
       '/faqs', // Add FAQs as a public route
+      '/clinic-faqs', // Add clinic FAQs as a public route
     ];
     return publicRoutes.contains(routePath);
   }
