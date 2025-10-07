@@ -23,6 +23,7 @@ import 'package:pawsense/pages/mobile/home_services/book_appointment_page.dart';
 import 'package:pawsense/pages/mobile/home_services/emergency_hotline_page.dart';
 import 'package:pawsense/pages/mobile/home_services/first_aid_guide_page.dart';
 import 'package:pawsense/pages/mobile/home_services/pet_care_tips_page.dart';
+import 'package:pawsense/pages/mobile/home_services/faqs_page.dart';
 
 import 'package:pawsense/pages/mobile/clinic/clinic_list_page.dart';
 import 'package:pawsense/pages/mobile/clinic/clinic_details_page.dart';
@@ -199,6 +200,10 @@ class AppRouter {
       GoRoute(
         path: '/pet-care-tips',
         builder: (context, state) => const PetCareTipsPage(),
+      ),
+      GoRoute(
+        path: '/faqs',
+        builder: (context, state) => const FAQsPage(),
       ),
 
       // Clinic routes
