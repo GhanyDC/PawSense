@@ -608,11 +608,7 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : _errorMessage != null
+      body: _errorMessage != null
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -707,7 +703,7 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
                                   email: _vetProfile['email'] ?? 'No email',
                                   phone: _vetProfile['phone'] ?? 'No phone',
                                   address: _vetProfile['address'] ?? 'No address',
-                                  website: _vetProfile['website'],
+                                  website: _vetProfile['website'] ?? '',
                                 ),
                                 SizedBox(height: kSpacingMedium),
 
@@ -743,7 +739,14 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
                                       ),
                                       SizedBox(height: kSpacingMedium),
 
-                                      if (_specializations.isEmpty)
+                                      if (_isLoading)
+                                        Center(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(kSpacingMedium),
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        )
+                                      else if (_specializations.isEmpty)
                                         Center(
                                           child: Text(
                                             'No specializations added yet',
@@ -797,7 +800,14 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
                                       ),
                                       SizedBox(height: kSpacingMedium),
                                       
-                                      if (_certifications.isEmpty)
+                                      if (_isLoading)
+                                        Center(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(kSpacingMedium),
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        )
+                                      else if (_certifications.isEmpty)
                                         Center(
                                           child: Text(
                                             'No certifications added yet',
@@ -848,6 +858,7 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
                             flex: 2,
                             child: VetServicesSection(
                               services: _services,
+                              isLoading: _isLoading,
                               onAddService: _showAddServiceModal,
                               onServiceToggle: (String id) => _toggleServiceStatus(id),
                               onServiceEdit: (String id) => _showEditServiceModal(id),
