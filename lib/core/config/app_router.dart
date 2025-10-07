@@ -12,24 +12,19 @@ import 'package:pawsense/pages/mobile/edit_profile_page.dart';
 import 'package:pawsense/pages/mobile/about_pawsense_page.dart';
 import 'package:pawsense/pages/mobile/history/ai_history_detail_page.dart';
 import 'package:pawsense/pages/mobile/history/appointment_history_detail_page.dart';
-
 import 'package:pawsense/pages/mobile/messaging/messaging_page.dart';
 import 'package:pawsense/pages/mobile/messaging/messaging_test_page.dart';
-
 import 'package:pawsense/pages/mobile/pets/view_all_pets_page.dart';
 import 'package:pawsense/pages/mobile/pets/add_edit_pet_page.dart';
-
 import 'package:pawsense/pages/mobile/home_services/book_appointment_page.dart';
 import 'package:pawsense/pages/mobile/home_services/emergency_hotline_page.dart';
 import 'package:pawsense/pages/mobile/home_services/first_aid_guide_page.dart';
 import 'package:pawsense/pages/mobile/home_services/pet_care_tips_page.dart';
 import 'package:pawsense/pages/mobile/home_services/faqs_page.dart';
 import 'package:pawsense/pages/mobile/home_services/clinic_faqs_page.dart';
-
 import 'package:pawsense/pages/mobile/clinic/clinic_list_page.dart';
 import 'package:pawsense/pages/mobile/clinic/clinic_details_page.dart';
 import 'package:pawsense/pages/mobile/skin_disease_library_page.dart';
-
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/models/user/pet_model.dart';
 import 'package:pawsense/pages/web/auth/web_login_page.dart';
@@ -48,7 +43,6 @@ import 'package:pawsense/pages/web/superadmin/system_analytics_screen.dart';
 import 'package:pawsense/pages/web/superadmin/user_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/system_settings_screen.dart';
 import 'package:flutter/foundation.dart';
-
 import '../widgets/shared/navigation/admin_shell.dart';
 import '../guards/auth_guard.dart';
 import '../services/optimization/role_manager.dart';
