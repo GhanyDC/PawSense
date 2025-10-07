@@ -410,9 +410,9 @@ class _FAQsPageState extends State<FAQsPage> {
                   borderRadius: BorderRadius.circular(kSpacingMedium),
                 ),
               ).copyWith(
-                backgroundColor: MaterialStateProperty.resolveWith<Color>(
-                  (Set<MaterialState> states) {
-                    if (states.contains(MaterialState.pressed)) {
+                backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                  (Set<WidgetState> states) {
+                    if (states.contains(WidgetState.pressed)) {
                       return AppColors.primary.withOpacity(0.1);
                     }
                     return Colors.transparent;

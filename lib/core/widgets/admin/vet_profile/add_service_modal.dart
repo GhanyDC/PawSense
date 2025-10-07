@@ -397,7 +397,7 @@ class _AddServiceModalState extends State<AddServiceModal> {
                   ),
                   SizedBox(height: kSpacingSmall),
                   DropdownButtonFormField<ServiceCategory>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(kBorderRadiusSmall),
