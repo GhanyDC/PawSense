@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
@@ -22,7 +23,7 @@ class AlertsPage extends StatefulWidget {
   State<AlertsPage> createState() => _AlertsPageState();
 }
 
-class _AlertsPageState extends State<AlertsPage> {
+class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
   UserModel? _userModel;
   bool _loading = true;
   int _currentNavIndex = 2; // Set to 2 for alerts tab
@@ -34,11 +35,56 @@ class _AlertsPageState extends State<AlertsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchUser();
   }
 
   @override
+  void didUpdateWidget(AlertsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refresh notifications when returning to this page
+    if (_userModel != null) {
+      _refreshNotifications();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed && mounted && _userModel != null) {
+      // Refresh notifications when app is resumed
+      print('🔄 App resumed, refreshing notifications...');
+      _refreshNotifications();
+    }
+  }
+
+  // Called when the route is popped (user navigates back)
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Force refresh when returning to this page
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _userModel != null) {
+        print('🔄 Dependencies changed, refreshing notifications...');
+        _refreshNotifications();
+      }
+    });
+  }
+
+  void _refreshNotifications() {
+    if (mounted && _userModel != null) {
+      print('🔄 Refreshing notification stream...');
+      setState(() {
+        // Clear local state to rely on static cache from notification service
+        _locallyReadNotifications.clear();
+        _notificationsStream = _getNotificationsStream();
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Clear local state to prevent memory leaks
     _locallyReadNotifications.clear();
     // Stream will be automatically disposed when widget is disposed
@@ -79,6 +125,8 @@ class _AlertsPageState extends State<AlertsPage> {
             .map((notification) => NotificationHelper.fromNotificationModel(notification))
             .map((alert) {
               // Apply local read state for instant UI updates
+              // Note: The notification service already handles static cache,
+              // but local state takes precedence for immediate responsiveness
               if (_locallyReadNotifications.contains(alert.id)) {
                 return AlertData(
                   id: alert.id,
@@ -92,6 +140,7 @@ class _AlertsPageState extends State<AlertsPage> {
                   metadata: alert.metadata,
                 );
               }
+              // Otherwise, use the read state from notification service (which includes static cache)
               return alert;
             })
             .toList();

@@ -9,9 +9,24 @@ class NotificationService {
   // Add a stream controller for immediate updates
   static final _updateController = StreamController<bool>.broadcast();
   
+  // Static cache for read notifications to persist across page rebuilds
+  static final Set<String> _localReadCache = <String>{};
+  
   /// Trigger an immediate update of notification streams
   static void triggerUpdate() {
     _updateController.add(true);
+    print('🚀 Triggered notification update');
+  }
+  
+  /// Add notification to local read cache
+  static void _addToReadCache(String notificationId) {
+    _localReadCache.add(notificationId);
+    print('📝 Added to read cache: $notificationId');
+  }
+  
+  /// Check if notification is in local read cache
+  static bool _isInReadCache(String notificationId) {
+    return _localReadCache.contains(notificationId);
   }
 
   /// Get user notifications stream
@@ -125,6 +140,9 @@ class NotificationService {
     try {
       print('🔍 Attempting to mark notification as read: $notificationId (userId: $userId)');
       
+      // Add to local cache immediately for instant updates
+      _addToReadCache(notificationId);
+      
       // Check if this is a virtual notification (appointment status, reminders, etc.)
       if (notificationId.startsWith('appointment_') && 
           (notificationId.endsWith('_reminder') || notificationId.endsWith('_status'))) {
@@ -177,6 +195,9 @@ class NotificationService {
       print('❌ Error marking notification as read: $e');
       print('📋 NotificationId: $notificationId');
       print('👤 UserId: $userId');
+      
+      // Remove from cache on error
+      _localReadCache.remove(notificationId);
     }
   }
 
@@ -575,7 +596,7 @@ class NotificationService {
         
         final readStates = readStatesDoc.exists ? readStatesDoc.data() ?? {} : <String, dynamic>{};
 
-        // Get regular notifications from database
+        // Get regular notifications from database and apply cache states
         final regularNotifications = await _firestore
             .collection(_collection)
             .where('userId', isEqualTo: userId)
@@ -583,16 +604,41 @@ class NotificationService {
             .limit(20)
             .get();
 
-        allNotifications.addAll(
-          regularNotifications.docs
-              .map((doc) => NotificationModel.fromFirestore(doc))
-              .where((notification) => notification.shouldShow)
-        );
+        for (final doc in regularNotifications.docs) {
+          final notification = NotificationModel.fromFirestore(doc);
+          if (notification.shouldShow) {
+            // Check if notification is in cache and update read state accordingly
+            if (_isInReadCache(notification.id)) {
+              final updatedNotification = NotificationModel(
+                id: notification.id,
+                userId: notification.userId,
+                title: notification.title,
+                message: notification.message,
+                category: notification.category,
+                priority: notification.priority,
+                isRead: true, // Override with cache state
+                actionUrl: notification.actionUrl,
+                actionLabel: notification.actionLabel,
+                createdAt: notification.createdAt,
+                sentAt: notification.sentAt,
+                readAt: notification.readAt,
+                expiresAt: notification.expiresAt,
+                metadata: notification.metadata,
+              );
+              allNotifications.add(updatedNotification);
+            } else {
+              allNotifications.add(notification);
+            }
+          }
+        }
 
-        // Get appointment notifications and apply read states
+        // Get appointment notifications and apply read states (both database and cache)
         await for (final appointmentNotifications in getAppointmentNotifications(userId).take(1)) {
           for (final notification in appointmentNotifications) {
-            final isRead = readStates[notification.id]?['isRead'] == true;
+            final isDatabaseRead = readStates[notification.id]?['isRead'] == true;
+            final isCacheRead = _isInReadCache(notification.id);
+            final isRead = isDatabaseRead || isCacheRead; // Check both sources
+            
             allNotifications.add(NotificationModel(
               id: notification.id,
               userId: notification.userId,
@@ -613,10 +659,13 @@ class NotificationService {
           break;
         }
 
-        // Get message notifications and apply read states
+        // Get message notifications and apply read states (both database and cache)
         await for (final messageNotifications in getMessageNotifications(userId).take(1)) {
           for (final notification in messageNotifications) {
-            final isRead = readStates[notification.id]?['isRead'] == true;
+            final isDatabaseRead = readStates[notification.id]?['isRead'] == true;
+            final isCacheRead = _isInReadCache(notification.id);
+            final isRead = isDatabaseRead || isCacheRead; // Check both sources
+            
             allNotifications.add(NotificationModel(
               id: notification.id,
               userId: notification.userId,
@@ -637,10 +686,13 @@ class NotificationService {
           break;
         }
 
-        // Get task notifications and apply read states
+        // Get task notifications and apply read states (both database and cache)
         await for (final taskNotifications in getTaskNotifications(userId).take(1)) {
           for (final notification in taskNotifications) {
-            final isRead = readStates[notification.id]?['isRead'] == true;
+            final isDatabaseRead = readStates[notification.id]?['isRead'] == true;
+            final isCacheRead = _isInReadCache(notification.id);
+            final isRead = isDatabaseRead || isCacheRead; // Check both sources
+            
             allNotifications.add(NotificationModel(
               id: notification.id,
               userId: notification.userId,
