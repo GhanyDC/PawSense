@@ -27,6 +27,9 @@ class _AlertsPageState extends State<AlertsPage> {
   bool _loading = true;
   int _currentNavIndex = 2; // Set to 2 for alerts tab
   Stream<List<AlertData>>? _notificationsStream;
+  
+  // Local state for instant updates
+  final Set<String> _locallyReadNotifications = <String>{};
 
   @override
   void initState() {
@@ -36,6 +39,8 @@ class _AlertsPageState extends State<AlertsPage> {
 
   @override
   void dispose() {
+    // Clear local state to prevent memory leaks
+    _locallyReadNotifications.clear();
     // Stream will be automatically disposed when widget is disposed
     super.dispose();
   }
@@ -59,7 +64,7 @@ class _AlertsPageState extends State<AlertsPage> {
     }
   }
 
-  /// Stream of notifications from Firebase
+  /// Stream of notifications from Firebase with local state management
   Stream<List<AlertData>> _getNotificationsStream() async* {
     if (_userModel == null) {
       yield [];
@@ -72,6 +77,23 @@ class _AlertsPageState extends State<AlertsPage> {
         
         final alertData = notifications
             .map((notification) => NotificationHelper.fromNotificationModel(notification))
+            .map((alert) {
+              // Apply local read state for instant UI updates
+              if (_locallyReadNotifications.contains(alert.id)) {
+                return AlertData(
+                  id: alert.id,
+                  title: alert.title,
+                  subtitle: alert.subtitle,
+                  type: alert.type,
+                  timestamp: alert.timestamp,
+                  isRead: true, // Override with local state
+                  actionUrl: alert.actionUrl,
+                  actionLabel: alert.actionLabel,
+                  metadata: alert.metadata,
+                );
+              }
+              return alert;
+            })
             .toList();
         
         // Update loading state
@@ -96,6 +118,17 @@ class _AlertsPageState extends State<AlertsPage> {
 
   void _handleAlertTap(AlertData alert) async {
     try {
+      // Optimistically mark as read locally for instant UI update
+      if (!alert.isRead) {
+        setState(() {
+          _locallyReadNotifications.add(alert.id);
+        });
+        
+        // Mark as read in backend
+        await NotificationService.markAsRead(alert.id, userId: _userModel?.uid);
+        print('Alert ${alert.id} marked as read on tap');
+      }
+      
       // Navigate to alert details page with notification data
       context.push(
         '/alerts/details/${alert.id}',
@@ -104,14 +137,24 @@ class _AlertsPageState extends State<AlertsPage> {
     } catch (e) {
       print('Error handling alert tap: $e');
       _showErrorMessage('Failed to open notification details');
+      
+      // Revert local state on error
+      setState(() {
+        _locallyReadNotifications.remove(alert.id);
+      });
     }
   }
 
   Future<void> _handleMarkAsRead(AlertData alert) async {
     if (!mounted) return;
     
+    // Optimistically mark as read locally for instant UI update
+    setState(() {
+      _locallyReadNotifications.add(alert.id);
+    });
+    
     try {
-      await NotificationService.markAsRead(alert.id);
+      await NotificationService.markAsRead(alert.id, userId: _userModel?.uid);
       
       // Success feedback
       if (mounted) {
@@ -126,6 +169,13 @@ class _AlertsPageState extends State<AlertsPage> {
     } catch (e) {
       print('Error marking alert as read: $e');
       _showErrorMessage('Failed to mark notification as read');
+      
+      // Revert local state on error
+      if (mounted) {
+        setState(() {
+          _locallyReadNotifications.remove(alert.id);
+        });
+      }
     }
   }
 
