@@ -91,7 +91,7 @@ class AlertItem extends StatelessWidget {
             : null,
       ),
       child: Material(
-        color: alert.isRead ? Colors.grey.shade50 : Colors.transparent,
+        color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
@@ -99,38 +99,19 @@ class AlertItem extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Compact Alert Icon with read/unread indicator
-                Stack(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: _getAlertColor().withValues(alpha: alert.isRead ? 0.05 : 0.1),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        _getAlertIcon(),
-                        color: alert.isRead ? Colors.grey.shade600 : _getAlertColor(),
-                        size: 16,
-                      ),
-                    ),
-                    // Unread indicator dot
-                    if (!alert.isRead)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: _getAlertColor(),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.white, width: 1.5),
-                          ),
-                        ),
-                      ),
-                  ],
+                // Compact Alert Icon
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: _getAlertColor().withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    _getAlertIcon(),
+                    color: _getAlertColor(),
+                    size: 16,
+                  ),
                 ),
                 
                 const SizedBox(width: 12),
@@ -140,46 +121,21 @@ class AlertItem extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              alert.title,
-                              style: TextStyle(
-                                color: alert.isRead ? Colors.grey.shade700 : AppColors.textPrimary,
-                                fontWeight: alert.isRead ? FontWeight.w500 : FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (!alert.isRead) ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _getAlertColor(),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'NEW',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      Text(
+                        alert.title,
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: alert.isRead ? FontWeight.w500 : FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         alert.subtitle,
                         style: TextStyle(
-                          color: alert.isRead ? Colors.grey.shade600 : Colors.grey.shade700,
+                          color: Colors.grey.shade700,
                           fontSize: 12,
                         ),
                         maxLines: 1,
@@ -208,11 +164,25 @@ class AlertItem extends StatelessWidget {
                   ),
                 ),
                 
-                // Compact trailing icon (removed unread indicator dot)
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.grey.shade400,
-                  size: 16,
+                // Compact trailing icon and unread indicator
+                Column(
+                  children: [
+                    if (!alert.isRead)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _getAlertColor(),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey.shade400,
+                      size: 16,
+                    ),
+                  ],
                 ),
               ],
             ),

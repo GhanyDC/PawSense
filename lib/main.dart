@@ -5,7 +5,6 @@ import 'package:pawsense/core/utils/app_theme.dart';
 import 'package:pawsense/core/config/firebase_options.dart';
 import 'package:pawsense/core/config/app_router.dart';
 import 'package:pawsense/core/services/shared/data_service.dart';
-import 'package:pawsense/core/services/notifications/appointment_reminder_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,9 +17,6 @@ void main() async {
 
   // Initialize DataService and enable Firebase
   DataService().enableFirebase(true);
-
-  // Start appointment reminder service
-  AppointmentReminderService.startReminderService();
 
   runApp(const PawSenseApp());
 }

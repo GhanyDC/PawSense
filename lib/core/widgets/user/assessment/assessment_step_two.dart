@@ -459,81 +459,114 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(kSpacingMedium),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Modern Header Card
+          // Main Card Container with light purple background
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(kSpacingLarge),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary.withOpacity(0.08),
-                  AppColors.primary.withOpacity(0.03),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.primary.withOpacity(0.2),
-                width: 1,
-              ),
+              color: const Color(0xFFF3F2FF), // Light purple background
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header with icon and status badges
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Camera icon
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
-                        Icons.photo_camera,
-                        color: Colors.white,
+                      child: Icon(
+                        Icons.photo_camera_outlined,
+                        color: AppColors.primary,
                         size: 24,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: kSpacingMedium),
+                    // Title and subtitle
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Take or Upload Photos',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
+                            style: kMobileTextStyleTitle.copyWith(
                               color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Capture multiple photos for better differential analysis.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                            style: kMobileTextStyleSubtitle.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    // Status Badge
+                  ],
+                ),
+                const SizedBox(height: kSpacingSmall),
+                // Status badges row
+                Row(
+                  children: [
+                    // Scanning badge
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
+                        horizontal: 12,
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: _isAnalyzing ? Colors.orange : AppColors.success,
+                        color: const Color(0xFFFF9500).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Scanning:',
+                            style: TextStyle(
+                              color: const Color(0xFFFF9500),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.assessmentData['selectedPetType']?.toString().toUpperCase() ?? 'DOG',
+                            style: TextStyle(
+                              color: const Color(0xFFFF9500),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    // Server Online badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF34C759).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        _isAnalyzing ? 'Scanning...' : 'Ready',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        'Server Online',
+                        style: TextStyle(
+                          color: const Color(0xFF34C759),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -541,132 +574,102 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                // Photo Quality Tips
+                const SizedBox(height: kSpacingLarge),
+                
+                // Photo tips
+                _buildPhotoTip(Icons.wb_sunny_outlined, 'Good lighting'),
+                const SizedBox(height: 8),
+                _buildPhotoTip(Icons.center_focus_strong, 'Center lesion'),
+                const SizedBox(height: 8),
+                _buildPhotoTip(Icons.blur_off, 'No blur'),
+                const SizedBox(height: kSpacingLarge),
+                
+                // Action Buttons Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading || _isAnalyzing ? null : _takePhoto,
+                        icon: const Icon(Icons.photo_camera, size: 20),
+                        label: const Text(
+                          'Take Photo',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: kSpacingMedium),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isLoading || _isAnalyzing ? null : _uploadPhotos,
+                        icon: Icon(
+                          Icons.upload_outlined,
+                          size: 20,
+                          color: AppColors.primary,
+                        ),
+                        label: Text(
+                          'Upload Photo',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(color: AppColors.primary, width: 2),
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: kSpacingLarge),
+                
+                // Photo drop zone (if no photos yet)
+                if (_selectedImages.isEmpty)
+                  _buildPhotoDropZone(),
+                
+                // Preparation Tips (Collapsible)
+                const SizedBox(height: kSpacingMedium),
+                _buildPreparationTips(),
+                
+                // Disclaimer at bottom
+                const SizedBox(height: kSpacingMedium),
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(kSpacingMedium),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Column(
-                    children: [
-                      _buildPhotoTip(Icons.wb_sunny_outlined, 'Good lighting'),
-                      const SizedBox(height: 8),
-                      _buildPhotoTip(Icons.center_focus_strong, 'Center lesion'),
-                      const SizedBox(height: 8),
-                      _buildPhotoTip(Icons.blur_off, 'No blur'),
-                    ],
+                  child: Text(
+                    'This is a preliminary differential analysis. For a confirmed diagnosis, please consult a licensed veterinarian.',
+                    style: kMobileTextStyleLegend.copyWith(
+                      color: AppColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: kSpacingMedium),
-          
-          // Photo Capture Buttons
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: (_isLoading || _isAnalyzing) ? null : _takePhoto,
-                  icon: const Icon(Icons.photo_camera, size: 20),
-                  label: const Text(
-                    'Take Photo',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: (_isLoading || _isAnalyzing) ? null : _uploadPhotos,
-                  icon: const Icon(Icons.upload, size: 20),
-                  label: const Text(
-                    'Upload Photo',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary, width: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: kSpacingMedium),
-          
-          // Tap to Add Photos Placeholder (when no photos)
-          if (_selectedImages.isEmpty)
-            GestureDetector(
-              onTap: _uploadPhotos,
-              child: Container(
-                padding: const EdgeInsets.all(40),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.3),
-                    width: 2,
-                    strokeAlign: BorderSide.strokeAlignInside,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.add_photo_alternate_outlined,
-                        size: 48,
-                        color: AppColors.primary.withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Tap to add photos',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'You can add up to 6 photos. Good lighting and\nsteady focus improve AI accuracy.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           
           // Photos Section
           if (_selectedImages.isNotEmpty) ...[
@@ -974,75 +977,127 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
             ),
             const SizedBox(height: kSpacingMedium),
           ],
-          
-          // Preparation Tips (Collapsible)
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoTip(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: AppColors.textSecondary,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: kMobileTextStyleSubtitle.copyWith(
+            color: AppColors.textSecondary,
+            fontSize: 13,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhotoDropZone() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.primary.withOpacity(0.3),
+          width: 2,
+          style: BorderStyle.solid,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Photo icon with circle background
           Container(
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(kBorderRadius),
-              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+              shape: BoxShape.circle,
             ),
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: () => setState(() => _showPreparationTips = !_showPreparationTips),
-                  child: Container(
-                    padding: const EdgeInsets.all(kSpacingMedium),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Preparation Tips',
-                          style: kMobileTextStyleTitle.copyWith(
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const Spacer(),
-                      
-                        Icon(
-                          _showPreparationTips ? Icons.expand_less : Icons.expand_more,
-                          color: AppColors.primary,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_showPreparationTips) ...[
-                  const Divider(height: 1, color: AppColors.primary),
-                  Padding(
-                    padding: const EdgeInsets.all(kSpacingMedium),
-                    child: Column(
-                      children: [
-                        _buildTip(Icons.wb_sunny, 'Use natural light'),
-                        _buildTip(Icons.straighten, 'Hold 10-15 cm away'),
-                        _buildTip(Icons.pets, 'Keep pet calm'),
-                        _buildTip(Icons.cleaning_services, 'Clean affected area'),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+            child: Icon(
+              Icons.photo_camera_outlined,
+              size: 40,
+              color: AppColors.primary.withOpacity(0.6),
             ),
           ),
           const SizedBox(height: kSpacingMedium),
-          
-          // Disclaimer
-          Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
-            decoration: BoxDecoration(
-              color: AppColors.info.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(kBorderRadius),
-              border: Border.all(color: AppColors.info.withOpacity(0.3)),
-            ),
-            child: Text(
-              'This is a preliminary differential analysis. For a confirmed diagnosis, please consult a licensed veterinarian.',
-              style: kMobileTextStyleLegend.copyWith(
-                color: AppColors.info,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
+          Text(
+            'Tap to add photos',
+            style: kMobileTextStyleTitle.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            'You can add up to 6 photos. Good lighting and steady focus improve AI accuracy.',
+            style: kMobileTextStyleSubtitle.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPreparationTips() {
+    return GestureDetector(
+      onTap: () => setState(() => _showPreparationTips = !_showPreparationTips),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(kSpacingMedium),
+              child: Row(
+                children: [
+                  Text(
+                    'Preparation Tips',
+                    style: kMobileTextStyleTitle.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _showPreparationTips ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+            if (_showPreparationTips) ...[
+              const Divider(height: 1, color: Color(0xFFE5E5E5)),
+              Padding(
+                padding: const EdgeInsets.all(kSpacingMedium),
+                child: Column(
+                  children: [
+                    _buildTip(Icons.wb_sunny, 'Use natural light'),
+                    _buildTip(Icons.straighten, 'Hold 10-15 cm away'),
+                    _buildTip(Icons.pets, 'Keep pet calm'),
+                    _buildTip(Icons.cleaning_services, 'Clean affected area'),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1066,27 +1121,6 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPhotoTip(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: Colors.grey.shade600,
-          size: 16,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade700,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 }

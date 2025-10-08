@@ -96,22 +96,8 @@ class _AlertsPageState extends State<AlertsPage> {
 
   void _handleAlertTap(AlertData alert) async {
     try {
-      // Navigate to alert details page with notification data
-      await context.push(
-        '/alerts/details/${alert.id}',
-        extra: alert, // Pass the full alert data
-      );
-      
-      // Add a small delay to ensure Firestore update has propagated
-      await Future.delayed(const Duration(milliseconds: 300));
-      
-      // Force refresh the stream by recreating it
-      // This ensures the UI updates to reflect the read status change
-      if (mounted && _userModel != null) {
-        setState(() {
-          _notificationsStream = _getNotificationsStream();
-        });
-      }
+      // Navigate to alert details page
+      context.push('/alerts/details/${alert.id}');
     } catch (e) {
       print('Error handling alert tap: $e');
       _showErrorMessage('Failed to open notification details');
