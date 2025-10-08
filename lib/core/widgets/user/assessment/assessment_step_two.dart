@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
-import 'package:pawsense/core/widgets/shared/buttons/primary_button.dart';
 import 'package:pawsense/core/services/pet_detection_service.dart';
 
 class AssessmentStepTwo extends StatefulWidget {
@@ -462,107 +461,103 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Section
+          // Modern Header Card
           Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(kBorderRadius),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withOpacity(0.08),
+                  AppColors.primary.withOpacity(0.03),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.primary.withOpacity(0.2),
+                width: 1,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Take or Upload Photos',
-                  style: kMobileTextStyleTitle.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: kSpacingSmall),
-                Text(
-                  'Capture multiple photos for better differential analysis.',
-                  style: kMobileTextStyleSubtitle.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: kSpacingMedium),
-                
-                // Pet Type and Server Status Indicators
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: kSpacingMedium,
-                        vertical: kSpacingSmall,
-                      ),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.warning.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: const Icon(
+                        Icons.photo_camera,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.pets,
-                            color: AppColors.warning,
-                            size: 16,
+                          const Text(
+                            'Take or Upload Photos',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
-                          const SizedBox(width: kSpacingXSmall),
+                          const SizedBox(height: 4),
                           Text(
-                            'Scanning: ${widget.assessmentData['selectedPetType'] ?? 'Dog'}',
-                            style: kMobileTextStyleServiceTitle.copyWith(
-                              color: AppColors.warning,
-                              fontWeight: FontWeight.w600,
+                            'Capture multiple photos for better differential analysis.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: kSpacingSmall),
+                    // Status Badge
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: kSpacingMedium,
-                        vertical: kSpacingSmall,
+                        horizontal: 10,
+                        vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: _serverConnected 
-                            ? Colors.green.withOpacity(0.1)
-                            : Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: _serverConnected 
-                              ? Colors.green.withOpacity(0.3)
-                              : Colors.red.withOpacity(0.3)
-                        ),
+                        color: _isAnalyzing ? Colors.orange : AppColors.success,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _serverConnected ? Icons.check_circle : Icons.error,
-                            color: _serverConnected ? Colors.green : Colors.red,
-                            size: 16,
-                          ),
-                          const SizedBox(width: kSpacingXSmall),
-                          Text(
-                            _serverConnected ? 'Server Online' : 'Server Offline',
-                            style: kMobileTextStyleServiceTitle.copyWith(
-                              color: _serverConnected ? Colors.green : Colors.red,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        _isAnalyzing ? 'Scanning...' : 'Ready',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                // Photo Quality Tips
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildPhotoTip(Icons.wb_sunny_outlined, 'Good lighting'),
+                      const SizedBox(height: 8),
+                      _buildPhotoTip(Icons.center_focus_strong, 'Center lesion'),
+                      const SizedBox(height: 8),
+                      _buildPhotoTip(Icons.blur_off, 'No blur'),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -570,53 +565,108 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
           const SizedBox(height: kSpacingMedium),
           
           // Photo Capture Buttons
-          Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(kBorderRadius),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: (_isLoading || _isAnalyzing) ? null : _takePhoto,
+                  icon: const Icon(Icons.photo_camera, size: 20),
+                  label: const Text(
+                    'Take Photo',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: (_isLoading || _isAnalyzing) ? null : _uploadPhotos,
+                  icon: const Icon(Icons.upload, size: 20),
+                  label: const Text(
+                    'Upload Photo',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary, width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: kSpacingMedium),
+          
+          // Tap to Add Photos Placeholder (when no photos)
+          if (_selectedImages.isEmpty)
+            GestureDetector(
+              onTap: _uploadPhotos,
+              child: Container(
+                padding: const EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.3),
+                    width: 2,
+                    strokeAlign: BorderSide.strokeAlignInside,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Expanded(
-                      child: PrimaryButton(
-                        text: 'Take Photo',
-                        icon: Icons.camera_alt,
-                        onPressed: (_isLoading || _isAnalyzing) ? null : _takePhoto,
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 48,
+                        color: AppColors.primary.withOpacity(0.6),
                       ),
                     ),
-                    const SizedBox(width: kSpacingMedium),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: (_isLoading || _isAnalyzing) ? null : _uploadPhotos,
-                        icon: Icon(Icons.upload),
-                        label: Text('Upload Photo'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          side: BorderSide(color: AppColors.primary),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(kButtonRadius),
-                          ),
-                          minimumSize: Size(double.infinity, kButtonHeight),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Tap to add photos',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'You can add up to 6 photos. Good lighting and\nsteady focus improve AI accuracy.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: kSpacingMedium),
           
           // Photos Section
           if (_selectedImages.isNotEmpty) ...[
@@ -1016,6 +1066,27 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPhotoTip(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: Colors.grey.shade600,
+          size: 16,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade700,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

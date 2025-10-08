@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/models/notifications/notification_model.dart';
 import 'package:pawsense/core/services/notifications/notification_service.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
 import 'package:pawsense/core/utils/notification_helper.dart';
+import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
+import 'package:pawsense/core/models/user/pet_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_model.dart';
 
 class NotificationDetailPage extends StatefulWidget {
   final String notificationId;
@@ -24,6 +28,11 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
   NotificationModel? _notification;
   bool _isLoading = true;
   String? _error;
+  
+  // Appointment details
+  AppointmentBooking? _appointment;
+  Pet? _pet;
+  Clinic? _clinic;
 
   @override
   void initState() {
@@ -50,9 +59,11 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
         if (mounted) {
           setState(() {
             _notification = notification;
-            _isLoading = false;
           });
         }
+        
+        // Fetch appointment details if this is an appointment notification
+        await _loadAppointmentDetails(notification);
         return;
       }
 
@@ -75,14 +86,104 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
       if (mounted) {
         setState(() {
           _notification = notification;
-          _isLoading = false;
         });
       }
+      
+      // Fetch appointment details if this is an appointment notification
+      await _loadAppointmentDetails(notification);
     } catch (e) {
       print('Error loading notification: $e');
       if (mounted) {
         setState(() {
           _error = 'Failed to load notification';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAppointmentDetails(NotificationModel notification) async {
+    try {
+      // Only load appointment details for appointment notifications
+      if (notification.category != NotificationCategory.appointment) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final appointmentId = notification.metadata?['appointmentId'] as String?;
+      if (appointmentId == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // Fetch appointment from Firestore
+      final appointmentDoc = await FirebaseFirestore.instance
+          .collection('appointments')
+          .doc(appointmentId)
+          .get();
+
+      if (!appointmentDoc.exists) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final appointment = AppointmentBooking.fromMap(
+        appointmentDoc.data()!,
+        appointmentDoc.id,
+      );
+
+      // Fetch pet details
+      Pet? pet;
+      try {
+        final petDoc = await FirebaseFirestore.instance
+            .collection('pets')
+            .doc(appointment.petId)
+            .get();
+        if (petDoc.exists) {
+          pet = Pet.fromMap(petDoc.data()!, petDoc.id);
+        }
+      } catch (e) {
+        print('Error loading pet: $e');
+      }
+
+      // Fetch clinic details
+      Clinic? clinic;
+      try {
+        final clinicDoc = await FirebaseFirestore.instance
+            .collection('clinics')
+            .doc(appointment.clinicId)
+            .get();
+        if (clinicDoc.exists) {
+          clinic = Clinic.fromMap(clinicDoc.data()!);
+        }
+      } catch (e) {
+        print('Error loading clinic: $e');
+      }
+
+      if (mounted) {
+        setState(() {
+          _appointment = appointment;
+          _pet = pet;
+          _clinic = clinic;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading appointment details: $e');
+      if (mounted) {
+        setState(() {
           _isLoading = false;
         });
       }
@@ -288,8 +389,6 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
   }
 
   Widget _buildAppointmentDetails(NotificationModel notification) {
-    final metadata = notification.metadata ?? {};
-    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
@@ -318,51 +417,60 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
           const SizedBox(height: 16),
           
           // Clinic
-          if (metadata['clinicName'] != null)
+          if (_clinic != null)
             _buildDetailRow(
               icon: Icons.local_hospital,
               iconColor: AppColors.primary,
               label: 'Clinic:',
-              value: metadata['clinicName'] as String,
+              value: _clinic!.clinicName,
             ),
           
           // Date & Time
-          if (metadata['appointmentDate'] != null)
+          if (_appointment != null)
             _buildDetailRow(
               icon: Icons.access_time,
               iconColor: AppColors.warning,
               label: 'When:',
               value: _formatAppointmentDateTime(
-                metadata['appointmentDate'] as String,
-                metadata['appointmentTime'] as String?,
+                _appointment!.appointmentDate.toIso8601String(),
+                _appointment!.appointmentTime,
               ),
             ),
           
           // Pet
-          if (metadata['petName'] != null)
+          if (_pet != null)
             _buildDetailRow(
               icon: Icons.pets,
               iconColor: AppColors.success,
               label: 'Pet:',
-              value: metadata['petName'] as String,
+              value: _pet!.petName,
+            ),
+          
+          // Service
+          if (_appointment != null)
+            _buildDetailRow(
+              icon: Icons.medical_services,
+              iconColor: AppColors.info,
+              label: 'Service:',
+              value: _appointment!.serviceName,
             ),
           
           // Status
-          if (metadata['status'] != null)
+          if (_appointment != null)
             _buildDetailRow(
               icon: Icons.info_outline,
-              iconColor: _getStatusColor(metadata['status'] as String),
+              iconColor: _getStatusColor(_appointment!.status.name),
               label: 'Status:',
-              value: _formatStatus(metadata['status'] as String),
+              value: _formatStatus(_appointment!.status.name),
             ),
           
           // Appointment ID
-          if (metadata['appointmentId'] != null)
+          if (_appointment != null)
             _buildDetailRow(
               icon: Icons.confirmation_number_outlined,
               iconColor: AppColors.textSecondary,
               label: 'ID:',
-              value: metadata['appointmentId'] as String,
+              value: _appointment!.id ?? 'N/A',
               isLast: true,
             ),
         ],
@@ -513,68 +621,103 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
   }
 
   Widget _buildActionButtons(NotificationModel notification) {
-    return Padding(
+    // Only show Message clinic button for appointment notifications
+    if (notification.category != NotificationCategory.appointment || _clinic == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Primary action button
-          if (notification.actionUrl != null && notification.actionLabel != null)
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Navigate to action URL
-                  context.push(notification.actionUrl!);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  notification.actionLabel!,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          
-          // Secondary action - Contact clinic (for appointments)
-          if (notification.category == NotificationCategory.appointment &&
-              notification.metadata?['clinicName'] != null) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton(
-                onPressed: () {
-                  // Navigate to messaging with clinic
-                  context.push('/messaging');
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: BorderSide(color: AppColors.primary, width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  'Message clinic',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary.withValues(alpha: 0.05),
+            AppColors.primary.withValues(alpha: 0.02),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.question_answer,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Need assistance?',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Message the clinic directly',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                if (_clinic == null) return;
+                
+                // Navigate to messaging page - it will handle conversation creation
+                if (mounted) {
+                  context.push('/messaging');
+                }
+              },
+              icon: const Icon(Icons.message_outlined, size: 18),
+              label: Text(
+                'Message ${_clinic!.clinicName}',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
