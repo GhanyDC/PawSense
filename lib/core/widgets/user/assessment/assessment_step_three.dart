@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
@@ -20,6 +19,8 @@ import 'package:pawsense/core/services/cloudinary/cloudinary_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
+import 'package:pawsense/core/services/user/skin_disease_service.dart';
+import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 
 class AssessmentStepThree extends StatefulWidget {
   final Map<String, dynamic> assessmentData;
@@ -46,11 +47,14 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
   late List<AnalysisResult> _analysisResults;
   Set<int> _previewingImages = {}; // Track which images are showing bounding boxes
   Set<int> _fullscreenBoundingBoxes = {}; // Track bounding boxes in fullscreen mode
+  SkinDiseaseModel? _detectedDisease; // Store the fetched disease info
+  bool _isLoadingDiseaseInfo = false;
   
   @override
   void initState() {
     super.initState();
     _processDetectionResults();
+    _fetchDiseaseInfo();
   }
 
   void _showFullscreenImage(XFile photo, int index, List<Map<String, dynamic>> detectionsToShow) {
@@ -108,12 +112,12 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                                         return CustomPaint(
                                           painter: BoundingBoxPainter(
                                             detectionsToShow,
-                                            boxColor: AppColors.primary,
                                             strokeWidth: 4.0,
                                             showLabels: true,
                                             showConfidence: true,
                                             originalImageWidth: 640.0,
                                             originalImageHeight: 640.0,
+                                            useRankColors: true, // Enable color-coding for top 3
                                           ),
                                         );
                                       },
@@ -246,34 +250,100 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
   void _processDetectionResults() {
     final detectionResults = widget.assessmentData['detectionResults'] as List<Map<String, dynamic>>? ?? [];
     
-    // Aggregate only the highest confidence detection from each image
-    final Map<String, List<double>> conditionConfidences = {};
+    // Configuration
+    const double CONFIDENCE_THRESHOLD = 0.50; // 50% minimum confidence
+    const double IOU_THRESHOLD = 0.5; // Intersection over Union threshold for duplicate detection
+    const int MAX_DETECTIONS_TO_SHOW = 3; // Show top 3 detections
     
-    for (final result in detectionResults) {
-      final allDetections = result['detections'] as List<Map<String, dynamic>>? ?? [];
+    // Collect all detections with their image indices for deduplication
+    final List<Map<String, dynamic>> allDetectionsWithContext = [];
+    
+    for (int imageIndex = 0; imageIndex < detectionResults.length; imageIndex++) {
+      final result = detectionResults[imageIndex];
+      final detections = result['detections'] as List<Map<String, dynamic>>? ?? [];
       
-      if (allDetections.isNotEmpty) {
-        // Sort by confidence and get only the highest one
-        final sortedDetections = List<Map<String, dynamic>>.from(allDetections);
-        sortedDetections.sort((a, b) => (b['confidence'] as double).compareTo(a['confidence'] as double));
-        final highestDetection = sortedDetections.first;
+      for (final detection in detections) {
+        final confidence = detection['confidence'] as double? ?? 0.0;
         
-        final String condition = highestDetection['label'];
-        final double confidence = highestDetection['confidence'];
-        
-        if (!conditionConfidences.containsKey(condition)) {
-          conditionConfidences[condition] = [];
+        // Apply confidence threshold
+        if (confidence >= CONFIDENCE_THRESHOLD) {
+          allDetectionsWithContext.add({
+            'label': detection['label'],
+            'confidence': confidence,
+            'box': detection['box'],
+            'boundingBox': detection['boundingBox'],
+            'imageIndex': imageIndex,
+          });
         }
-        conditionConfidences[condition]!.add(confidence);
       }
     }
     
-    if (conditionConfidences.isEmpty) {
-      // Fallback to mock data if no detections
+    if (allDetectionsWithContext.isEmpty) {
+      // No detections meet the threshold
       _analysisResults = [
-        AnalysisResult(condition: 'No conditions detected', percentage: 100.0, color: const Color(0xFF34C759)),
+        AnalysisResult(
+          condition: 'No high-confidence detections',
+          percentage: 100.0,
+          color: const Color(0xFF34C759),
+        ),
       ];
       return;
+    }
+    
+    // Sort all detections by confidence
+    allDetectionsWithContext.sort((a, b) => 
+      (b['confidence'] as double).compareTo(a['confidence'] as double)
+    );
+    
+    // Remove duplicates (same condition at similar location)
+    final List<Map<String, dynamic>> uniqueDetections = [];
+    
+    for (final detection in allDetectionsWithContext) {
+      bool isDuplicate = false;
+      final label = detection['label'] as String;
+      final box = detection['box'] as List?;
+      
+      for (final existing in uniqueDetections) {
+        final existingLabel = existing['label'] as String;
+        final existingBox = existing['box'] as List?;
+        
+        // Check if same condition
+        if (label == existingLabel) {
+          // Check if bounding boxes overlap significantly
+          if (box != null && existingBox != null && box.length >= 4 && existingBox.length >= 4) {
+            final iou = _calculateIOU(
+              [box[0], box[1], box[2], box[3]],
+              [existingBox[0], existingBox[1], existingBox[2], existingBox[3]],
+            );
+            
+            if (iou > IOU_THRESHOLD) {
+              isDuplicate = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!isDuplicate) {
+        uniqueDetections.add(detection);
+      }
+      
+      // Stop if we have enough unique detections
+      if (uniqueDetections.length >= MAX_DETECTIONS_TO_SHOW) {
+        break;
+      }
+    }
+    
+    // Aggregate detections by condition for statistics
+    final Map<String, List<double>> conditionConfidences = {};
+    for (final detection in uniqueDetections) {
+      final label = detection['label'] as String;
+      final confidence = detection['confidence'] as double;
+      
+      if (!conditionConfidences.containsKey(label)) {
+        conditionConfidences[label] = [];
+      }
+      conditionConfidences[label]!.add(confidence);
     }
     
     // Calculate average confidence for each condition
@@ -286,20 +356,21 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
     final sortedConditions = avgConfidences.entries.toList();
     sortedConditions.sort((a, b) => b.value.compareTo(a.value));
     
-    // Convert to AnalysisResult objects
+    // Assign colors
     final colors = [
-      const Color(0xFFFF9500),
-      const Color(0xFF007AFF),
-      const Color(0xFF34C759),
-      const Color(0xFFFF3B30),
-      const Color(0xFFAF52DE),
-      const Color(0xFFFF2D92),
-      const Color(0xFF5856D6),
-      const Color(0xFFFF9F0A),
-      const Color(0xFF30B0C7),
+      const Color(0xFFFF9500), // Orange - Highest
+      const Color(0xFF007AFF), // Blue - Second
+      const Color(0xFF34C759), // Green - Third
+      const Color(0xFFFF3B30), // Red
+      const Color(0xFFAF52DE), // Purple
+      const Color(0xFFFF2D92), // Pink
+      const Color(0xFF5856D6), // Indigo
+      const Color(0xFFFF9F0A), // Amber
+      const Color(0xFF30B0C7), // Cyan
     ];
     
-    _analysisResults = sortedConditions.asMap().entries.map((entry) {
+    // Convert to AnalysisResult objects (top 3 only)
+    _analysisResults = sortedConditions.take(MAX_DETECTIONS_TO_SHOW).toList().asMap().entries.map((entry) {
       final index = entry.key;
       final condition = entry.value.key;
       final confidence = entry.value.value;
@@ -310,10 +381,109 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
         color: colors[index % colors.length],
       );
     }).toList();
+    
+    print('📊 Processed ${_analysisResults.length} unique skin disease detections:');
+    for (final result in _analysisResults) {
+      print('   • ${result.condition}: ${result.percentage.toStringAsFixed(1)}%');
+    }
+  }
+  
+  /// Calculate Intersection over Union (IoU) for two bounding boxes
+  /// Format: [x1, y1, x2, y2]
+  double _calculateIOU(List<dynamic> box1, List<dynamic> box2) {
+    try {
+      final x1_1 = box1[0].toDouble();
+      final y1_1 = box1[1].toDouble();
+      final x2_1 = box1[2].toDouble();
+      final y2_1 = box1[3].toDouble();
+      
+      final x1_2 = box2[0].toDouble();
+      final y1_2 = box2[1].toDouble();
+      final x2_2 = box2[2].toDouble();
+      final y2_2 = box2[3].toDouble();
+      
+      // Calculate intersection area
+      final xLeft = x1_1 > x1_2 ? x1_1 : x1_2;
+      final yTop = y1_1 > y1_2 ? y1_1 : y1_2;
+      final xRight = x2_1 < x2_2 ? x2_1 : x2_2;
+      final yBottom = y2_1 < y2_2 ? y2_1 : y2_2;
+      
+      if (xRight < xLeft || yBottom < yTop) {
+        return 0.0; // No intersection
+      }
+      
+      final intersectionArea = (xRight - xLeft) * (yBottom - yTop);
+      
+      // Calculate union area
+      final box1Area = (x2_1 - x1_1) * (y2_1 - y1_1);
+      final box2Area = (x2_2 - x1_2) * (y2_2 - y1_2);
+      final unionArea = box1Area + box2Area - intersectionArea;
+      
+      if (unionArea <= 0) {
+        return 0.0;
+      }
+      
+      return intersectionArea / unionArea;
+    } catch (e) {
+      print('Error calculating IOU: $e');
+      return 0.0;
+    }
   }
 
   String _formatConditionName(String condition) {
     return DetectionUtils.formatConditionName(condition);
+  }
+
+  /// Fetch skin disease information based on highest confidence detection
+  Future<void> _fetchDiseaseInfo() async {
+    if (_analysisResults.isEmpty) {
+      return;
+    }
+    
+    setState(() {
+      _isLoadingDiseaseInfo = true;
+    });
+    
+    try {
+      // Get the highest confidence condition
+      final highestConfidenceCondition = _analysisResults.first.condition;
+      
+      // Search for the disease in the database
+      final diseaseService = SkinDiseaseService();
+      final allDiseases = await diseaseService.getAllDiseases();
+      
+      // Try to match by name (case-insensitive, fuzzy matching)
+      SkinDiseaseModel? matchedDisease;
+      
+      for (var disease in allDiseases) {
+        // Direct match
+        if (disease.name.toLowerCase() == highestConfidenceCondition.toLowerCase()) {
+          matchedDisease = disease;
+          break;
+        }
+        
+        // Partial match (contains)
+        if (disease.name.toLowerCase().contains(highestConfidenceCondition.toLowerCase()) ||
+            highestConfidenceCondition.toLowerCase().contains(disease.name.toLowerCase())) {
+          matchedDisease = disease;
+          break;
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _detectedDisease = matchedDisease;
+          _isLoadingDiseaseInfo = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching disease info: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingDiseaseInfo = false;
+        });
+      }
+    }
   }
 
   // Save assessment to Firebase without generating PDF
@@ -1066,82 +1236,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
           const SizedBox(height: kSpacingMedium),
           
           // Initial Remedies/Suggestions (Collapsible)
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(kBorderRadius),
-              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-            ),
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: () => setState(() => _showRemedies = !_showRemedies),
-                  child: Container(
-                    padding: const EdgeInsets.all(kSpacingMedium),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.healing,
-                          color: AppColors.primary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: kSpacingSmall),
-                        Text(
-                          'Initial Remedies & Suggestions',
-                          style: kMobileTextStyleTitle.copyWith(
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const Spacer(),
-
-                        Icon(
-                          _showRemedies ? Icons.expand_less : Icons.expand_more,
-                          color: AppColors.primary,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_showRemedies) ...[
-                  const Divider(height: 1, color: AppColors.primary),
-                  Container(
-                    padding: const EdgeInsets.all(kSpacingMedium),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(kBorderRadius),
-                        bottomRight: Radius.circular(kBorderRadius),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildRemedyItem(
-                          Icons.local_hospital,
-                          'Immediate Care',
-                          'Keep the affected area clean and dry. Avoid excessive scratching.',
-                        ),
-                        _buildRemedyItem(
-                          Icons.medication,
-                          'Topical Treatment',
-                          'Apply antifungal cream twice daily if mange is suspected.',
-                        ),
-                        _buildRemedyItem(
-                          Icons.schedule,
-                          'Monitor Progress',
-                          'Track symptoms daily and note any changes or improvements.',
-                        ),
-                        _buildRemedyItem(
-                          Icons.warning,
-                          'When to Seek Help',
-                          'Consult a veterinarian if symptoms worsen or persist beyond 7 days.',
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          _buildRemediesSection(),
           const SizedBox(height: kSpacingMedium),
           
           // Action Buttons
@@ -1315,17 +1410,60 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                 ? detectionResults[index]['detections'] as List<Map<String, dynamic>>? ?? []
                 : <Map<String, dynamic>>[];
 
-            // Get only the highest confidence detection
-            Map<String, dynamic>? highestDetection;
+            // Get top 3 detections for this image (filtered for duplicates and threshold)
+            const double CONFIDENCE_THRESHOLD = 0.0; // 50% minimum confidence
+            const double IOU_THRESHOLD = 0.5; // For duplicate detection
+            const int MAX_DETECTIONS_PER_IMAGE = 3;
+            
+            List<Map<String, dynamic>> detectionsToShow = [];
+            
             if (allDetections.isNotEmpty) {
-              // Sort by confidence and get the highest
+              // Sort by confidence descending
               final sortedDetections = List<Map<String, dynamic>>.from(allDetections);
-              sortedDetections.sort((a, b) => (b['confidence'] as double).compareTo(a['confidence'] as double));
-              highestDetection = sortedDetections.first;
+              sortedDetections.sort((a, b) => 
+                (b['confidence'] as double).compareTo(a['confidence'] as double)
+              );
+              
+              // Filter duplicates and apply threshold
+              for (final detection in sortedDetections) {
+                final confidence = detection['confidence'] as double? ?? 0.0;
+                
+                // Skip if below threshold
+                if (confidence < CONFIDENCE_THRESHOLD) continue;
+                
+                bool isDuplicate = false;
+                final label = detection['label'] as String;
+                final box = detection['box'] as List?;
+                
+                // Check for duplicates (same disease at overlapping location)
+                for (final existing in detectionsToShow) {
+                  final existingLabel = existing['label'] as String;
+                  final existingBox = existing['box'] as List?;
+                  
+                  if (label == existingLabel) {
+                    if (box != null && existingBox != null && box.length >= 4 && existingBox.length >= 4) {
+                      final iou = _calculateIOU(
+                        [box[0], box[1], box[2], box[3]],
+                        [existingBox[0], existingBox[1], existingBox[2], existingBox[3]],
+                      );
+                      
+                      if (iou > IOU_THRESHOLD) {
+                        isDuplicate = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+                
+                if (!isDuplicate) {
+                  detectionsToShow.add(detection);
+                  
+                  if (detectionsToShow.length >= MAX_DETECTIONS_PER_IMAGE) {
+                    break;
+                  }
+                }
+              }
             }
-
-            // Create list with only the highest detection for display
-            final detectionsToShow = highestDetection != null ? [highestDetection] : <Map<String, dynamic>>[];
 
             return Padding(
               padding: const EdgeInsets.only(bottom: kSpacingMedium),
@@ -1469,8 +1607,8 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                                       const SizedBox(width: 4),
                                       Text(
                                         _previewingImages.contains(index) 
-                                            ? 'Showing Detection'
-                                            : 'Detection Available',
+                                            ? '${detectionsToShow.length} Detection${detectionsToShow.length > 1 ? 's' : ''}'
+                                            : '${detectionsToShow.length} Detection${detectionsToShow.length > 1 ? 's' : ''} Available',
                                         style: kMobileTextStyleLegend.copyWith(
                                           color: _previewingImages.contains(index) 
                                               ? AppColors.primary
@@ -1506,20 +1644,34 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                           
                           if (detectionsToShow.isNotEmpty) ...[
                             const SizedBox(height: kSpacingSmall),
-                            ...detectionsToShow.map((detection) {
+                            ...detectionsToShow.asMap().entries.map((entry) {
+                              final int detectionIndex = entry.key;
+                              final detection = entry.value;
                               final String condition = detection['label'];
                               final double confidence = detection['confidence'];
+                              
+                              // Assign colors based on rank (matching pie chart colors)
+                              final rankColors = [
+                                const Color(0xFFFF9500), // Orange - Highest
+                                const Color(0xFF007AFF), // Blue - Second
+                                const Color(0xFF34C759), // Green - Third
+                              ];
+                              final detectionColor = rankColors[detectionIndex % rankColors.length];
                               
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Row(
                                   children: [
                                     Container(
-                                      width: 8,
-                                      height: 8,
+                                      width: 10,
+                                      height: 10,
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary,
+                                        color: detectionColor,
                                         shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: detectionColor.withOpacity(0.3),
+                                          width: 2,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: kSpacingSmall),
@@ -1528,14 +1680,31 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                                         _formatConditionName(condition),
                                         style: kMobileTextStyleLegend.copyWith(
                                           color: AppColors.textPrimary,
+                                          fontWeight: detectionIndex == 0 
+                                              ? FontWeight.w600 
+                                              : FontWeight.w500,
                                         ),
                                       ),
                                     ),
-                                    Text(
-                                      '${(confidence * 100).toStringAsFixed(1)}%',
-                                      style: kMobileTextStyleLegend.copyWith(
-                                        color: AppColors.textSecondary,
-                                        fontWeight: FontWeight.w600,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: detectionColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: detectionColor.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${(confidence * 100).toStringAsFixed(1)}%',
+                                        style: kMobileTextStyleLegend.copyWith(
+                                          color: detectionColor,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 11,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1556,7 +1725,207 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
     );
   }
 
-  Widget _buildRemedyItem(IconData icon, String title, String description) {
+  Widget _buildRemediesSection() {
+    // Check if we have disease info with remedies
+    final hasRemedies = _detectedDisease?.initialRemedies != null;
+    final remedies = _detectedDisease?.initialRemedies;
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(kBorderRadius),
+        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _showRemedies = !_showRemedies),
+            child: Container(
+              padding: const EdgeInsets.all(kSpacingMedium),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.healing,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: kSpacingSmall),
+                  Expanded(
+                    child: Text(
+                      'Initial Remedies & Suggestions',
+                      style: kMobileTextStyleTitle.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  if (_isLoadingDiseaseInfo)
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      ),
+                    )
+                  else
+                    Icon(
+                      _showRemedies ? Icons.expand_less : Icons.expand_more,
+                      color: AppColors.primary,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (_showRemedies) ...[
+            const Divider(height: 1, color: AppColors.primary),
+            Container(
+              padding: const EdgeInsets.all(kSpacingMedium),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(kBorderRadius),
+                  bottomRight: Radius.circular(kBorderRadius),
+                ),
+              ),
+              child: hasRemedies
+                  ? _buildDynamicRemedies(remedies!)
+                  : _buildPlaceholderRemedies(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildDynamicRemedies(Map<String, dynamic> remedies) {
+    final List<Widget> remedyWidgets = [];
+    
+    // Immediate Care
+    if (remedies.containsKey('immediateCare')) {
+      final immediateCare = remedies['immediateCare'] as Map<String, dynamic>;
+      final actions = List<String>.from(immediateCare['actions'] ?? []);
+      remedyWidgets.add(_buildRemedyItem(
+        Icons.local_hospital,
+        immediateCare['title'] ?? 'Immediate Care',
+        actions.join('\n• '),
+        isListFormat: true,
+      ));
+    }
+    
+    // Topical Treatment / Environmental Disinfection
+    if (remedies.containsKey('topicalTreatment')) {
+      final topicalTreatment = remedies['topicalTreatment'] as Map<String, dynamic>;
+      final actions = List<String>.from(topicalTreatment['actions'] ?? []);
+      final note = topicalTreatment['note'] as String?;
+      
+      String content = actions.join('\n• ');
+      if (note != null && note.isNotEmpty) {
+        content += '\n\n⚠️ Note: $note';
+      }
+      
+      remedyWidgets.add(_buildRemedyItem(
+        Icons.medication,
+        topicalTreatment['title'] ?? 'Treatment',
+        content,
+        isListFormat: true,
+      ));
+    }
+    
+    // Monitoring
+    if (remedies.containsKey('monitoring')) {
+      final monitoring = remedies['monitoring'] as Map<String, dynamic>;
+      final actions = List<String>.from(monitoring['actions'] ?? []);
+      remedyWidgets.add(_buildRemedyItem(
+        Icons.schedule,
+        monitoring['title'] ?? 'Monitor Progress',
+        actions.join('\n• '),
+        isListFormat: true,
+      ));
+    }
+    
+    // When to Seek Help
+    if (remedies.containsKey('whenToSeekHelp')) {
+      final whenToSeekHelp = remedies['whenToSeekHelp'] as Map<String, dynamic>;
+      final actions = List<String>.from(whenToSeekHelp['actions'] ?? []);
+      final urgency = whenToSeekHelp['urgency'] as String?;
+      
+      String content = actions.join('\n• ');
+      if (urgency != null) {
+        content = '⏰ Urgency: ${urgency.replaceAll('_', ' ')}\n\n$content';
+      }
+      
+      remedyWidgets.add(_buildRemedyItem(
+        Icons.warning,
+        whenToSeekHelp['title'] ?? 'When to Seek Help',
+        content,
+        isListFormat: true,
+        isWarning: true,
+      ));
+    }
+    
+    return Column(children: remedyWidgets);
+  }
+  
+  Widget _buildPlaceholderRemedies() {
+    return Column(
+      children: [
+        // Info banner
+        Container(
+          padding: const EdgeInsets.all(kSpacingMedium),
+          margin: const EdgeInsets.only(bottom: kSpacingMedium),
+          decoration: BoxDecoration(
+            color: AppColors.info.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(kBorderRadius),
+            border: Border.all(color: AppColors.info.withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: AppColors.info, size: 20),
+              const SizedBox(width: kSpacingSmall),
+              Expanded(
+                child: Text(
+                  'Specific remedies for this condition are being updated. Please follow general care guidelines below.',
+                  style: kMobileTextStyleLegend.copyWith(
+                    color: AppColors.info,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Generic remedies
+        _buildRemedyItem(
+          Icons.local_hospital,
+          'Immediate Care',
+          '• Keep the affected area clean and dry\n• Prevent your pet from scratching or licking the area\n• Avoid applying any products without vet approval\n• Document symptoms with photos for your vet',
+          isListFormat: true,
+        ),
+        _buildRemedyItem(
+          Icons.schedule,
+          'Monitor Progress',
+          '• Track symptoms daily and note any changes\n• Take photos to monitor progression\n• Keep a log of your pet\'s behavior and appetite\n• Note if symptoms worsen or improve',
+          isListFormat: true,
+        ),
+        _buildRemedyItem(
+          Icons.warning,
+          'When to Seek Help',
+          '⏰ Consult a veterinarian immediately if:\n\n• Symptoms worsen or spread rapidly\n• Your pet shows signs of pain or distress\n• The affected area becomes infected\n• Symptoms persist beyond 7 days',
+          isListFormat: true,
+          isWarning: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRemedyItem(
+    IconData icon, 
+    String title, 
+    String description, {
+    bool isListFormat = false,
+    bool isWarning = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: kSpacingMedium),
       child: Row(
@@ -1565,12 +1934,12 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
           Container(
             padding: const EdgeInsets.all(kSpacingSmall),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: (isWarning ? AppColors.error : AppColors.primary).withOpacity(0.1),
               borderRadius: BorderRadius.circular(kBorderRadius),
             ),
             child: Icon(
               icon,
-              color: AppColors.primary,
+              color: isWarning ? AppColors.error : AppColors.primary,
               size: 20,
             ),
           ),
@@ -1583,11 +1952,12 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
                   title,
                   style: kMobileTextStyleTitle.copyWith(
                     color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: kSpacingXSmall),
                 Text(
-                  description,
+                  isListFormat ? '• $description' : description,
                   style: kMobileTextStyleServiceSubtitle.copyWith(
                     color: AppColors.textSecondary,
                     height: 1.4,

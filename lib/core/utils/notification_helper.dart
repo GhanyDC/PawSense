@@ -17,6 +17,70 @@ class NotificationHelper {
     );
   }
 
+  /// Convert AlertData back to NotificationModel
+  static NotificationModel toNotificationModel(AlertData alert) {
+    return NotificationModel(
+      id: alert.id,
+      userId: '', // Will be populated from context if needed
+      title: alert.title,
+      message: alert.subtitle,
+      category: _mapAlertTypeToCategory(alert.type),
+      priority: _determinePriorityFromMetadata(alert.metadata),
+      isRead: alert.isRead,
+      actionUrl: alert.actionUrl,
+      actionLabel: alert.actionLabel,
+      metadata: alert.metadata,
+      createdAt: alert.timestamp,
+    );
+  }
+
+  /// Map AlertType to NotificationCategory
+  static NotificationCategory _mapAlertTypeToCategory(AlertType type) {
+    switch (type) {
+      case AlertType.appointment:
+      case AlertType.appointmentPending:
+        return NotificationCategory.appointment;
+      case AlertType.message:
+        return NotificationCategory.message;
+      case AlertType.task:
+      case AlertType.reschedule:
+      case AlertType.declined:
+      case AlertType.reappointment:
+        return NotificationCategory.task;
+      case AlertType.systemUpdate:
+        return NotificationCategory.system;
+    }
+  }
+
+  /// Determine priority from metadata
+  static NotificationPriority _determinePriorityFromMetadata(Map<String, dynamic>? metadata) {
+    if (metadata == null) return NotificationPriority.medium;
+    
+    final priorityStr = metadata['priority'] as String?;
+    if (priorityStr != null) {
+      switch (priorityStr.toLowerCase()) {
+        case 'low':
+          return NotificationPriority.low;
+        case 'high':
+          return NotificationPriority.high;
+        case 'urgent':
+          return NotificationPriority.urgent;
+        default:
+          return NotificationPriority.medium;
+      }
+    }
+    
+    // Check for urgent indicators
+    final daysUntil = metadata['daysUntil'] as int?;
+    if (daysUntil != null && daysUntil <= 1) {
+      return NotificationPriority.urgent;
+    } else if (daysUntil != null && daysUntil <= 3) {
+      return NotificationPriority.high;
+    }
+    
+    return NotificationPriority.medium;
+  }
+
   /// Map NotificationCategory to AlertType
   static AlertType _mapCategoryToAlertType(NotificationCategory category, [Map<String, dynamic>? metadata]) {
     switch (category) {

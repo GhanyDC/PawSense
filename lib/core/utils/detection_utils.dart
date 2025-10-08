@@ -80,6 +80,7 @@ class BoundingBoxPainter extends CustomPainter {
   final bool showConfidence;
   final double originalImageWidth;
   final double originalImageHeight;
+  final bool useRankColors; // New: Use different colors for top 3
 
   BoundingBoxPainter(
     this.detections, {
@@ -89,20 +90,34 @@ class BoundingBoxPainter extends CustomPainter {
     this.showConfidence = true,
     this.originalImageWidth = 640.0,
     this.originalImageHeight = 640.0,
+    this.useRankColors = true, // Default to true for top 3 visualization
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = boxColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
+    // Define rank-based colors matching the UI
+    final rankColors = [
+      const Color(0xFFFF9500), // Orange - Highest (1st)
+      const Color(0xFF007AFF), // Blue - Second (2nd)
+      const Color(0xFF34C759), // Green - Third (3rd)
+    ];
 
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
     );
 
-    for (final detection in detections) {
+    for (int i = 0; i < detections.length; i++) {
+      final detection = detections[i];
+      
+      // Use rank-based color if enabled, otherwise use the single boxColor
+      final Color currentBoxColor = useRankColors 
+          ? rankColors[i % rankColors.length]
+          : boxColor;
+      
+      final paint = Paint()
+        ..color = currentBoxColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth;
       final coordinates = DetectionUtils.extractBoundingBoxCoordinates(detection);
       if (coordinates == null) continue;
 
@@ -145,7 +160,7 @@ class BoundingBoxPainter extends CustomPainter {
 
       // Draw label if enabled
       if (showLabels) {
-        _drawLabel(canvas, textPainter, x1, y1, label, confidence);
+        _drawLabel(canvas, textPainter, x1, y1, label, confidence, currentBoxColor);
       }
     }
   }
@@ -157,6 +172,7 @@ class BoundingBoxPainter extends CustomPainter {
     double y1,
     String label,
     double confidence,
+    Color backgroundColor,
   ) {
     // Create label text
     String labelText = DetectionUtils.formatConditionName(label);
@@ -184,7 +200,7 @@ class BoundingBoxPainter extends CustomPainter {
     final double labelY = y1 > textPainter.height + 8 ? y1 - textPainter.height - 4 : y1 + 4;
     
     // Draw label background
-    final labelBackground = Paint()..color = boxColor;
+    final labelBackground = Paint()..color = backgroundColor;
     final labelRect = Rect.fromLTWH(
       x1,
       labelY,
@@ -206,7 +222,8 @@ class BoundingBoxPainter extends CustomPainter {
            showLabels != oldDelegate.showLabels ||
            showConfidence != oldDelegate.showConfidence ||
            originalImageWidth != oldDelegate.originalImageWidth ||
-           originalImageHeight != oldDelegate.originalImageHeight;
+           originalImageHeight != oldDelegate.originalImageHeight ||
+           useRankColors != oldDelegate.useRankColors;
   }
 }
 

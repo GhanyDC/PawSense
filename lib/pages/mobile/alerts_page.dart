@@ -96,8 +96,11 @@ class _AlertsPageState extends State<AlertsPage> {
 
   void _handleAlertTap(AlertData alert) async {
     try {
-      // Navigate to alert details page
-      context.push('/alerts/details/${alert.id}');
+      // Navigate to alert details page with notification data
+      context.push(
+        '/alerts/details/${alert.id}',
+        extra: alert, // Pass the full alert data
+      );
     } catch (e) {
       print('Error handling alert tap: $e');
       _showErrorMessage('Failed to open notification details');
