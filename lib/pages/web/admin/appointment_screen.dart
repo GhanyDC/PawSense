@@ -960,7 +960,7 @@ class _OptimizedAppointmentManagementScreenState
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Accepted appointment for ${appointment.pet.name}'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.success,
             ),
           );
           
@@ -975,7 +975,7 @@ class _OptimizedAppointmentManagementScreenState
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message']),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.error,
               duration: const Duration(seconds: 4),
             ),
           );
@@ -1050,6 +1050,7 @@ class _OptimizedAppointmentManagementScreenState
                   ? 'Rejected appointment for ${appointment.pet.name}'
                   : 'Failed to reject appointment',
             ),
+            backgroundColor: success ? AppColors.warning : AppColors.error,
           ),
         );
         
@@ -1112,6 +1113,7 @@ class _OptimizedAppointmentManagementScreenState
                   ? 'Cancelled appointment for ${appointment.pet.name}'
                   : 'Failed to cancel appointment',
             ),
+            backgroundColor: success ? AppColors.warning : AppColors.error,
           ),
         );
         
