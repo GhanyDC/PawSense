@@ -35,6 +35,17 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   String _aiAssessmentFeedback = '';
   List<Map<String, dynamic>> _aiPredictions = [];
   Map<String, bool> _predictionValidation = {};
+  String? _selectedCorrectDisease; // For when AI assessment is incorrect
+  
+  // Disease name lists loaded from Firestore
+  Map<String, List<String>> _diseasesByPetType = {};
+  bool _isLoadingDiseases = false;
+  
+  // Image Assessment Data for Training
+  List<Map<String, dynamic>> _assessmentImages = [];
+  String? _originalImageUrl;
+  String? _annotatedImageUrl;
+  Map<String, dynamic>? _assessmentMetadata;
   
   bool _isLoading = false;
   bool _isSaving = false;
@@ -43,6 +54,7 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   void initState() {
     super.initState();
     _loadAIAssessment();
+    _loadDiseasesFromFirestore();
   }
 
   @override
@@ -57,8 +69,10 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   Future<void> _loadAIAssessment() async {
     if (widget.appointment.assessmentResultId == null || 
         widget.appointment.assessmentResultId!.isEmpty) {
+      print('No assessment result ID found for appointment ${widget.appointment.id}');
       return;
     }
+    print('Loading AI assessment for appointment ${widget.appointment.id} with result ID ${widget.appointment.assessmentResultId}');
 
     setState(() => _isLoading = true);
 
@@ -82,6 +96,24 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             };
           }).toList();
           
+          // Load image assessment data for training validation
+          _originalImageUrl = data['originalImageUrl'] as String?;
+          _annotatedImageUrl = data['annotatedImageUrl'] as String?;
+          _assessmentMetadata = data['metadata'] as Map<String, dynamic>?;
+          
+          print('AI Assessment loaded: hasAssessment=$_hasAIAssessment, predictions=${_aiPredictions.length}, originalImageUrl=$_originalImageUrl');
+          
+          // Load assessment images if available
+          final images = data['images'] as List<dynamic>? ?? [];
+          _assessmentImages = images.map((img) {
+            return {
+              'url': img['url'] ?? '',
+              'type': img['type'] ?? 'original', // original, annotated, processed
+              'timestamp': img['timestamp'] ?? Timestamp.now(),
+              'description': img['description'] ?? '',
+            };
+          }).toList();
+          
           // Initialize validation map
           for (var i = 0; i < _aiPredictions.length; i++) {
             _predictionValidation[i.toString()] = false;
@@ -93,6 +125,96 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _loadDiseasesFromFirestore() async {
+    setState(() => _isLoadingDiseases = true);
+
+    try {
+      final diseasesSnapshot = await FirebaseFirestore.instance
+          .collection('skinDiseases')
+          .get();
+
+      final Map<String, List<String>> diseasesByType = {
+        'Dogs': <String>[],
+        'Cats': <String>[],
+      };
+
+      for (var doc in diseasesSnapshot.docs) {
+        final data = doc.data();
+        final name = data['name'] as String? ?? '';
+        final species = data['species'] as List<dynamic>? ?? [];
+
+        if (name.isNotEmpty) {
+          // Add the disease to appropriate species lists
+          for (var specie in species) {
+            final specieStr = specie.toString();
+            if (diseasesByType.containsKey(specieStr)) {
+              diseasesByType[specieStr]!.add(name);
+            }
+          }
+        }
+      }
+
+      // Sort the lists alphabetically and add "Other" option at the end
+      for (var key in diseasesByType.keys) {
+        diseasesByType[key]!.sort();
+        diseasesByType[key]!.add('Other');
+      }
+
+      setState(() {
+        // Map from plural to singular for compatibility with existing pet types
+        _diseasesByPetType = {
+          'Dog': diseasesByType['Dogs'] ?? [],
+          'Cat': diseasesByType['Cats'] ?? [],
+        };
+        _isLoadingDiseases = false;
+      });
+
+      print('Loaded diseases: $_diseasesByPetType');
+    } catch (e) {
+      print('Error loading diseases: $e');
+      setState(() {
+        // Fallback to basic list if loading fails
+        _diseasesByPetType = {
+          'Dog': ['Contact Dermatitis', 'Allergic Dermatitis', 'Bacterial Infection', 'Fungal Infection', 'Other'],
+          'Cat': ['Contact Dermatitis', 'Allergic Dermatitis', 'Bacterial Infection', 'Fungal Infection', 'Other'],
+        };
+        _isLoadingDiseases = false;
+      });
+    }
+  }
+
+  List<String> _getDiseasesForPetType() {
+    final petType = widget.appointment.pet.type;
+    return _diseasesByPetType[petType] ?? _diseasesByPetType['Dog'] ?? [];
+  }
+
+  String _generateUniqueFilename({String? diseaseName}) {
+    final now = DateTime.now();
+    final timestamp = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+    final petType = widget.appointment.pet.type.toLowerCase();
+    final appointmentId = widget.appointment.id.substring(0, 8); // First 8 chars of appointment ID
+    
+    // Use the selected correct disease if available, otherwise use the AI prediction or diagnosis
+    String diseaseForFilename = diseaseName ?? _selectedCorrectDisease ?? _diagnosisController.text.trim();
+    
+    if (diseaseForFilename.isEmpty && _aiPredictions.isNotEmpty) {
+      diseaseForFilename = _aiPredictions.first['condition'] ?? 'unknown';
+    }
+    
+    if (diseaseForFilename.isEmpty) {
+      diseaseForFilename = 'diagnosis';
+    }
+    
+    // Clean disease name for filename (remove special characters, spaces)
+    diseaseForFilename = diseaseForFilename
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    
+    return '${petType}_${diseaseForFilename}_${appointmentId}_${timestamp}';
   }
 
   Future<void> _selectFollowUpDate() async {
@@ -180,6 +302,17 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       return;
     }
 
+    // Validate correct disease selection if AI assessment is marked as incorrect
+    if (_hasAIAssessment && _aiAssessmentCorrect == false && (_selectedCorrectDisease == null || _selectedCorrectDisease!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select the correct disease when marking AI assessment as incorrect'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -231,6 +364,7 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             'predictionsValidation': validatedPredictions,
             'clinicDiagnosis': _diagnosisController.text.trim(),
             'clinicTreatment': _treatmentController.text.trim(),
+            'correctDisease': _aiAssessmentCorrect == false ? _selectedCorrectDisease : null,
           },
           'updatedAt': Timestamp.now(),
         });
@@ -241,6 +375,36 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
               .collection('model_training_data')
               .doc();
           
+          // Prepare image data for training with unique filename
+          Map<String, dynamic> imageTrainingData = {};
+          if (_originalImageUrl != null || _assessmentImages.isNotEmpty) {
+            // Generate unique filename based on the disease
+            final uniqueFilename = _generateUniqueFilename(
+              diseaseName: _aiAssessmentCorrect == false ? _selectedCorrectDisease : null
+            );
+            
+            if (_originalImageUrl != null) {
+              imageTrainingData['originalImageUrl'] = _originalImageUrl;
+            }
+            if (_annotatedImageUrl != null) {
+              imageTrainingData['annotatedImageUrl'] = _annotatedImageUrl;
+            }
+            if (_assessmentImages.isNotEmpty) {
+              imageTrainingData['assessmentImages'] = _assessmentImages;
+            }
+            if (_assessmentMetadata != null) {
+              imageTrainingData['assessmentMetadata'] = _assessmentMetadata;
+            }
+            
+            // Add unique filename for file storage/organization
+            imageTrainingData['uniqueFilename'] = uniqueFilename;
+            imageTrainingData['diseaseLabel'] = _aiAssessmentCorrect == false 
+                ? _selectedCorrectDisease 
+                : (_aiPredictions.isNotEmpty ? _aiPredictions.first['condition'] : _diagnosisController.text.trim());
+            imageTrainingData['petType'] = widget.appointment.pet.type;
+            imageTrainingData['correctionType'] = _aiAssessmentCorrect == false ? 'manual_correction' : 'validation';
+          }
+          
           batch.set(validationRef, {
             'appointmentId': widget.appointment.id,
             'assessmentResultId': widget.appointment.assessmentResultId,
@@ -250,9 +414,14 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             'clinicDiagnosis': _diagnosisController.text.trim(),
             'overallCorrect': _aiAssessmentCorrect,
             'feedback': _aiAssessmentFeedback,
+            'correctDisease': _aiAssessmentCorrect == false ? _selectedCorrectDisease : null,
             'validatedAt': Timestamp.now(),
             'validatedBy': widget.appointment.clinicId,
             'canUseForTraining': _aiAssessmentCorrect == true, // Mark for retraining
+            'canUseForRetraining': _aiAssessmentCorrect == false && _selectedCorrectDisease != null, // Mark for correction training
+            'imageData': imageTrainingData.isNotEmpty ? imageTrainingData : null,
+            'hasImageAssessment': (_originalImageUrl != null || _assessmentImages.isNotEmpty),
+            'trainingDataType': _originalImageUrl != null ? 'image_assessment' : 'text_assessment',
           });
         }
       }
@@ -407,7 +576,308 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // AI Assessment Validation Section (Compact)
+                            // Clinic Evaluation Section (First)
+                            const Text(
+                              'Clinic Evaluation',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Diagnosis
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Diagnosis',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: TextFormField(
+                                    controller: _diagnosisController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Enter the final diagnosis',
+                                      hintStyle: TextStyle(fontSize: 13),
+                                      border: OutlineInputBorder(),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                      isDense: true,
+                                    ),
+                                    style: const TextStyle(fontSize: 13),
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty) {
+                                        return 'Please enter a diagnosis';
+                                      }
+                                      return null;
+                                    },
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Treatment Provided
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Treatment Provided',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: TextFormField(
+                                    controller: _treatmentController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Describe the treatment',
+                                      hintStyle: TextStyle(fontSize: 13),
+                                      border: OutlineInputBorder(),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                      isDense: true,
+                                    ),
+                                    style: const TextStyle(fontSize: 13),
+                                    validator: (value) {
+                                      if (value == null || value.trim().isEmpty) {
+                                        return 'Please describe the treatment';
+                                      }
+                                      return null;
+                                    },
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Prescription
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Prescription',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: TextFormField(
+                                    controller: _prescriptionController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Medications and dosage',
+                                      hintStyle: TextStyle(fontSize: 13),
+                                      border: OutlineInputBorder(),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                      isDense: true,
+                                    ),
+                                    style: const TextStyle(fontSize: 13),
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Additional Notes
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Additional Notes',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: TextFormField(
+                                    controller: _clinicNotesController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Other observations',
+                                      hintStyle: TextStyle(fontSize: 13),
+                                      border: OutlineInputBorder(),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                      isDense: true,
+                                    ),
+                                    style: const TextStyle(fontSize: 13),
+                                    maxLines: 3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Follow-up Section
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.info.withOpacity(0.05),
+                                border: Border.all(color: AppColors.info.withOpacity(0.2)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Checkbox(
+                                        value: _needsFollowUp,
+                                        onChanged: (value) {
+                                          setState(() => _needsFollowUp = value ?? false);
+                                        },
+                                        activeColor: AppColors.primary,
+                                      ),
+                                      const Expanded(
+                                        child: Text(
+                                          'Schedule Follow-up Appointment',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_needsFollowUp) ...[
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Date',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              InkWell(
+                                                onTap: _selectFollowUpDate,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.grey),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    _followUpDate != null
+                                                        ? '${_followUpDate!.day}/${_followUpDate!.month}/${_followUpDate!.year}'
+                                                        : 'Select Date',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: _followUpDate != null ? Colors.black : Colors.grey,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Time',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              InkWell(
+                                                onTap: _selectFollowUpTime,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.grey),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    _followUpTime ?? 'Select Time',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: _followUpTime != null ? Colors.black : Colors.grey,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // AI Assessment Validation Section (After Clinic Evaluation)
                             if (_hasAIAssessment) ...[
                               Container(
                                 padding: const EdgeInsets.all(16),
@@ -512,7 +982,12 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                                             value: true,
                                             groupValue: _aiAssessmentCorrect,
                                             onChanged: (value) {
-                                              setState(() => _aiAssessmentCorrect = value);
+                                              setState(() {
+                                                _aiAssessmentCorrect = value;
+                                                if (value == true) {
+                                                  _selectedCorrectDisease = null; // Reset when switching to correct
+                                                }
+                                              });
                                             },
                                             activeColor: AppColors.success,
                                             dense: true,
@@ -526,7 +1001,12 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                                             value: false,
                                             groupValue: _aiAssessmentCorrect,
                                             onChanged: (value) {
-                                              setState(() => _aiAssessmentCorrect = value);
+                                              setState(() {
+                                                _aiAssessmentCorrect = value;
+                                                if (value == true) {
+                                                  _selectedCorrectDisease = null; // Reset when switching to correct
+                                                }
+                                              });
                                             },
                                             activeColor: AppColors.error,
                                             dense: true,
@@ -536,6 +1016,107 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                                         ),
                                       ],
                                     ),
+                                    
+                                    // Disease Selection Dropdown (when AI is incorrect)
+                                    if (_aiAssessmentCorrect == false) ...[
+                                      const SizedBox(height: 16),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Select Correct Disease *',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              border: Border.all(color: AppColors.border),
+                                              borderRadius: BorderRadius.circular(8),
+                                              color: AppColors.white,
+                                            ),
+                                            child: _isLoadingDiseases 
+                                                ? Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                                                    child: Row(
+                                                      children: [
+                                                        SizedBox(
+                                                          width: 16,
+                                                          height: 16,
+                                                          child: CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 12),
+                                                        Text(
+                                                          'Loading diseases...',
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            color: AppColors.textSecondary,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                : DropdownButtonFormField<String>(
+                                                    value: _selectedCorrectDisease,
+                                                    decoration: InputDecoration(
+                                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                      border: InputBorder.none,
+                                                      hintText: _getDiseasesForPetType().isEmpty 
+                                                          ? 'No diseases available' 
+                                                          : 'Select the correct disease',
+                                                      hintStyle: const TextStyle(
+                                                        fontSize: 13,
+                                                        color: AppColors.textSecondary,
+                                                      ),
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: AppColors.textPrimary,
+                                                    ),
+                                                    items: _getDiseasesForPetType().map((disease) {
+                                                      return DropdownMenuItem<String>(
+                                                        value: disease,
+                                                        child: Text(
+                                                          disease,
+                                                          style: const TextStyle(fontSize: 13),
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                    onChanged: _getDiseasesForPetType().isEmpty ? null : (value) {
+                                                      setState(() {
+                                                        _selectedCorrectDisease = value;
+                                                      });
+                                                    },
+                                                    validator: (value) {
+                                                      if (_aiAssessmentCorrect == false && (value == null || value.isEmpty)) {
+                                                        return 'Please select the correct disease';
+                                                      }
+                                                      return null;
+                                                    },
+                                                    isExpanded: true,
+                                                    dropdownColor: AppColors.white,
+                                                    iconEnabledColor: AppColors.primary,
+                                                  ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'This will help improve our AI model accuracy for ${widget.appointment.pet.type.toLowerCase()} diseases.',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.textSecondary,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                    
                                     const SizedBox(height: 12),
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -576,275 +1157,144 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                                         ),
                                       ],
                                     ),
+                                    
+                                    // Image Assessment Validation for Model Training
+                                    if (_hasAIAssessment) ...[
+                                      const SizedBox(height: 16),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 16),
+                                      
+                                      Row(
+                                        children: [
+                                          Icon(Icons.image, color: AppColors.primary, size: 18),
+                                          const SizedBox(width: 8),
+                                          const Text(
+                                            'Image Assessment for Model Training',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      
+                                      // Display assessment images (always show container)
+                                      Container(
+                                        width: double.infinity,
+                                        height: 200,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
+                                              ? Image.network(
+                                                  _originalImageUrl!,
+                                                  fit: BoxFit.cover,
+                                                  loadingBuilder: (context, child, loadingProgress) {
+                                                    if (loadingProgress == null) return child;
+                                                    return const Center(
+                                                      child: CircularProgressIndicator(),
+                                                    );
+                                                  },
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: Colors.grey.withOpacity(0.1),
+                                                      child: const Center(
+                                                        child: Column(
+                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                          children: [
+                                                            Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                                                            Text('Image not available', style: TextStyle(color: Colors.grey)),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                )
+                                              : Container(
+                                                  color: Colors.grey.withOpacity(0.1),
+                                                  child: const Center(
+                                                    child: Column(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      children: [
+                                                        Icon(Icons.image, size: 40, color: Colors.grey),
+                                                        Text('No assessment image available', style: TextStyle(color: Colors.grey)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Original Assessment Image',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      
+                                      // Image validation confirmation
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.warning.withOpacity(0.05),
+                                          border: Border.all(color: AppColors.warning.withOpacity(0.2)),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Training Data Validation',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            const Text(
+                                              'By confirming the AI assessment as correct, this image and assessment data will be used to improve our AI model. Please verify the accuracy before confirming.',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textSecondary,
+                                                height: 1.3,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            if (_assessmentMetadata != null) ...[
+                                              Text(
+                                                'Assessment Date: ${(_assessmentMetadata!['timestamp'] as Timestamp?)?.toDate().toString().split(' ')[0] ?? 'Unknown'}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                              ),
+                                              if (_assessmentMetadata!['confidence'] != null)
+                                                Text(
+                                                  'AI Confidence: ${(_assessmentMetadata!['confidence'] as num).toStringAsFixed(1)}%',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 20),
                             ],
-
-                            // Clinic Evaluation Section
-                            const Text(
-                              'Clinic Evaluation',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Diagnosis
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Diagnosis',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: TextFormField(
-                                    controller: _diagnosisController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Enter the final diagnosis',
-                                      hintStyle: TextStyle(fontSize: 13),
-                                      border: OutlineInputBorder(),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                      isDense: true,
-                                    ),
-                                    style: const TextStyle(fontSize: 13),
-                                    maxLines: 2,
-                                    validator: (value) {
-                                      if (value == null || value.trim().isEmpty) {
-                                        return 'Diagnosis is required';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Treatment
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Treatment Provided',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: TextFormField(
-                                    controller: _treatmentController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Describe the treatment',
-                                      hintStyle: TextStyle(fontSize: 13),
-                                      border: OutlineInputBorder(),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                      isDense: true,
-                                    ),
-                                    style: const TextStyle(fontSize: 13),
-                                    maxLines: 2,
-                                    validator: (value) {
-                                      if (value == null || value.trim().isEmpty) {
-                                        return 'Treatment information is required';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Prescription
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Prescription',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: TextFormField(
-                                    controller: _prescriptionController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Medications and dosage',
-                                      hintStyle: TextStyle(fontSize: 13),
-                                      border: OutlineInputBorder(),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                      isDense: true,
-                                    ),
-                                    style: const TextStyle(fontSize: 13),
-                                    maxLines: 2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Additional Notes
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Additional Notes',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: TextFormField(
-                                    controller: _clinicNotesController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Other observations',
-                                      hintStyle: TextStyle(fontSize: 13),
-                                      border: OutlineInputBorder(),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                      isDense: true,
-                                    ),
-                                    style: const TextStyle(fontSize: 13),
-                                    maxLines: 2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Follow-up Section (Compact)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.success.withOpacity(0.05),
-                                border: Border.all(color: AppColors.border),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Checkbox(
-                                        value: _needsFollowUp,
-                                        onChanged: (value) {
-                                          setState(() => _needsFollowUp = value ?? false);
-                                        },
-                                        activeColor: AppColors.primary,
-                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                      const Text(
-                                        'Schedule Follow-up Appointment',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (_needsFollowUp) ...[
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: OutlinedButton.icon(
-                                            onPressed: _selectFollowUpDate,
-                                            icon: const Icon(Icons.calendar_today, size: 16),
-                                            label: Text(
-                                              _followUpDate == null
-                                                  ? 'Select Date'
-                                                  : '${_followUpDate!.year}-${_followUpDate!.month.toString().padLeft(2, '0')}-${_followUpDate!.day.toString().padLeft(2, '0')}',
-                                              style: const TextStyle(fontSize: 13),
-                                            ),
-                                            style: OutlinedButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              visualDensity: VisualDensity.compact,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: OutlinedButton.icon(
-                                            onPressed: _selectFollowUpTime,
-                                            icon: const Icon(Icons.access_time, size: 16),
-                                            label: Text(
-                                              _followUpTime ?? 'Select Time',
-                                              style: const TextStyle(fontSize: 13),
-                                            ),
-                                            style: OutlinedButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              visualDensity: VisualDensity.compact,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
                           ],
                         ),
                       ),

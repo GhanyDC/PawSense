@@ -1,11 +1,15 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/models/user/assessment_result_model.dart';
+import 'package:http/http.dart' as http;
+
+// Conditional imports for platform compatibility
+import 'dart:io' if (dart.library.js) 'io_stub.dart';
+import 'package:path_provider/path_provider.dart' if (dart.library.js) 'io_stub.dart';
 
 class PDFGenerationService {
   // Generate PDF for assessment result
@@ -17,6 +21,27 @@ class PDFGenerationService {
     _debugValidateAssessmentData(assessmentResult);
     
     final pdf = pw.Document();
+
+    // Load Unicode-compatible fonts
+    pw.Font? robotoFont;
+    pw.Font? robotoBoldFont;
+    pw.ThemeData theme = pw.ThemeData.base(); // Default theme
+    
+    try {
+      // Try to load fonts from the system or use printing package built-in fonts
+      robotoFont = await PdfGoogleFonts.notoSansRegular();
+      robotoBoldFont = await PdfGoogleFonts.notoSansBold();
+      
+      // Set theme with Unicode fonts
+      theme = pw.ThemeData.withFont(
+        base: robotoFont,
+        bold: robotoBoldFont,
+      );
+      print('✅ Unicode fonts loaded successfully');
+    } catch (e) {
+      print('⚠️ Failed to load Unicode fonts, using default fonts: $e');
+      // Keep the default theme if font loading fails
+    }
 
     // Load logo image (you can add this to assets)
     pw.ImageProvider? logoImage;
@@ -34,35 +59,35 @@ class PDFGenerationService {
         Uint8List? imageBytes;
         
         if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-          // Handle Cloudinary URL
+          // Handle Cloudinary URL with web-compatible HTTP client
           print('Loading image from URL: $imagePath');
-          final httpClient = HttpClient();
           try {
-            final response = await httpClient.getUrl(Uri.parse(imagePath));
-            final httpResponse = await response.close();
+            final response = await http.get(Uri.parse(imagePath));
             
-            if (httpResponse.statusCode == 200) {
-              final List<int> bytes = [];
-              await for (var chunk in httpResponse) {
-                bytes.addAll(chunk);
-              }
-              imageBytes = Uint8List.fromList(bytes);
+            if (response.statusCode == 200) {
+              imageBytes = response.bodyBytes;
               print('✅ Loaded image from URL: $imagePath');
             } else {
-              print('❌ Failed to load image from URL: $imagePath (Status: ${httpResponse.statusCode})');
+              print('❌ Failed to load image from URL: $imagePath (Status: ${response.statusCode})');
             }
-          } finally {
-            httpClient.close();
+          } catch (e) {
+            print('❌ HTTP error loading image from URL: $imagePath - $e');
+          }
+        } else if (!kIsWeb) {
+          // Handle local file path (only for non-web platforms)
+          try {
+            final file = File(imagePath);
+            if (await file.exists()) {
+              imageBytes = await file.readAsBytes();
+              print('✅ Loaded local image: $imagePath');
+            } else {
+              print('❌ Local file not found: $imagePath');
+            }
+          } catch (e) {
+            print('❌ Error loading local file: $imagePath - $e');
           }
         } else {
-          // Handle local file path
-          final file = File(imagePath);
-          if (await file.exists()) {
-            imageBytes = await file.readAsBytes();
-            print('✅ Loaded local image: $imagePath');
-          } else {
-            print('❌ Local file not found: $imagePath');
-          }
+          print('❌ Local file paths not supported on web platform: $imagePath');
         }
         
         if (imageBytes != null) {
@@ -75,6 +100,7 @@ class PDFGenerationService {
 
     pdf.addPage(
       pw.MultiPage(
+        theme: theme,
         build: (pw.Context context) {
           return [
             // Header with logo and PawSense title
@@ -112,37 +138,53 @@ class PDFGenerationService {
     return pdf.save();
   }
 
-  // Save PDF to device storage (simplified approach)
+  // Save PDF to device storage (platform-aware approach)
   static Future<String> savePDFToDevice(Uint8List pdfBytes, String fileName) async {
-    try {
-      Directory directory;
-      
-      if (Platform.isAndroid) {
-        // For Android, try to save to external storage first
-        final externalDir = await getExternalStorageDirectory();
-        if (externalDir != null) {
-          // Create a Downloads folder in external storage
-          directory = Directory('${externalDir.path}/Downloads');
-          if (!await directory.exists()) {
-            await directory.create(recursive: true);
+    if (kIsWeb) {
+      // For web, use the system save dialog via printing package
+      try {
+        await Printing.layoutPdf(
+          name: fileName,
+          format: PdfPageFormat.a4,
+          onLayout: (PdfPageFormat format) async => pdfBytes,
+        );
+        return 'PDF saved via browser';
+      } catch (e) {
+        print('Error saving PDF on web: $e');
+        rethrow;
+      }
+    } else {
+      // For mobile platforms only
+      try {
+        Directory directory;
+        
+        if (Platform.isAndroid) {
+          // For Android, try to save to external storage first
+          final externalDir = await getExternalStorageDirectory();
+          if (externalDir != null) {
+            // Create a Downloads folder in external storage
+            directory = Directory('${externalDir.path}/Downloads');
+            if (!await directory.exists()) {
+              await directory.create(recursive: true);
+            }
+          } else {
+            // Fallback to application documents directory
+            directory = await getApplicationDocumentsDirectory();
           }
         } else {
-          // Fallback to application documents directory
+          // For iOS, use documents directory
           directory = await getApplicationDocumentsDirectory();
         }
-      } else {
-        // For iOS, use documents directory
-        directory = await getApplicationDocumentsDirectory();
+        
+        final file = File('${directory.path}/$fileName.pdf');
+        await file.writeAsBytes(pdfBytes);
+        
+        print('PDF saved to: ${file.path}');
+        return file.path;
+      } catch (e) {
+        print('Error saving PDF on mobile: $e');
+        rethrow;
       }
-      
-      final file = File('${directory.path}/$fileName.pdf');
-      await file.writeAsBytes(pdfBytes);
-      
-      print('PDF saved to: ${file.path}');
-      return file.path;
-    } catch (e) {
-      print('Error saving PDF: $e');
-      rethrow;
     }
   }
 

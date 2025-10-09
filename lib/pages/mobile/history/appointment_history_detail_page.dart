@@ -332,9 +332,6 @@ class _AppointmentHistoryDetailPageState extends State<AppointmentHistoryDetailP
           ),
           const SizedBox(height: kMobileSizedBoxLarge),
           _buildInfoRow('Service', appointment.serviceName),
-          _buildInfoRow('Service ID', appointment.serviceId),
-          _buildInfoRow('Clinic ID', appointment.clinicId),
-          _buildInfoRow('Pet ID', appointment.petId),
         ],
       ),
     );
@@ -511,7 +508,6 @@ class _AppointmentHistoryDetailPageState extends State<AppointmentHistoryDetailP
           const SizedBox(height: kMobileSizedBoxLarge),
           _buildInfoRow('Created', _formatDateTime(appointment.createdAt)),
           _buildInfoRow('Last Updated', _formatDateTime(appointment.updatedAt)),
-          _buildInfoRow('Appointment ID', appointment.id ?? 'N/A'),
         ],
       ),
     );

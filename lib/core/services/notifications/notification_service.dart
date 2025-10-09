@@ -1,9 +1,43 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/models/notifications/notification_model.dart';
 
 class NotificationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'notifications';
+  
+  // Add a stream controller for immediate updates
+  static final _updateController = StreamController<bool>.broadcast();
+  
+  // Static cache for read notifications to persist across page rebuilds
+  static final Set<String> _localReadCache = <String>{};
+  
+  // OPTIMIZATION: Add caching system to prevent excessive Firebase reads
+  static final Map<String, List<NotificationModel>> _notificationCache = {};
+  static final Map<String, int> _unreadCountCache = {};
+  static final Map<String, DateTime> _lastFetchTime = {};
+  static final Set<String> _migratedUsers = {};
+  
+  // OPTIMIZATION: Cache duration constants for aggressive caching
+  static const Duration _cacheValidDuration = Duration(minutes: 2);
+  static const Duration _streamRefreshDuration = Duration(seconds: 30); // MUCH slower than 500ms!
+  
+  /// Trigger an immediate update of notification streams
+  static void triggerUpdate() {
+    _updateController.add(true);
+    print('🚀 Triggered notification update');
+  }
+  
+  /// Add notification to local read cache
+  static void _addToReadCache(String notificationId) {
+    _localReadCache.add(notificationId);
+    print('📝 Added to read cache: $notificationId');
+  }
+  
+  /// Check if notification is in local read cache
+  static bool _isInReadCache(String notificationId) {
+    return _localReadCache.contains(notificationId);
+  }
 
   /// Get user notifications stream
   static Stream<List<NotificationModel>> getUserNotifications(String userId) {
@@ -21,26 +55,161 @@ class NotificationService {
 
   /// Get unread notifications count
   static Stream<int> getUnreadNotificationsCount(String userId) {
-    return _firestore
-        .collection(_collection)
-        .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => NotificationModel.fromFirestore(doc))
-            .where((notification) => notification.shouldShow)
-            .length);
+    late StreamController<int> controller;
+    late StreamSubscription periodicSub;
+    late StreamSubscription triggerSub;
+    
+    controller = StreamController<int>(
+      onListen: () {
+        // Function to update count with caching
+        Future<void> updateCount() async {
+          try {
+            final now = DateTime.now();
+            final lastFetch = _lastFetchTime['unread_$userId'];
+            
+            // OPTIMIZATION: Use cached count if still valid (within 2 minutes)
+            if (lastFetch != null && 
+                now.difference(lastFetch) < _cacheValidDuration &&
+                _unreadCountCache.containsKey(userId)) {
+              controller.add(_unreadCountCache[userId]!);
+              return;
+            }
+            
+            // Count regular notifications with LIMIT to reduce reads
+            final regularSnapshot = await _firestore
+                .collection(_collection)
+                .where('userId', isEqualTo: userId)
+                .where('isRead', isEqualTo: false)
+                .limit(50) // LIMIT to reduce Firebase reads
+                .get();
+
+            final regularCount = regularSnapshot.docs
+                .map((doc) => NotificationModel.fromFirestore(doc))
+                .where((notification) => notification.shouldShow)
+                .length;
+
+            // Get virtual notification read states
+            final readStatesDoc = await _firestore
+                .collection('user_preferences')
+                .doc('notification_read_states_$userId')
+                .get();
+            
+            final readStates = readStatesDoc.exists ? readStatesDoc.data() ?? {} : <String, dynamic>{};
+
+            // OPTIMIZATION: Get cached virtual notification count to reduce reads
+            int virtualCount = await _getCachedVirtualNotificationCount(userId, readStates);
+
+            final totalCount = regularCount + virtualCount;
+            
+            // OPTIMIZATION: Cache the result
+            _unreadCountCache[userId] = totalCount;
+            _lastFetchTime['unread_$userId'] = now;
+            
+            controller.add(totalCount);
+          } catch (e) {
+            print('Error counting unread notifications: $e');
+            controller.add(0);
+          }
+        }
+        
+        // Initial update
+        updateCount();
+        
+        // Periodic updates every 30 seconds instead of 500ms (60x reduction!)
+        periodicSub = Stream.periodic(_streamRefreshDuration)
+            .listen((_) => updateCount());
+        
+        // Immediate updates when triggered
+        triggerSub = _updateController.stream
+            .listen((_) => updateCount());
+      },
+      onCancel: () {
+        periodicSub.cancel();
+        triggerSub.cancel();
+      },
+    );
+    
+    return controller.stream.distinct(); // Only emit when count actually changes
   }
 
   /// Mark notification as read
-  static Future<void> markAsRead(String notificationId) async {
+  static Future<void> markAsRead(String notificationId, {String? userId}) async {
     try {
+      print('🔍 Attempting to mark notification as read: $notificationId (userId: $userId)');
+      
+      // Add to local cache immediately for instant updates
+      _addToReadCache(notificationId);
+      
+      // Check if this is a virtual notification (appointment status, reminders, etc.)
+      if (notificationId.startsWith('appointment_') && 
+          (notificationId.endsWith('_reminder') || notificationId.endsWith('_status'))) {
+        print('📱 Detected virtual appointment notification: $notificationId');
+        
+        // For appointment notifications, store the read state separately
+        final docPath = userId != null ? 'notification_read_states_$userId' : 'notification_read_states';
+        await _firestore.collection('user_preferences').doc(docPath).set({
+          notificationId: {
+            'isRead': true,
+            'readAt': Timestamp.now(),
+          }
+        }, SetOptions(merge: true));
+        print('✅ Marked virtual notification as read: $notificationId');
+        
+        // Trigger immediate update
+        triggerUpdate();
+        return;
+      }
+      
+      if (notificationId.startsWith('message_') || notificationId.startsWith('task_')) {
+        print('💬 Detected virtual message/task notification: $notificationId');
+        
+        // For message and task notifications, also store read state separately
+        final docPath = userId != null ? 'notification_read_states_$userId' : 'notification_read_states';
+        await _firestore.collection('user_preferences').doc(docPath).set({
+          notificationId: {
+            'isRead': true,
+            'readAt': Timestamp.now(),
+          }
+        }, SetOptions(merge: true));
+        print('✅ Marked virtual notification as read: $notificationId');
+        
+        // Trigger immediate update
+        triggerUpdate();
+        return;
+      }
+
+      // For regular notifications stored in Firestore
+      print('📄 Detected regular notification, updating Firestore document: $notificationId');
       await _firestore.collection(_collection).doc(notificationId).update({
         'isRead': true,
         'readAt': Timestamp.now(),
       });
+      print('✅ Marked notification as read: $notificationId');
+      
+      // Trigger immediate update
+      triggerUpdate();
     } catch (e) {
-      print('Error marking notification as read: $e');
+      print('❌ Error marking notification as read: $e');
+      print('📋 NotificationId: $notificationId');
+      print('👤 UserId: $userId');
+      
+      // Remove from cache on error
+      _localReadCache.remove(notificationId);
+    }
+  }
+
+  /// Check if a virtual notification is read
+  static Future<bool> isVirtualNotificationRead(String notificationId, {String? userId}) async {
+    try {
+      final docPath = userId != null ? 'notification_read_states_$userId' : 'notification_read_states';
+      final doc = await _firestore.collection('user_preferences').doc(docPath).get();
+      if (!doc.exists) return false;
+      
+      final data = doc.data();
+      return data?[notificationId]?['isRead'] == true;
+    } catch (e) {
+      print('Error checking virtual notification read state: $e');
+      return false;
     }
   }
 
@@ -134,11 +303,10 @@ class NotificationService {
   /// Generate appointment notifications
   static Stream<List<NotificationModel>> getAppointmentNotifications(String userId) async* {
     try {
-      // Get user's appointments
+      // Get user's appointments (removed orderBy to avoid index requirement)
       await for (final appointmentsSnapshot in _firestore
           .collection('appointments')
           .where('userId', isEqualTo: userId)
-          .orderBy('updatedAt', descending: true)
           .limit(20)
           .snapshots()) {
         
@@ -162,7 +330,7 @@ class NotificationService {
 
             switch (status) {
               case 'pending':
-                title = 'Appointment Request Received';
+                title = 'Appointment Request Sent';
                 message = 'Your appointment request for $petName at $clinicName has been submitted and is awaiting approval.';
                 priority = NotificationPriority.medium;
                 break;
@@ -171,11 +339,7 @@ class NotificationService {
                 message = 'Great news! Your appointment for $petName at $clinicName has been confirmed.';
                 priority = NotificationPriority.high;
                 break;
-              case 'cancelled':
-                title = 'Appointment Cancelled';
-                message = 'Your appointment for $petName at $clinicName has been cancelled.';
-                priority = NotificationPriority.high;
-                break;
+              // Removed 'cancelled' case - these are handled by real notifications to prevent duplicates
               case 'completed':
                 title = 'Appointment Completed';
                 message = 'Your appointment for $petName at $clinicName has been completed.';
@@ -192,7 +356,7 @@ class NotificationService {
                 category: NotificationCategory.appointment,
                 priority: priority,
                 isRead: false,
-                actionUrl: '/appointments/${appointmentId}',
+                actionUrl: '/appointments/details/${appointmentId}',
                 actionLabel: 'View Details',
                 createdAt: updatedAt,
                 metadata: {
@@ -218,7 +382,7 @@ class NotificationService {
                   category: NotificationCategory.appointment,
                   priority: NotificationPriority.medium,
                   isRead: false,
-                  actionUrl: '/appointments/${appointmentId}',
+                  actionUrl: '/appointments/details/${appointmentId}',
                   actionLabel: 'View Details',
                   createdAt: now,
                   metadata: {
@@ -247,12 +411,11 @@ class NotificationService {
   /// Generate message notifications
   static Stream<List<NotificationModel>> getMessageNotifications(String userId) async* {
     try {
-      // Get user's conversations with unread messages
+      // Get user's conversations with unread messages (removed orderBy to avoid index requirement)
       await for (final conversationsSnapshot in _firestore
           .collection('conversations')
           .where('userId', isEqualTo: userId)
           .where('unreadCount', isGreaterThan: 0)
-          .orderBy('updatedAt', descending: true)
           .snapshots()) {
         
         final notifications = <NotificationModel>[];
@@ -306,11 +469,10 @@ class NotificationService {
   /// Generate task notifications
   static Stream<List<NotificationModel>> getTaskNotifications(String userId) async* {
     try {
-      // Get user's tasks
+      // Get user's tasks (removed orderBy to avoid index requirement)
       await for (final tasksSnapshot in _firestore
           .collection('tasks')
           .where('assigneeId', isEqualTo: userId)
-          .orderBy('updatedAt', descending: true)
           .limit(20)
           .snapshots()) {
         
@@ -415,11 +577,19 @@ class NotificationService {
   /// Get comprehensive notifications (appointments + messages + tasks + regular notifications)
   static Stream<List<NotificationModel>> getAllUserNotifications(String userId) async* {
     try {
-      // Combine all notification streams
-      await for (final _ in Stream.periodic(const Duration(seconds: 2))) {
+      // OPTIMIZATION: Combine all notification streams with much slower updates to reduce Firebase reads
+      await for (final _ in Stream.periodic(_streamRefreshDuration)) {
         final allNotifications = <NotificationModel>[];
 
-        // Get regular notifications from database
+        // Get virtual notification read states
+        final readStatesDoc = await _firestore
+            .collection('user_preferences')
+            .doc('notification_read_states_$userId')
+            .get();
+        
+        final readStates = readStatesDoc.exists ? readStatesDoc.data() ?? {} : <String, dynamic>{};
+
+        // Get regular notifications from database and apply cache states
         final regularNotifications = await _firestore
             .collection(_collection)
             .where('userId', isEqualTo: userId)
@@ -427,27 +597,112 @@ class NotificationService {
             .limit(20)
             .get();
 
-        allNotifications.addAll(
-          regularNotifications.docs
-              .map((doc) => NotificationModel.fromFirestore(doc))
-              .where((notification) => notification.shouldShow)
-        );
+        for (final doc in regularNotifications.docs) {
+          final notification = NotificationModel.fromFirestore(doc);
+          if (notification.shouldShow) {
+            // Check if notification is in cache and update read state accordingly
+            if (_isInReadCache(notification.id)) {
+              final updatedNotification = NotificationModel(
+                id: notification.id,
+                userId: notification.userId,
+                title: notification.title,
+                message: notification.message,
+                category: notification.category,
+                priority: notification.priority,
+                isRead: true, // Override with cache state
+                actionUrl: notification.actionUrl,
+                actionLabel: notification.actionLabel,
+                createdAt: notification.createdAt,
+                sentAt: notification.sentAt,
+                readAt: notification.readAt,
+                expiresAt: notification.expiresAt,
+                metadata: notification.metadata,
+              );
+              allNotifications.add(updatedNotification);
+            } else {
+              allNotifications.add(notification);
+            }
+          }
+        }
 
-        // Get appointment notifications
+        // Get appointment notifications and apply read states (both database and cache)
         await for (final appointmentNotifications in getAppointmentNotifications(userId).take(1)) {
-          allNotifications.addAll(appointmentNotifications);
+          for (final notification in appointmentNotifications) {
+            final isDatabaseRead = readStates[notification.id]?['isRead'] == true;
+            final isCacheRead = _isInReadCache(notification.id);
+            final isRead = isDatabaseRead || isCacheRead; // Check both sources
+            
+            allNotifications.add(NotificationModel(
+              id: notification.id,
+              userId: notification.userId,
+              title: notification.title,
+              message: notification.message,
+              category: notification.category,
+              priority: notification.priority,
+              isRead: isRead,
+              actionUrl: notification.actionUrl,
+              actionLabel: notification.actionLabel,
+              createdAt: notification.createdAt,
+              sentAt: notification.sentAt,
+              readAt: notification.readAt,
+              expiresAt: notification.expiresAt,
+              metadata: notification.metadata,
+            ));
+          }
           break;
         }
 
-        // Get message notifications
+        // Get message notifications and apply read states (both database and cache)
         await for (final messageNotifications in getMessageNotifications(userId).take(1)) {
-          allNotifications.addAll(messageNotifications);
+          for (final notification in messageNotifications) {
+            final isDatabaseRead = readStates[notification.id]?['isRead'] == true;
+            final isCacheRead = _isInReadCache(notification.id);
+            final isRead = isDatabaseRead || isCacheRead; // Check both sources
+            
+            allNotifications.add(NotificationModel(
+              id: notification.id,
+              userId: notification.userId,
+              title: notification.title,
+              message: notification.message,
+              category: notification.category,
+              priority: notification.priority,
+              isRead: isRead,
+              actionUrl: notification.actionUrl,
+              actionLabel: notification.actionLabel,
+              createdAt: notification.createdAt,
+              sentAt: notification.sentAt,
+              readAt: notification.readAt,
+              expiresAt: notification.expiresAt,
+              metadata: notification.metadata,
+            ));
+          }
           break;
         }
 
-        // Get task notifications  
+        // Get task notifications and apply read states (both database and cache)
         await for (final taskNotifications in getTaskNotifications(userId).take(1)) {
-          allNotifications.addAll(taskNotifications);
+          for (final notification in taskNotifications) {
+            final isDatabaseRead = readStates[notification.id]?['isRead'] == true;
+            final isCacheRead = _isInReadCache(notification.id);
+            final isRead = isDatabaseRead || isCacheRead; // Check both sources
+            
+            allNotifications.add(NotificationModel(
+              id: notification.id,
+              userId: notification.userId,
+              title: notification.title,
+              message: notification.message,
+              category: notification.category,
+              priority: notification.priority,
+              isRead: isRead,
+              actionUrl: notification.actionUrl,
+              actionLabel: notification.actionLabel,
+              createdAt: notification.createdAt,
+              sentAt: notification.sentAt,
+              readAt: notification.readAt,
+              expiresAt: notification.expiresAt,
+              metadata: notification.metadata,
+            ));
+          }
           break;
         }
 
@@ -482,11 +737,19 @@ class NotificationService {
     try {
       final title = isEmergency 
           ? 'Emergency Appointment Request Submitted'
-          : 'Appointment Request Received';
+          : 'Appointment Request Sent';
       
       final message = isEmergency
           ? 'Your emergency appointment request for $petName has been submitted. $clinicName will contact you shortly.'
           : 'Your appointment request for $petName at $clinicName has been submitted and is awaiting approval.';
+
+      // Determine the action URL and label based on whether we have an appointmentId
+      final actionUrl = appointmentId != null 
+          ? '/appointments/details/$appointmentId'
+          : '/book-appointment';
+      final actionLabel = appointmentId != null 
+          ? 'View Details'
+          : 'View Status';
 
       await createNotification(
         userId: userId,
@@ -494,8 +757,8 @@ class NotificationService {
         message: message,
         category: NotificationCategory.appointment,
         priority: isEmergency ? NotificationPriority.high : NotificationPriority.medium,
-        actionUrl: '/book-appointment',
-        actionLabel: 'View Status',
+        actionUrl: actionUrl,
+        actionLabel: actionLabel,
         metadata: {
           'appointmentId': appointmentId ?? 'pending_${DateTime.now().millisecondsSinceEpoch}',
           'clinicName': clinicName,
@@ -587,6 +850,59 @@ class NotificationService {
     }
   }
 
+  /// OPTIMIZATION: Get cached virtual notification count to reduce Firebase reads
+  static Future<int> _getCachedVirtualNotificationCount(String userId, Map<String, dynamic> readStates) async {
+    final now = DateTime.now();
+    final cacheKey = 'virtual_count_$userId';
+    final lastFetch = _lastFetchTime[cacheKey];
+    
+    // Return cached count if still valid (within 2 minutes)
+    if (lastFetch != null && 
+        now.difference(lastFetch) < _cacheValidDuration &&
+        _unreadCountCache.containsKey(cacheKey)) {
+      return _unreadCountCache[cacheKey]!;
+    }
+    
+    try {
+      int virtualCount = 0;
+      
+      // Count only recent appointments to reduce reads (last 7 days)
+      final recentCutoff = DateTime.now().subtract(const Duration(days: 7));
+      
+      // Get appointments with limit and recent filter
+      final appointmentsQuery = await _firestore
+          .collection('appointments')
+          .where('userId', isEqualTo: userId)
+          .where('createdAt', isGreaterThan: Timestamp.fromDate(recentCutoff))
+          .limit(10) // Limit to reduce reads
+          .get();
+      
+      // Only count unread appointment notifications
+      for (final doc in appointmentsQuery.docs) {
+        final appointmentId = doc.id;
+        final status = doc.data()['status'] as String?;
+        
+        // Only generate notifications for active statuses
+        if (status == 'pending' || status == 'confirmed') {
+          final notificationId = 'appointment_${appointmentId}_status';
+          if (readStates[notificationId]?['isRead'] != true) {
+            virtualCount++;
+          }
+        }
+      }
+      
+      // Cache the result
+      _unreadCountCache[cacheKey] = virtualCount;
+      _lastFetchTime[cacheKey] = now;
+      
+      return virtualCount;
+      
+    } catch (e) {
+      print('❌ Error getting cached virtual notification count: $e');
+      return 0;
+    }
+  }
+
   /// Format date for notifications
   static String _formatDate(DateTime date) {
     final now = DateTime.now();
@@ -601,5 +917,187 @@ class NotificationService {
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
+  }
+
+  /// Migration function to update old "Received" notifications to "Sent"
+  static Future<void> migrateOldNotificationText(String userId) async {
+    try {
+      print('🔄 Starting migration of old notification text for user: $userId');
+      
+      // Find all notifications with the old text
+      final oldNotificationsQuery = await _firestore
+          .collection(_collection)
+          .where('userId', isEqualTo: userId)
+          .where('title', isEqualTo: 'Appointment Request Received')
+          .get();
+      
+      final batch = _firestore.batch();
+      int updateCount = 0;
+      
+      for (final doc in oldNotificationsQuery.docs) {
+        // Update the title to the new text
+        batch.update(doc.reference, {
+          'title': 'Appointment Request Sent',
+          'updatedAt': Timestamp.now(),
+        });
+        updateCount++;
+      }
+      
+      if (updateCount > 0) {
+        await batch.commit();
+        print('✅ Migrated $updateCount notifications from "Received" to "Sent"');
+      } else {
+        print('ℹ️ No notifications found with old text to migrate');
+      }
+      
+    } catch (e) {
+      print('❌ Error during notification migration: $e');
+    }
+  }
+
+  /// Migration function to update action URLs for appointment notifications
+  static Future<void> migrateAppointmentActionUrls(String userId) async {
+    try {
+      print('🔄 Starting migration of appointment action URLs for user: $userId');
+      
+      // Find appointment notifications with old action URL
+      final oldActionUrlQuery = await _firestore
+          .collection(_collection)
+          .where('userId', isEqualTo: userId)
+          .where('actionUrl', isEqualTo: '/book-appointment')
+          .where('category', isEqualTo: 'appointment')
+          .get();
+      
+      final batch = _firestore.batch();
+      int updateCount = 0;
+      
+      for (final doc in oldActionUrlQuery.docs) {
+        final data = doc.data();
+        final appointmentId = data['metadata']?['appointmentId'] as String?;
+        
+        if (appointmentId != null && appointmentId != 'pending_${DateTime.now().millisecondsSinceEpoch}') {
+          // Update to use appointment details URL
+          batch.update(doc.reference, {
+            'actionUrl': '/appointments/details/$appointmentId',
+            'actionLabel': 'View Details',
+            'updatedAt': Timestamp.now(),
+          });
+          updateCount++;
+        }
+      }
+      
+      if (updateCount > 0) {
+        await batch.commit();
+        print('✅ Migrated $updateCount appointment notification URLs');
+      } else {
+        print('ℹ️ No appointment notifications found with old URLs to migrate');
+      }
+      
+    } catch (e) {
+      print('❌ Error during URL migration: $e');
+    }
+  }
+
+  /// Clean up duplicate cancelled appointment notifications
+  static Future<void> cleanupDuplicateCancelledNotifications(String userId) async {
+    try {
+      print('🧹 Cleaning up duplicate cancelled notifications for user: $userId');
+      
+      // Get all cancelled appointment notifications for this user
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('userId', isEqualTo: userId)
+          .where('category', isEqualTo: 'appointment')
+          .where('title', isEqualTo: 'Appointment Cancelled')
+          .get();
+      
+      if (snapshot.docs.isEmpty) {
+        print('ℹ️ No cancelled notifications found to clean up');
+        return;
+      }
+      
+      // Group notifications by appointment ID
+      final Map<String, List<QueryDocumentSnapshot>> notificationGroups = {};
+      for (final doc in snapshot.docs) {
+        final metadata = doc.data();
+        final appointmentId = metadata['metadata']?['appointmentId'] as String?;
+        
+        if (appointmentId != null) {
+          notificationGroups.putIfAbsent(appointmentId, () => []).add(doc);
+        }
+      }
+      
+      int deletedCount = 0;
+      final batch = _firestore.batch();
+      
+      // For each appointment, keep only the most recent notification and delete duplicates
+      for (final group in notificationGroups.values) {
+        if (group.length > 1) {
+          // Sort by creation time (most recent first)
+          group.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>?;
+            final bData = b.data() as Map<String, dynamic>?;
+            final aTime = aData?['createdAt'] as Timestamp?;
+            final bTime = bData?['createdAt'] as Timestamp?;
+            if (aTime == null || bTime == null) return 0;
+            return bTime.compareTo(aTime);
+          });
+          
+          // Delete all but the most recent (first in sorted list)
+          for (int i = 1; i < group.length; i++) {
+            batch.delete(group[i].reference);
+            deletedCount++;
+          }
+        }
+      }
+      
+      if (deletedCount > 0) {
+        await batch.commit();
+        print('✅ Cleaned up $deletedCount duplicate cancelled notifications');
+      } else {
+        print('ℹ️ No duplicate cancelled notifications found');
+      }
+      
+    } catch (e) {
+      print('❌ Error cleaning up duplicate notifications: $e');
+    }
+  }
+
+  /// Complete migration for a user (call this once to fix existing notifications)
+  static Future<void> migrateUserNotifications(String userId) async {
+    // OPTIMIZATION: Skip if already migrated in this session to prevent repeated Firebase reads
+    if (_migratedUsers.contains(userId)) {
+      print('📋 Skipping migration - already completed for user: $userId');
+      return;
+    }
+    
+    try {
+      print('🚀 Starting complete notification migration for user: $userId');
+      await migrateOldNotificationText(userId);
+      await migrateAppointmentActionUrls(userId);
+      await cleanupDuplicateCancelledNotifications(userId);
+      
+      // Mark as migrated to prevent re-running
+      _migratedUsers.add(userId);
+      print('✅ Notification migration completed for user: $userId');
+      
+    } catch (e) {
+      print('❌ Migration failed for user: $userId - $e');
+    }
+  }
+
+  /// OPTIMIZATION: Clear cache when needed to free memory
+  static void clearNotificationCache(String userId) {
+    _notificationCache.removeWhere((key, value) => key.contains(userId));
+    _unreadCountCache.removeWhere((key, value) => key.contains(userId));
+    _lastFetchTime.removeWhere((key, value) => key.contains(userId));
+    print('🧹 Cleared notification cache for user: $userId');
+  }
+
+  /// OPTIMIZATION: Manual refresh trigger for immediate updates
+  static void forceRefresh(String userId) {
+    clearNotificationCache(userId);
+    triggerUpdate();
+    print('🔄 Forced refresh for user: $userId');
   }
 }
