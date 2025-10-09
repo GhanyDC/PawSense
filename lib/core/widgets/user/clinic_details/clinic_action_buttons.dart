@@ -26,18 +26,19 @@ class ClinicActionButtons extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Action Buttons Row
-          Row(
+          // Action Buttons Column (stacked vertically)
+          Column(
             children: [
-              Expanded(
-                flex: 2,
+              // Book Appointment Button (full width)
+              SizedBox(
+                width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: clinic.isActive ? onBookAppointment : null,
                   icon: Icon(Icons.calendar_today, size: 18),
                   label: Text(
                     'Book Appointment',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -45,7 +46,7 @@ class ClinicActionButtons extends StatelessWidget {
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.white,
                     padding: const EdgeInsets.symmetric(
-                      vertical: kMobilePaddingSmall,
+                      vertical: kMobilePaddingMedium,
                       horizontal: kMobilePaddingMedium,
                     ),
                     shape: RoundedRectangleBorder(
@@ -56,16 +57,18 @@ class ClinicActionButtons extends StatelessWidget {
                 ),
               ),
               
-              const SizedBox(width: kMobileSizedBoxMedium),
+              const SizedBox(height: kMobileSizedBoxMedium),
               
-              Expanded(
+              // Message Button (full width)
+              SizedBox(
+                width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: clinic.isActive ? onMessageClinic : null,
-                  icon: Icon(Icons.message, size: 16),
+                  icon: Icon(Icons.message, size: 18),
                   label: Text(
                     'Message',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -73,8 +76,8 @@ class ClinicActionButtons extends StatelessWidget {
                     foregroundColor: AppColors.primary,
                     side: BorderSide(color: AppColors.primary),
                     padding: const EdgeInsets.symmetric(
-                      vertical: kMobilePaddingSmall,
-                      horizontal: kMobilePaddingSmall,
+                      vertical: kMobilePaddingMedium,
+                      horizontal: kMobilePaddingMedium,
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: kMobileBorderRadiusButtonPreset,
