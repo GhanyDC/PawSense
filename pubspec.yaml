@@ -196,12 +196,6 @@ flutter_native_splash:
   #color_dark_ios: "#042a49"
   #color_web: "#42a5f5"
   #color_dark_web: "#042a49"
-  
-  # Use the same logo but with different sizing for mobile platforms
-  image_android: assets/img/logo.png
-  image_dark_android: assets/img/logo.png
-  image_ios: assets/img/logo.png
-  image_dark_ios: assets/img/logo.png
   #image_web: assets/splash-web.png
   #image_dark_web: assets/splash-invert-web.png
   #background_image_android: "assets/background-android.png"

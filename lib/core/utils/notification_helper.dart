@@ -40,6 +40,41 @@ class NotificationHelper {
     );
   }
 
+  /// Convert AlertData back to NotificationModel
+  static NotificationModel toNotificationModel(AlertData alert) {
+    return NotificationModel(
+      id: alert.id,
+      userId: '', // Will be filled by the service
+      title: alert.title,
+      message: alert.subtitle,
+      category: _mapAlertTypeToCategory(alert.type),
+      priority: NotificationPriority.medium, // Default priority
+      isRead: alert.isRead,
+      createdAt: alert.timestamp,
+      actionUrl: alert.actionUrl,
+      actionLabel: alert.actionLabel,
+      metadata: alert.metadata,
+    );
+  }
+
+  /// Map AlertType back to NotificationCategory
+  static NotificationCategory _mapAlertTypeToCategory(AlertType type) {
+    switch (type) {
+      case AlertType.appointment:
+      case AlertType.appointmentPending:
+      case AlertType.reschedule:
+      case AlertType.reappointment:
+        return NotificationCategory.appointment;
+      case AlertType.message:
+        return NotificationCategory.message;
+      case AlertType.task:
+        return NotificationCategory.task;
+      case AlertType.systemUpdate:
+      case AlertType.declined:
+        return NotificationCategory.system;
+    }
+  }
+
   /// Map NotificationCategory to AlertType
   static AlertType _mapCategoryToAlertType(NotificationCategory category, [Map<String, dynamic>? metadata]) {
     switch (category) {
