@@ -29,9 +29,6 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
   int _currentNavIndex = 2; // Set to 2 for alerts tab
   Stream<List<AlertData>>? _notificationsStream;
   
-  // OPTIMIZATION: Track migration per session to prevent repeated Firebase reads
-  static final Set<String> _sessionMigrations = {};
-  
   // Local state for instant updates
   final Set<String> _locallyReadNotifications = <String>{};
 
@@ -90,12 +87,6 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     // Clear local state to prevent memory leaks
     _locallyReadNotifications.clear();
-    
-    // OPTIMIZATION: Clear notification cache to free memory
-    if (_userModel != null) {
-      NotificationService.clearNotificationCache(_userModel!.uid);
-    }
-    
     // Stream will be automatically disposed when widget is disposed
     super.dispose();
   }
@@ -104,14 +95,8 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     try {
       final userModel = await AuthGuard.getCurrentUser();
       if (userModel != null && mounted) {
-        // OPTIMIZATION: Only run migration once per session to prevent repeated Firebase reads
-        if (!_sessionMigrations.contains(userModel.uid)) {
-          // Run migration in background to avoid blocking UI
-          Future.delayed(const Duration(seconds: 2), () {
-            NotificationService.migrateUserNotifications(userModel.uid);
-          });
-          _sessionMigrations.add(userModel.uid);
-        }
+        // Run migration for existing notifications (one-time fix)
+        NotificationService.migrateUserNotifications(userModel.uid);
         
         setState(() {
           _userModel = userModel;
