@@ -363,7 +363,7 @@ class NotificationService {
                 category: NotificationCategory.appointment,
                 priority: priority,
                 isRead: false,
-                actionUrl: '/appointments/${appointmentId}',
+                actionUrl: '/appointments/details/${appointmentId}',
                 actionLabel: 'View Details',
                 createdAt: updatedAt,
                 metadata: {
@@ -389,7 +389,7 @@ class NotificationService {
                   category: NotificationCategory.appointment,
                   priority: NotificationPriority.medium,
                   isRead: false,
-                  actionUrl: '/appointments/${appointmentId}',
+                  actionUrl: '/appointments/details/${appointmentId}',
                   actionLabel: 'View Details',
                   createdAt: now,
                   metadata: {

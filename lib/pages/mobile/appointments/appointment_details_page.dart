@@ -47,7 +47,17 @@ class _AppointmentDetailsPageState extends State<AppointmentDetailsPage> {
       // Get appointment details
       final appointment = await _getAppointmentById(widget.appointmentId);
       
-      if (!_mounted || appointment == null) return;
+      if (!_mounted) return;
+      
+      if (appointment == null) {
+        // Handle appointment not found
+        if (_mounted) {
+          setState(() {
+            _loading = false;
+          });
+        }
+        return;
+      }
 
       // Get pet details
       final pet = await PetService.getPetById(appointment.petId);
@@ -82,19 +92,28 @@ class _AppointmentDetailsPageState extends State<AppointmentDetailsPage> {
       // Get current user
       final currentUser = await AuthGuard.getCurrentUser();
       if (currentUser == null) {
-        throw Exception('User not authenticated');
+        print('❌ User not authenticated when trying to get appointment: $appointmentId');
+        return null;
       }
 
       final appointments = await AppointmentBookingService.getUserAppointments(
         currentUser.uid,
       );
       
-      return appointments.firstWhere(
-        (apt) => apt.id == appointmentId,
-        orElse: () => throw Exception('Appointment not found'),
-      );
+      // Use try-catch with firstWhere to handle not found case gracefully
+      AppointmentBooking? appointment;
+      try {
+        appointment = appointments.firstWhere((apt) => apt.id == appointmentId);
+        print('✅ Found appointment: $appointmentId');
+      } catch (e) {
+        print('⚠️ Appointment not found: $appointmentId for user: ${currentUser.uid}');
+        print('📋 Available appointments: ${appointments.map((a) => a.id).toList()}');
+        appointment = null;
+      }
+      
+      return appointment;
     } catch (e) {
-      print('Error getting appointment: $e');
+      print('❌ Error getting appointment $appointmentId: $e');
       return null;
     }
   }
