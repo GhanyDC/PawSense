@@ -6,8 +6,7 @@ import 'package:pawsense/pages/mobile/auth/verify_email_page.dart';
 import 'package:pawsense/pages/mobile/home_page.dart';
 import 'package:pawsense/pages/mobile/assessment_page.dart';
 import 'package:pawsense/pages/mobile/alerts_page.dart';
-import 'package:pawsense/pages/mobile/notification_detail_page.dart';
-import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
+import 'package:pawsense/pages/mobile/alerts/alerts_details_page.dart';
 import 'package:pawsense/pages/mobile/appointments/appointment_details_page.dart';
 import 'package:pawsense/pages/mobile/edit_profile_page.dart';
 import 'package:pawsense/pages/mobile/about_pawsense_page.dart';
@@ -94,11 +93,7 @@ class AppRouter {
         path: '/alerts/details/:notificationId',
         builder: (context, state) {
           final notificationId = state.pathParameters['notificationId']!;
-          final alertData = state.extra as AlertData?;
-          return NotificationDetailPage(
-            notificationId: notificationId,
-            alertData: alertData,
-          );
+          return AlertDetailsPage(notificationId: notificationId);
         },
       ),
       GoRoute(

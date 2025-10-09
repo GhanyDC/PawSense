@@ -942,21 +942,21 @@ class _UserHomePageState extends State<UserHomePage> {
         },
       ),
       ServiceItem(
-        title: 'Messages',
-        subtitle: 'Chat with vets',
-        icon: Icons.message,
+        title: 'Emergency Hotline',
+        subtitle: '24/7 support',
+        icon: Icons.phone,
         backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/messaging');
+          context.push('/emergency-hotline');
         },
       ),
       ServiceItem(
-        title: 'FAQs',
-        subtitle: 'Common questions',
-        icon: Icons.help_outline,
+        title: 'First Aid Guide',
+        subtitle: 'Emergency tips',
+        icon: Icons.medical_services,
         backgroundColor: const Color(0xFFFF9500).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/faqs');
+          context.push('/first-aid-guide');
         },
       ),
       ServiceItem(

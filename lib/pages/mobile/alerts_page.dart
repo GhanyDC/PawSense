@@ -182,35 +182,35 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
       yield [];
     }
   }
-
+  
   void _handleAlertTap(AlertData alert) async {
-    try {
-      // Optimistically mark as read locally for instant UI update
-      if (!alert.isRead) {
+      try {
+        // Optimistically mark as read locally for instant UI update
+        if (!alert.isRead) {
+          setState(() {
+            _locallyReadNotifications.add(alert.id);
+          });
+
+          // Mark as read in backend
+          await NotificationService.markAsRead(alert.id, userId: _userModel?.uid);
+          print('Alert ${alert.id} marked as read on tap');
+        }
+
+        // Navigate to alert details page with notification data
+        context.push(
+          '/alerts/details/${alert.id}',
+          extra: alert, // Pass the full alert data
+        );
+      } catch (e) {
+        print('Error handling alert tap: $e');
+        _showErrorMessage('Failed to open notification details');
+
+        // Revert local state on error
         setState(() {
-          _locallyReadNotifications.add(alert.id);
+          _locallyReadNotifications.remove(alert.id);
         });
-        
-        // Mark as read in backend
-        await NotificationService.markAsRead(alert.id, userId: _userModel?.uid);
-        print('Alert ${alert.id} marked as read on tap');
       }
-      
-      // Navigate to alert details page with notification data
-      context.push(
-        '/alerts/details/${alert.id}',
-        extra: alert, // Pass the full alert data
-      );
-    } catch (e) {
-      print('Error handling alert tap: $e');
-      _showErrorMessage('Failed to open notification details');
-      
-      // Revert local state on error
-      setState(() {
-        _locallyReadNotifications.remove(alert.id);
-      });
     }
-  }
 
   Future<void> _handleMarkAsRead(AlertData alert) async {
     if (!mounted) return;
