@@ -1001,7 +1001,7 @@ class _UserHomePageState extends State<UserHomePage> {
         icon: Icons.message,
         backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/messaging');
+          context.push('/messaging?source=services');
         },
       ),
       ServiceItem(
@@ -1014,12 +1014,12 @@ class _UserHomePageState extends State<UserHomePage> {
         },
       ),
       ServiceItem(
-        title: 'Pet Care Tips',
-        subtitle: 'Daily care',
-        icon: Icons.lightbulb_outline,
+        title: 'Skin Disease Info',
+        subtitle: 'Learn about conditions',
+        icon: Icons.medical_information_outlined,
         backgroundColor: const Color(0xFF34C759).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/pet-care-tips');
+          context.push('/skin-disease-library?source=services');
         },
       ),
     ];

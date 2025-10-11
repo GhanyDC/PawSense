@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/services/messaging/messaging_service.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
@@ -272,12 +273,35 @@ class _MessagingPageState extends State<MessagingPage> {
       );
     }
 
+    // Check if we came from services grid
+    final uri = GoRouterState.of(context).uri;
+    final source = uri.queryParameters['source'];
+    final fromServices = source == 'services';
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: UserAppBar(
-        user: _userModel,
-        onUserUpdated: _onUserUpdated,
-      ),
+      appBar: fromServices 
+        ? AppBar(
+            backgroundColor: AppColors.white,
+            elevation: 0,
+            centerTitle: false,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+              onPressed: () => context.pop(),
+            ),
+            title: const Text(
+              'Messages',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          )
+        : UserAppBar(
+            user: _userModel,
+            onUserUpdated: _onUserUpdated,
+          ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToClinicSelection(),
         backgroundColor: AppColors.primary,

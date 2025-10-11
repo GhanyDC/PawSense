@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
@@ -12,6 +13,7 @@ import 'package:pawsense/core/widgets/user/skin_disease/species_toggle.dart';
 import 'package:pawsense/core/widgets/user/skin_disease/disease_filters.dart';
 import 'package:pawsense/core/widgets/user/skin_disease/disease_card.dart';
 import 'package:pawsense/core/widgets/user/skin_disease/disease_empty_state.dart';
+import 'package:pawsense/core/widgets/shared/ui/scroll_to_top_fab.dart';
 import 'package:pawsense/pages/mobile/skin_disease_detail_page.dart';
 
 /// Skin Disease Information Library Page (Mobile/User)
@@ -28,6 +30,7 @@ class SkinDiseaseLibraryPage extends StatefulWidget {
 class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
   final SkinDiseaseService _service = SkinDiseaseService();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   
   List<SkinDiseaseModel> _allDiseases = [];
   List<SkinDiseaseModel> _filteredDiseases = [];
@@ -51,6 +54,7 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -194,14 +198,45 @@ class _SkinDiseaseLibraryPageState extends State<SkinDiseaseLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Check if we came from services grid
+    final uri = GoRouterState.of(context).uri;
+    final source = uri.queryParameters['source'];
+    final fromServices = source == 'services';
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: UserAppBar(user: _userModel),
+      appBar: fromServices 
+        ? AppBar(
+            backgroundColor: AppColors.white,
+            elevation: 0,
+            centerTitle: false,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+              onPressed: () => context.pop(),
+            ),
+            title: const Text(
+              'Skin Disease Info',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          )
+        : UserAppBar(user: _userModel),
+      floatingActionButton: _isLoading || _userLoading 
+          ? null
+          : ScrollToTopFab(
+              scrollController: _scrollController,
+              showThreshold: 200.0,
+              tooltip: 'Scroll to top',
+            ),
       body: _isLoading || _userLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadData,
               child: CustomScrollView(
+                controller: _scrollController,
                 slivers: [
                   // Info banner component
                   const SliverToBoxAdapter(
