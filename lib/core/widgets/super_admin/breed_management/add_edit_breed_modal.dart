@@ -24,7 +24,6 @@ class _AddEditBreedModalState extends State<AddEditBreedModal> {
   final _descriptionController = TextEditingController();
   final _imageUrlController = TextEditingController();
   final _lifespanController = TextEditingController();
-  final List<TextEditingController> _healthIssuesControllers = [];
   
   String _selectedSpecies = 'dog';
   String _selectedSize = SizeCategory.medium;
@@ -48,17 +47,6 @@ class _AddEditBreedModalState extends State<AddEditBreedModal> {
           ? CoatType.short 
           : widget.breed!.coatType;
       _isActive = widget.breed!.isActive;
-      
-      // Initialize health issues
-      for (final issue in widget.breed!.commonHealthIssues) {
-        final controller = TextEditingController(text: issue);
-        _healthIssuesControllers.add(controller);
-      }
-    }
-    
-    // Always have at least one empty health issue field
-    if (_healthIssuesControllers.isEmpty) {
-      _addHealthIssueField();
     }
   }
   
@@ -68,23 +56,7 @@ class _AddEditBreedModalState extends State<AddEditBreedModal> {
     _descriptionController.dispose();
     _imageUrlController.dispose();
     _lifespanController.dispose();
-    for (final controller in _healthIssuesControllers) {
-      controller.dispose();
-    }
     super.dispose();
-  }
-  
-  void _addHealthIssueField() {
-    setState(() {
-      _healthIssuesControllers.add(TextEditingController());
-    });
-  }
-  
-  void _removeHealthIssueField(int index) {
-    setState(() {
-      _healthIssuesControllers[index].dispose();
-      _healthIssuesControllers.removeAt(index);
-    });
   }
   
   Future<void> _handleSave() async {
@@ -100,19 +72,13 @@ class _AddEditBreedModalState extends State<AddEditBreedModal> {
       final currentUser = await authService.getCurrentUser();
       final userId = currentUser?.uid ?? '';
       
-      // Collect health issues (non-empty only)
-      final healthIssues = _healthIssuesControllers
-          .map((c) => c.text.trim())
-          .where((text) => text.isNotEmpty)
-          .toList();
-      
       final breed = PetBreed(
         id: widget.breed?.id ?? '',
         name: _nameController.text.trim(),
         species: _selectedSpecies,
         description: _descriptionController.text.trim(),
         imageUrl: _imageUrlController.text.trim(),
-        commonHealthIssues: healthIssues,
+        commonHealthIssues: [], // No health issues needed
         averageLifespan: _lifespanController.text.trim(),
         sizeCategory: _selectedSize,
         coatType: _selectedCoat,
@@ -317,74 +283,8 @@ class _AddEditBreedModalState extends State<AddEditBreedModal> {
                       ),
                       SizedBox(height: kSpacingLarge),
                       
-                      // Common Health Issues
-                      Text(
-                        'Common Health Issues',
-                        style: kTextStyleRegular.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: kSpacingSmall),
-                      ..._healthIssuesControllers.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final controller = entry.value;
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: kSpacingSmall),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: controller,
-                                  decoration: InputDecoration(
-                                    hintText: 'e.g., Hip Dysplasia',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.remove_circle, color: AppColors.error),
-                                onPressed: () => _removeHealthIssueField(index),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      TextButton.icon(
-                        onPressed: _addHealthIssueField,
-                        icon: Icon(Icons.add),
-                        label: Text('Add Health Issue'),
-                      ),
-                      SizedBox(height: kSpacingLarge),
-                      
-                      // Status toggle
-                      Row(
-                        children: [
-                          Text(
-                            'Status:',
-                            style: kTextStyleRegular.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(width: kSpacingMedium),
-                          Switch(
-                            value: _isActive,
-                            onChanged: (value) {
-                              setState(() => _isActive = value);
-                            },
-                            activeColor: AppColors.success,
-                          ),
-                          SizedBox(width: kSpacingSmall),
-                          Text(
-                            _isActive ? 'Active' : 'Inactive',
-                            style: kTextStyleRegular.copyWith(
-                              color: _isActive ? AppColors.success : AppColors.textSecondary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
+                      // Status toggle (system settings style)
+                      _buildStatusToggle(),
                     ],
                   ),
                 ),
@@ -481,6 +381,46 @@ class _AddEditBreedModalState extends State<AddEditBreedModal> {
           onChanged: maxLength != null ? (_) => setState(() {}) : null,
         ),
       ],
+    );
+  }
+  
+  Widget _buildStatusToggle() {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: kSpacingMedium),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Breed Status',
+                  style: kTextStyleRegular.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: kSpacingSmall / 2),
+                Text(
+                  _isActive 
+                      ? 'Breed is currently active and visible' 
+                      : 'Breed is currently inactive and hidden',
+                  style: kTextStyleSmall.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _isActive,
+            onChanged: (value) {
+              setState(() => _isActive = value);
+            },
+            activeColor: AppColors.primary,
+          ),
+        ],
+      ),
     );
   }
   

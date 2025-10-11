@@ -12,9 +12,6 @@ class BreedSearchAndFilter extends StatelessWidget {
   final Function(BreedStatus) onStatusChanged;
   final BreedSortOption selectedSort;
   final Function(BreedSortOption) onSortChanged;
-  final String viewMode;
-  final Function(String) onViewModeChanged;
-  final VoidCallback onAddBreed;
 
   const BreedSearchAndFilter({
     super.key,
@@ -26,9 +23,6 @@ class BreedSearchAndFilter extends StatelessWidget {
     required this.onStatusChanged,
     required this.selectedSort,
     required this.onSortChanged,
-    required this.viewMode,
-    required this.onViewModeChanged,
-    required this.onAddBreed,
   });
 
   @override
@@ -113,36 +107,6 @@ class BreedSearchAndFilter extends StatelessWidget {
                   items: BreedSortOption.values,
                   onChanged: onSortChanged,
                   getLabel: (sort) => sort.displayName,
-                ),
-              ),
-              SizedBox(width: kSpacingMedium),
-              
-              // View mode toggle
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.circular(kBorderRadiusSmall),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.view_list),
-                      color: viewMode == 'list' ? AppColors.primary : AppColors.textSecondary,
-                      onPressed: () => onViewModeChanged('list'),
-                      tooltip: 'List View',
-                    ),
-                    Container(
-                      width: 1,
-                      height: 24,
-                      color: AppColors.border,
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.grid_view),
-                      color: viewMode == 'grid' ? AppColors.primary : AppColors.textSecondary,
-                      onPressed: () => onViewModeChanged('grid'),
-                      tooltip: 'Grid View',
-                    ),
-                  ],
                 ),
               ),
             ],

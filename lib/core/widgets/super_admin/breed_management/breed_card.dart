@@ -21,107 +21,121 @@ class BreedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.only(bottom: kSpacingMedium),
-      padding: EdgeInsets.all(kSpacingMedium),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(kBorderRadius),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: Offset(0, 2),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(kBorderRadius),
+      hoverColor: AppColors.primary.withValues(alpha: 0.05),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: kSpacingMedium,
+          vertical: kSpacingMedium + 4,
+        ),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppColors.border, width: 1),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Breed image
-          _buildBreedImage(),
-          SizedBox(width: kSpacingMedium),
-          
-          // Breed name
-          Expanded(
-            flex: 2,
-            child: GestureDetector(
-              onTap: onTap,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        child: Row(
+          children: [
+            // Breed image + name column (matching header width)
+            SizedBox(
+              width: 60, // Fixed width for image
+              child: _buildBreedImage(),
+            ),
+            SizedBox(width: kSpacingMedium),
+            
+            // Breed name
+            Expanded(
+              flex: 2,
+              child: Text(
+                breed.name,
+                style: kTextStyleRegular.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+            SizedBox(width: kSpacingMedium),
+            
+            // Species chip
+            Expanded(
+              flex: 1,
+              child: _buildSpeciesChip(),
+            ),
+            SizedBox(width: kSpacingMedium),
+            
+            // Description
+            Expanded(
+              flex: 3,
+              child: Text(
+                breed.getFormattedDescription(),
+                style: kTextStyleSmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(width: kSpacingMedium),
+            
+            // Status toggle
+            SizedBox(
+              width: 100, // Fixed width for consistency
+              child: Center(
+                child: Switch(
+                  value: breed.isActive,
+                  onChanged: onStatusToggle,
+                  activeColor: AppColors.primary,
+                ),
+              ),
+            ),
+            SizedBox(width: kSpacingMedium),
+            
+            // Date added
+            SizedBox(
+              width: 120, // Fixed width for dates
+              child: Text(
+                _formatDate(breed.createdAt),
+                style: kTextStyleSmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            SizedBox(width: kSpacingMedium),
+            
+            // Actions
+            SizedBox(
+              width: 96, // Fixed width for action buttons
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    breed.name,
-                    style: kTextStyleRegular.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  IconButton(
+                    icon: Icon(Icons.edit_outlined, size: 20),
+                    color: AppColors.info,
+                    onPressed: onEdit,
+                    tooltip: 'Edit Breed',
+                    splashRadius: 20,
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(),
+                  ),
+                  SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 20),
+                    color: AppColors.error,
+                    onPressed: onDelete,
+                    tooltip: 'Delete Breed',
+                    splashRadius: 20,
+                    padding: EdgeInsets.all(8),
+                    constraints: BoxConstraints(),
                   ),
                 ],
               ),
             ),
-          ),
-          
-          // Species chip
-          Expanded(
-            child: _buildSpeciesChip(),
-          ),
-          
-          // Description
-          Expanded(
-            flex: 3,
-            child: Text(
-              breed.getFormattedDescription(),
-              style: kTextStyleSmall.copyWith(
-                color: AppColors.textSecondary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          SizedBox(width: kSpacingMedium),
-          
-          // Status toggle
-          Expanded(
-            child: Center(
-              child: Switch(
-                value: breed.isActive,
-                onChanged: onStatusToggle,
-                activeColor: AppColors.success,
-              ),
-            ),
-          ),
-          
-          // Date added
-          Expanded(
-            child: Text(
-              _formatDate(breed.createdAt),
-              style: kTextStyleSmall.copyWith(
-                color: AppColors.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          
-          // Actions
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(Icons.edit, size: kIconSizeMedium),
-                color: AppColors.info,
-                onPressed: onEdit,
-                tooltip: 'Edit',
-              ),
-              IconButton(
-                icon: Icon(Icons.delete, size: kIconSizeMedium),
-                color: AppColors.error,
-                onPressed: onDelete,
-                tooltip: 'Delete',
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -171,23 +185,42 @@ class BreedCard extends StatelessWidget {
   }
 
   Widget _buildSpeciesChip() {
-    final iscat = breed.species == 'cat';
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: kSpacingSmall,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: (iscat ? Color(0xFFFF9500) : Color(0xFF007AFF)).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Text(
-          breed.speciesDisplayName,
-          style: kTextStyleSmall.copyWith(
-            color: iscat ? Color(0xFFFF9500) : Color(0xFF007AFF),
-            fontWeight: FontWeight.w600,
+    final isCat = breed.species == 'cat';
+    final chipColor = isCat ? Color(0xFFFF9500) : Color(0xFF007AFF);
+    
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: chipColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: chipColor.withValues(alpha: 0.3),
+            width: 1,
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isCat ? Icons.pets : Icons.pets,
+              size: 14,
+              color: chipColor,
+            ),
+            SizedBox(width: 4),
+            Text(
+              breed.speciesDisplayName,
+              style: kTextStyleSmall.copyWith(
+                color: chipColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -29,7 +29,6 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   BreedSpecies _selectedSpecies = BreedSpecies.all;
   BreedStatus _selectedStatus = BreedStatus.all;
   BreedSortOption _selectedSort = BreedSortOption.nameAsc;
-  String _viewMode = 'list';
   
   // Debouncing
   Timer? _debounceTimer;
@@ -105,10 +104,6 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   void _onSortChanged(BreedSortOption sort) {
     setState(() => _selectedSort = sort);
     _loadBreeds();
-  }
-  
-  void _onViewModeChanged(String mode) {
-    setState(() => _viewMode = mode);
   }
   
   void _showAddBreedModal() {
@@ -274,9 +269,6 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
                     onStatusChanged: _onStatusChanged,
                     selectedSort: _selectedSort,
                     onSortChanged: _onSortChanged,
-                    viewMode: _viewMode,
-                    onViewModeChanged: _onViewModeChanged,
-                    onAddBreed: _showAddBreedModal,
                   ),
                   SizedBox(height: kSpacingLarge),
                   
@@ -296,28 +288,34 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
       return _buildEmptyState();
     }
     
-    if (_viewMode == 'grid') {
-      return _buildGridView();
-    }
-    
     return _buildListView();
   }
   
   Widget _buildListView() {
     return Container(
-      padding: EdgeInsets.all(kSpacingMedium),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(kBorderRadius),
         border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Table header
           _buildTableHeader(),
-          SizedBox(height: kSpacingMedium),
           
-          // Breed cards
+          // Divider
+          Divider(height: 1, thickness: 1, color: AppColors.border),
+          
+          // Breed rows
           ..._filteredBreeds.map((breed) => BreedCard(
             breed: breed,
             onTap: () => _showEditBreedModal(breed),
@@ -331,28 +329,60 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   }
   
   Widget _buildTableHeader() {
-    return Row(
-      children: [
-        SizedBox(width: 48 + kSpacingMedium),
-        Expanded(
-          flex: 2,
-          child: Text('BREED NAME', style: _headerStyle()),
-        ),
-        Expanded(
-          child: Text('SPECIES', style: _headerStyle()),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text('DESCRIPTION', style: _headerStyle()),
-        ),
-        Expanded(
-          child: Center(child: Text('STATUS', style: _headerStyle())),
-        ),
-        Expanded(
-          child: Center(child: Text('DATE ADDED', style: _headerStyle())),
-        ),
-        SizedBox(width: 100),
-      ],
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: kSpacingMedium,
+        vertical: kSpacingMedium,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(kBorderRadius)),
+      ),
+      child: Row(
+        children: [
+          // Image + Name column
+          SizedBox(width: 60 + kSpacingMedium), // Image width + spacing
+          Expanded(
+            flex: 2,
+            child: Text('BREED NAME', style: _headerStyle()),
+          ),
+          SizedBox(width: kSpacingMedium),
+          
+          // Species column
+          Expanded(
+            flex: 1,
+            child: Text('SPECIES', style: _headerStyle()),
+          ),
+          SizedBox(width: kSpacingMedium),
+          
+          // Description column
+          Expanded(
+            flex: 3,
+            child: Text('DESCRIPTION', style: _headerStyle()),
+          ),
+          SizedBox(width: kSpacingMedium),
+          
+          // Status column
+          SizedBox(
+            width: 100,
+            child: Center(child: Text('STATUS', style: _headerStyle())),
+          ),
+          SizedBox(width: kSpacingMedium),
+          
+          // Date column
+          SizedBox(
+            width: 120,
+            child: Text('DATE ADDED', style: _headerStyle(), textAlign: TextAlign.center),
+          ),
+          SizedBox(width: kSpacingMedium),
+          
+          // Actions column
+          SizedBox(
+            width: 96,
+            child: Text('ACTIONS', style: _headerStyle(), textAlign: TextAlign.right),
+          ),
+        ],
+      ),
     );
   }
   
@@ -360,103 +390,11 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
     return kTextStyleSmall.copyWith(
       color: AppColors.textSecondary,
       fontWeight: FontWeight.w600,
-      letterSpacing: 0.5,
+      letterSpacing: 0.8,
     );
   }
   
-  Widget _buildGridView() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: kSpacingLarge,
-        mainAxisSpacing: kSpacingLarge,
-        childAspectRatio: 1.2,
-      ),
-      itemCount: _filteredBreeds.length,
-      itemBuilder: (context, index) {
-        final breed = _filteredBreeds[index];
-        return _buildGridCard(breed);
-      },
-    );
-  }
-  
-  Widget _buildGridCard(PetBreed breed) {
-    return Container(
-      padding: EdgeInsets.all(kSpacingMedium),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(kBorderRadius),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Image
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.border,
-            ),
-            child: ClipOval(
-              child: breed.imageUrl.isNotEmpty
-                  ? Image.network(breed.imageUrl, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Icon(Icons.pets, size: 40))
-                  : Icon(Icons.pets, size: 40),
-            ),
-          ),
-          SizedBox(height: kSpacingMedium),
-          
-          // Name
-          Text(
-            breed.name,
-            style: kTextStyleRegular.copyWith(fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          SizedBox(height: kSpacingSmall),
-          
-          // Species chip
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: (breed.species == 'cat' ? Color(0xFFFF9500) : Color(0xFF007AFF)).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              breed.speciesDisplayName,
-              style: kTextStyleSmall.copyWith(
-                color: breed.species == 'cat' ? Color(0xFFFF9500) : Color(0xFF007AFF),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Spacer(),
-          
-          // Actions
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: Icon(Icons.edit, size: 20),
-                color: AppColors.info,
-                onPressed: () => _showEditBreedModal(breed),
-              ),
-              IconButton(
-                icon: Icon(Icons.delete, size: 20),
-                color: AppColors.error,
-                onPressed: () => _showDeleteDialog(breed),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-  
+
   Widget _buildEmptyState() {
     return Container(
       padding: EdgeInsets.all(kSpacingXLarge * 2),
