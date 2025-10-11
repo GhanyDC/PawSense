@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
 import 'package:pawsense/core/models/clinic/appointment_models.dart' as AppointmentModels;
@@ -5,16 +6,17 @@ import 'package:pawsense/core/models/user/pet_model.dart' as UserModels;
 
 /// Paginated appointment service for efficient data loading
 class PaginatedAppointmentService {
-  static const int _pageSize = 10; // Load 10 appointments at a time for faster initial load
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Get paginated appointments for a clinic
+  /// Get paginated appointments for a clinic with page-based pagination
   static Future<PaginatedAppointmentResult> getClinicAppointmentsPaginated({
     required String clinicId,
     DocumentSnapshot? lastDocument,
     DateTime? startDate,
     DateTime? endDate,
     AppointmentStatus? status,
+    int page = 1,
+    int itemsPerPage = 10,
   }) async {
     try {
       Query query = _firestore
@@ -36,26 +38,33 @@ class PaginatedAppointmentService {
         query = query.where('status', isEqualTo: status.toString().split('.').last);
       }
 
-      // Order by appointment date
-      query = query.orderBy('appointmentDate', descending: false);
+      // Order by created date descending (newest first)
+      query = query.orderBy('createdAt', descending: true);
 
-      // Pagination: start after last document if provided
-      if (lastDocument != null) {
-        query = query.startAfterDocument(lastDocument);
-      }
+      // Get total count for pagination info
+      final countSnapshot = await query.count().get();
+      final totalCount = countSnapshot.count ?? 0;
+      final totalPages = (totalCount / itemsPerPage).ceil();
 
-      // Limit to page size + 1 to check if there are more pages
-      query = query.limit(_pageSize + 1);
+      // Load enough documents to support pagination
+      // For small datasets, we can afford to load more and slice
+      final maxToLoad = math.min(totalCount, 500); // Cap at 500 for performance
+      query = query.limit(maxToLoad);
 
       final querySnapshot = await query.get();
       
-      // Check if there are more pages
-      final hasMore = querySnapshot.docs.length > _pageSize;
+      // Calculate pagination slice
+      final startIndex = (page - 1) * itemsPerPage;
+      final endIndex = math.min(startIndex + itemsPerPage, querySnapshot.docs.length);
       
-      // Take only the requested page size
-      final docs = hasMore 
-          ? querySnapshot.docs.sublist(0, _pageSize)
-          : querySnapshot.docs;
+      final docs = startIndex < querySnapshot.docs.length 
+          ? querySnapshot.docs.sublist(startIndex, endIndex)
+          : <QueryDocumentSnapshot>[];
+      
+      print('📊 Pagination Debug: page=$page, itemsPerPage=$itemsPerPage, totalDocs=${querySnapshot.docs.length}, showing=${docs.length}');
+      
+      // Check if there are more pages
+      final hasMore = page < totalPages;
       
       final appointments = <AppointmentModels.Appointment>[];
 
@@ -80,6 +89,9 @@ class PaginatedAppointmentService {
         appointments: appointments,
         lastDocument: docs.isNotEmpty ? docs.last : null,
         hasMore: hasMore,
+        totalCount: totalCount,
+        totalPages: totalPages,
+        currentPage: page,
       );
     } catch (e) {
       print('❌ Error getting paginated appointments: $e');
@@ -87,6 +99,9 @@ class PaginatedAppointmentService {
         appointments: [],
         lastDocument: null,
         hasMore: false,
+        totalCount: 0,
+        totalPages: 0,
+        currentPage: page,
       );
     }
   }
@@ -330,11 +345,17 @@ class PaginatedAppointmentResult {
   final List<AppointmentModels.Appointment> appointments;
   final DocumentSnapshot? lastDocument;
   final bool hasMore;
+  final int? totalCount;
+  final int? totalPages;
+  final int? currentPage;
 
   PaginatedAppointmentResult({
     required this.appointments,
     required this.lastDocument,
     required this.hasMore,
+    this.totalCount,
+    this.totalPages,
+    this.currentPage,
   });
 }
 

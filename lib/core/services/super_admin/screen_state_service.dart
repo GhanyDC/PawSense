@@ -17,9 +17,12 @@ class ScreenStateService {
   String _userSelectedStatus = 'All Status';
 
   // Appointment Management State
+  int _appointmentCurrentPage = 1;
   String _appointmentSearchQuery = '';
   String _appointmentSelectedStatus = 'All Status';
   String _appointmentDateSortOrder = 'desc'; // Default to newest first
+  DateTime? _appointmentStartDate;
+  DateTime? _appointmentEndDate;
 
   // Clinic Schedule State
   DateTime _scheduleSelectedDate = DateTime.now();
@@ -76,28 +79,42 @@ class ScreenStateService {
   }
 
   // Appointment Management Getters & Setters
+  int get appointmentCurrentPage => _appointmentCurrentPage;
   String get appointmentSearchQuery => _appointmentSearchQuery;
   String get appointmentSelectedStatus => _appointmentSelectedStatus;
   String get appointmentDateSortOrder => _appointmentDateSortOrder;
+  DateTime? get appointmentStartDate => _appointmentStartDate;
+  DateTime? get appointmentEndDate => _appointmentEndDate;
 
   void saveAppointmentState({
+    int? currentPage,
     required String searchQuery,
     required String selectedStatus,
     String? dateSortOrder,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
+    if (currentPage != null) {
+      _appointmentCurrentPage = currentPage;
+    }
     _appointmentSearchQuery = searchQuery;
     _appointmentSelectedStatus = selectedStatus;
     if (dateSortOrder != null) {
       _appointmentDateSortOrder = dateSortOrder;
     }
-    print('💾 Saved appointment management state: status="$selectedStatus", search="$searchQuery", sort="$_appointmentDateSortOrder"');
+    _appointmentStartDate = startDate;
+    _appointmentEndDate = endDate;
+    print('💾 Saved appointment management state: page=$_appointmentCurrentPage, status="$selectedStatus", search="$searchQuery", sort="$_appointmentDateSortOrder", dates="${startDate?.toString().split(' ')[0]} to ${endDate?.toString().split(' ')[0]}"');
   }
 
   /// Reset appointment state to defaults
   void resetAppointmentState() {
+    _appointmentCurrentPage = 1;
     _appointmentSearchQuery = '';
     _appointmentSelectedStatus = 'All Status';
     _appointmentDateSortOrder = 'desc';
+    _appointmentStartDate = null;
+    _appointmentEndDate = null;
   }
 
   // Clinic Schedule Getters & Setters
