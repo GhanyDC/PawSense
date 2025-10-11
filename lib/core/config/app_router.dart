@@ -42,6 +42,7 @@ import 'package:pawsense/pages/web/admin/settings_screen.dart';
 import 'package:pawsense/pages/web/superadmin/clinic_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/system_analytics_screen.dart';
 import 'package:pawsense/pages/web/superadmin/user_management_screen.dart';
+import 'package:pawsense/pages/web/superadmin/breed_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/system_settings_screen.dart';
 import 'package:flutter/foundation.dart';
 import '../widgets/shared/navigation/admin_shell.dart';
@@ -355,6 +356,13 @@ class AppRouter {
             builder: (context, state) => const UserManagementScreen(),
             pageBuilder: (context, state) => NoTransitionPage(
               child: const UserManagementScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/super-admin/pet-breeds',
+            builder: (context, state) => const BreedManagementScreen(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: const BreedManagementScreen(),
             ),
           ),
           GoRoute(
