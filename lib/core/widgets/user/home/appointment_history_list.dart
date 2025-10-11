@@ -42,9 +42,13 @@ class AppointmentHistoryList extends StatelessWidget {
       return _buildEmptyState();
     }
 
+    // Sort appointments by date (most recent first)
+    final sortedAppointments = List<AppointmentHistoryData>.from(appointmentHistory);
+    sortedAppointments.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     return Column(
       children: [
-        ...appointmentHistory.map((item) => AppointmentHistoryItem(
+        ...sortedAppointments.map((item) => AppointmentHistoryItem(
           data: item,
           onTap: () {
             context.go('/appointment-history/${item.id}');

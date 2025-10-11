@@ -525,7 +525,39 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   List<AppointmentHistoryData> _convertAppointmentsToHistoryData(List<booking.AppointmentBooking> appointments) {
-    return appointments.map((appointment) {
+    print('DEBUG: Converting ${appointments.length} appointments to history data');
+    
+    // Create a map to track unique appointments (ignoring status changes)
+    // Key insight: Same appointment with different statuses = ONE appointment entry
+    final Map<String, booking.AppointmentBooking> uniqueAppointments = {};
+    
+    for (final appointment in appointments) {
+      // Create a unique key based ONLY on service, date, and time (NOT status)
+      // This ensures that "Consultation Service 31/10 09:00" appears only ONCE
+      // regardless of whether it was Pending → Confirmed → Cancelled
+      final uniqueKey = '${appointment.serviceName}_${appointment.appointmentDate.toIso8601String().split('T')[0]}_${appointment.appointmentTime}';
+      
+      // Keep the appointment with the most recent update time (latest status)
+      if (!uniqueAppointments.containsKey(uniqueKey)) {
+        uniqueAppointments[uniqueKey] = appointment;
+        print('DEBUG: Added new appointment: ${appointment.serviceName} on ${appointment.appointmentDate.toIso8601String().split('T')[0]} at ${appointment.appointmentTime} - Status: ${appointment.status}');
+      } else {
+        // Compare update times to keep the most recent version
+        final existingAppointment = uniqueAppointments[uniqueKey]!;
+        
+        if (appointment.updatedAt.isAfter(existingAppointment.updatedAt)) {
+          print('DEBUG: Updating appointment status: ${appointment.serviceName} from ${existingAppointment.status} to ${appointment.status}');
+          uniqueAppointments[uniqueKey] = appointment;
+        } else {
+          print('DEBUG: Keeping existing appointment status: ${appointment.serviceName} - ${existingAppointment.status}');
+        }
+      }
+    }
+    
+    print('DEBUG: After deduplication: ${uniqueAppointments.length} unique appointments');
+    
+    // Convert the unique appointments to history data
+    return uniqueAppointments.values.map((appointment) {
       // Convert booking AppointmentStatus to history AppointmentStatus
       AppointmentStatus historyStatus;
       switch (appointment.status) {
@@ -544,13 +576,14 @@ class _UserHomePageState extends State<UserHomePage> {
           break;
       }
       
-      // Format the subtitle with date and time
+      // Format the subtitle with date, time, and status
       final dateStr = '${appointment.appointmentDate.day}/${appointment.appointmentDate.month}';
-      final subtitle = '$dateStr • ${appointment.appointmentTime}';
+      final statusStr = _getStatusDisplayName(appointment.status);
+      final subtitle = '$dateStr • ${appointment.appointmentTime} • $statusStr';
       
       return AppointmentHistoryData(
         id: appointment.id ?? '',
-        title: _getStatusTitle(appointment.status),
+        title: _getStatusTitle(appointment),
         subtitle: subtitle,
         status: historyStatus,
         timestamp: appointment.appointmentDate,
@@ -559,7 +592,14 @@ class _UserHomePageState extends State<UserHomePage> {
     }).toList();
   }
   
-  String _getStatusTitle(booking.AppointmentStatus status) {
+  String _getStatusTitle(booking.AppointmentBooking appointment) {
+    // Use service name as the primary title instead of just status
+    return appointment.serviceName.isNotEmpty 
+        ? appointment.serviceName 
+        : 'Veterinary Appointment';
+  }
+
+  String _getStatusDisplayName(booking.AppointmentStatus status) {
     switch (status) {
       case booking.AppointmentStatus.pending:
         return 'Pending';
