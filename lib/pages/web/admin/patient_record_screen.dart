@@ -286,6 +286,11 @@ class _ImprovedPatientRecordsScreenState extends State<ImprovedPatientRecordsScr
 
         return true;
       }).toList();
+      
+      // Sort by most recent appointment/booking date (newest bookings first)
+      _filteredPatients.sort((a, b) => b.lastVisit.compareTo(a.lastVisit));
+      
+      print('🔄 Applied filters and sorting: ${_filteredPatients.length} patients displayed (sorted by newest appointments first)');
     });
   }
 
