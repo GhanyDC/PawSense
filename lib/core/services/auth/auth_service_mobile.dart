@@ -37,6 +37,13 @@ class AuthService {
       email: normalizedEmail,
       password: password,
     );
+    
+    // Set display name for email purposes
+    if (cred.user != null) {
+      final displayName = '${firstName.trim()} ${lastName.trim()}';
+      await cred.user!.updateDisplayName(displayName);
+    }
+    
     await cred.user?.sendEmailVerification();
     return cred.user?.uid;
   }
@@ -52,6 +59,16 @@ class AuthService {
   Future<void> resendVerificationEmail() async =>
       await _auth.currentUser?.sendEmailVerification();
 
+  /// Updates the display name of the current Firebase user
+  /// This is used for showing the sender name in emails
+  Future<void> updateUserDisplayName(String firstName, String lastName) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final displayName = '${firstName.trim()} ${lastName.trim()}';
+      await user.updateDisplayName(displayName);
+    }
+  }
+
   /// Saves or updates a user document in Firestore.
   /// Always stores the email in lowercase.
   Future<void> saveUser(UserModel user) async {
@@ -61,7 +78,15 @@ class AuthService {
           .collection('users')
           .doc(user.uid)
           .set(updatedUser.toMap());
-      debugPrint('User saved: {user.uid}');
+      
+      // Update Firebase user display name for email purposes
+      if (user.firstName != null && user.lastName != null) {
+        await updateUserDisplayName(user.firstName!, user.lastName!);
+      } else if (user.username.isNotEmpty) {
+        await _auth.currentUser?.updateDisplayName(user.username);
+      }
+      
+      debugPrint('User saved: {user.uid}');
     } catch (e, stack) {
       debugPrint('Error saving user: $e\n$stack');
       rethrow;
@@ -108,6 +133,21 @@ class AuthService {
           code: 'user-disabled',
           message: 'Your account has been deactivated. Please contact support for assistance.',
         );
+      }
+      
+      // Update display name for existing users (migration fix)
+      if (userData != null && userData.firstName != null && userData.lastName != null) {
+        final currentDisplayName = cred.user!.displayName;
+        final expectedDisplayName = '${userData.firstName!.trim()} ${userData.lastName!.trim()}';
+        
+        if (currentDisplayName != expectedDisplayName) {
+          try {
+            await cred.user!.updateDisplayName(expectedDisplayName);
+            debugPrint('✅ Updated display name for user ${cred.user!.uid}: $expectedDisplayName');
+          } catch (e) {
+            debugPrint('⚠️ Failed to update display name: $e');
+          }
+        }
       }
     }
     
