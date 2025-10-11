@@ -302,7 +302,7 @@ class PetInfoCardState extends State<PetInfoCard> {
         const SizedBox(height: kMobileSizedBoxLarge),
         
         // Add Pet button
-        SizedBox(
+       SizedBox(
           width: double.infinity,
           height: 40,
           child: ElevatedButton(
@@ -323,7 +323,7 @@ class PetInfoCardState extends State<PetInfoCard> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const  EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
