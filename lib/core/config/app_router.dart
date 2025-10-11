@@ -5,7 +5,7 @@ import 'package:pawsense/pages/mobile/auth/sign_up_page.dart';
 import 'package:pawsense/pages/mobile/auth/verify_email_page.dart';
 import 'package:pawsense/pages/mobile/home_page.dart';
 import 'package:pawsense/pages/mobile/assessment_page.dart';
-import 'package:pawsense/pages/mobile/alerts_page.dart';
+import 'package:pawsense/pages/mobile/optimized_alerts_page.dart';
 import 'package:pawsense/pages/mobile/notification_detail_page.dart';
 import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
 import 'package:pawsense/pages/mobile/appointments/appointment_details_page.dart';
@@ -87,7 +87,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/alerts',
-        builder: (context, state) => AlertsPage(key: alertsPageKey),
+        builder: (context, state) => const OptimizedAlertsPage(),
       ),
       GoRoute(
         path: '/alerts/details/:notificationId',

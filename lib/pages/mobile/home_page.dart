@@ -25,8 +25,7 @@ import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/utils/data_cache.dart';
 import 'package:pawsense/core/services/notifications/notification_service.dart';
 import 'package:pawsense/core/services/notifications/notification_overlay_manager.dart';
-import 'package:pawsense/core/utils/notification_helper.dart';
-import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
+import 'package:pawsense/core/services/notifications/global_notification_manager.dart';
 
 class UserHomePage extends StatefulWidget {
   const UserHomePage({super.key});
@@ -66,7 +65,6 @@ class _UserHomePageState extends State<UserHomePage> {
   // Notification system
   int _notificationCount = 0;
   late Stream<int> _notificationStream;
-  List<AlertData> _lastKnownAlerts = [];
 
   @override
   void initState() {
@@ -76,7 +74,8 @@ class _UserHomePageState extends State<UserHomePage> {
 
   @override
   void dispose() {
-    // Clean up notification overlay
+    // Global notification manager handles cleanup automatically
+    // Only clean up old notification overlay (fallback)
     NotificationOverlayManager.clearAll();
     super.dispose();
   }
@@ -279,10 +278,47 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
-  void _initializeNotificationStream() {
+  void _initializeNotificationStream() async {
+    if (_userModel == null) {
+      debugPrint('⚠️ Cannot initialize notifications: _userModel is null');
+      return;
+    }
+    
+    try {
+      // Use global notification manager
+      final globalManager = GlobalNotificationManager();
+      
+      // Listen to unread count changes
+      globalManager.unreadCountStream.listen((count) {
+        debugPrint('� Global unread count updated to: $count');
+        if (mounted) {
+          setState(() {
+            _notificationCount = count;
+          });
+        }
+      });
+      
+      // Get initial count
+      final initialCount = globalManager.unreadCount;
+      setState(() {
+        _notificationCount = initialCount;
+      });
+      
+      debugPrint('✅ Home page connected to global notification manager');
+      debugPrint('📊 Initial unread count: $initialCount');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to connect to global notifications: $e');
+      debugPrint('🔄 Falling back to old notification system');
+      // Fallback to old system if needed
+      _initializeFallbackNotifications();
+    }
+  }
+
+  // Fallback method in case of initialization failure
+  void _initializeFallbackNotifications() {
     if (_userModel == null) return;
     
-    // Listen to notification count
     _notificationStream = NotificationService.getUnreadNotificationsCount(_userModel!.uid);
     _notificationStream.listen((count) {
       if (mounted) {
@@ -291,38 +327,17 @@ class _UserHomePageState extends State<UserHomePage> {
         });
       }
     });
-    
-    // Listen to new notifications for popup display
-    NotificationService.getAllUserNotifications(_userModel!.uid).listen((notifications) {
-      if (!mounted) return;
-      
-      final alertData = notifications
-          .map((notification) => NotificationHelper.fromNotificationModel(notification))
-          .toList();
-      
-      // Check for new unread notifications
-      final newAlerts = alertData.where((alert) => 
-          !alert.isRead && 
-          !_lastKnownAlerts.any((known) => known.id == alert.id)
-      ).toList();
-      
-      // Show popup for new notifications
-      for (final alert in newAlerts) {
-        NotificationOverlayManager.showNotification(
-          context,
-          alert,
-          userId: _userModel?.uid,
-          onTap: () {
-            // Navigate to alerts page
-            setState(() {
-              _currentNavIndex = 2; // Alerts tab
-            });
-          },
-        );
-      }
-      
-      _lastKnownAlerts = alertData;
-    });
+  }
+
+  // Debug method to test popup notifications (can be called manually for testing)
+  void debugTestPopupNotification() {
+    try {
+      final globalManager = GlobalNotificationManager();
+      globalManager.showTestPopup(context);
+      debugPrint('🧪 Debug: Test popup notification triggered via global manager');
+    } catch (e) {
+      debugPrint('❌ Error in debug popup test: $e');
+    }
   }
 
   Future<void> _fetchAssessmentHistory({bool forceRefresh = false}) async {
