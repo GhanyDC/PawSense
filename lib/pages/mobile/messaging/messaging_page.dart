@@ -27,6 +27,7 @@ class _MessagingPageState extends State<MessagingPage> {
   StreamSubscription<Set<String>>? _readConversationsSubscription;
   StreamSubscription<bool>? _dataChangedSubscription;
   List<Conversation> _previousConversations = []; // Track previous conversations for comparison
+  Set<String> _processedMessageKeys = {}; // Track processed messages to prevent duplicates
   
   // Filter states
   String _selectedFilter = 'All'; // 'All', 'Unread', 'Read'
@@ -121,36 +122,72 @@ class _MessagingPageState extends State<MessagingPage> {
   }
 
   void _checkForNewMessages(List<Conversation> oldConversations, List<Conversation> newConversations) {
+    // Skip processing if this is the first load (oldConversations is empty)
+    if (oldConversations.isEmpty) {
+      print('📱 First load - skipping new message detection');
+      return;
+    }
+
     // Create map for easier comparison
     final oldConversationMap = {for (var conv in oldConversations) conv.id: conv};
 
-    // Check each conversation for increased unread count (following admin logic)
     for (final newConv in newConversations) {
       final oldConv = oldConversationMap[newConv.id];
       
-      // Only mark as unread if:
-      // 1. Last message is from clinic (not from current user)  
-      // 2. Conversation is not currently being viewed
-      // 3. This is a new message (either new conversation or the lastMessageSenderId changed from user to clinic)
+      // Check if this is a new message from clinic
       final lastMessageFromClinic = _userModel != null && 
                                    newConv.lastMessageSenderId != _userModel!.uid &&
                                    newConv.lastMessageSenderId != null;
       
-      final oldLastMessageFromUser = oldConv != null && 
-                                     _userModel != null && 
-                                     oldConv.lastMessageSenderId == _userModel!.uid;
-      
-      // Detect if this is a new clinic message (either new conversation or sender changed from user to clinic)
-      final isNewClinicMessage = lastMessageFromClinic && 
-                                 (oldConv == null || oldLastMessageFromUser);
-      
-      if (isNewClinicMessage) {
-        print('🆕 New clinic message detected: ${newConv.clinicName}');
+      if (lastMessageFromClinic) {
         final isCurrentlySelected = _currentlySelectedConversationId == newConv.id;
-        if (!isCurrentlySelected) {
-          // Use the new method specifically for clinic messages
-          _mobilePreferencesService.markNewMessageFromClinic(newConv.id, 1); // Use 1 instead of server count
-          print('🆕 New clinic message marked as unread via markNewMessageFromClinic');
+        
+        // Only process if conversation exists in old list (not a completely new conversation)
+        // New conversations should be handled differently
+        if (oldConv != null) {
+          // Check if the last message time has changed (new message)
+          final oldTime = oldConv.lastMessageTime;
+          final newTime = newConv.lastMessageTime;
+          
+          bool hasNewerMessage = false;
+          if (newTime != null && oldTime != null && newTime.isAfter(oldTime)) {
+            hasNewerMessage = true;
+          }
+          
+          // Also check if the message content changed AND it's from clinic
+          bool hasNewContent = oldConv.lastMessage != newConv.lastMessage;
+          
+          if ((hasNewerMessage || hasNewContent) && !isCurrentlySelected) {
+            // Create a unique key for this message to prevent duplicate processing
+            final messageKey = '${newConv.id}_${newTime?.millisecondsSinceEpoch}_${newConv.lastMessage?.hashCode}';
+            
+            if (!_processedMessageKeys.contains(messageKey)) {
+              print('🆕 New clinic message detected: ${newConv.clinicName}');
+              print('🆕 Message key: $messageKey');
+              print('🆕 Old time: ${oldTime}');
+              print('🆕 New time: ${newTime}');
+              print('🆕 Old message: ${oldConv.lastMessage}');
+              print('🆕 New message: ${newConv.lastMessage}');
+              print('🆕 Sender ID: ${newConv.lastMessageSenderId}');
+              
+              _mobilePreferencesService.markNewMessageFromClinic(newConv.id, 1);
+              print('🆕 New clinic message marked as unread via markNewMessageFromClinic');
+              
+              // Mark this message as processed
+              _processedMessageKeys.add(messageKey);
+              
+              // Clean up old processed keys (keep only last 50 to prevent memory buildup)
+              if (_processedMessageKeys.length > 50) {
+                final keysList = _processedMessageKeys.toList();
+                _processedMessageKeys = keysList.sublist(keysList.length - 50).toSet();
+              }
+              
+              // Force rebuild of the conversation list
+              setState(() {});
+            } else {
+              print('🔄 Message already processed, skipping: ${newConv.clinicName}');
+            }
+          }
         }
       }
     }
@@ -379,21 +416,6 @@ class _MessagingPageState extends State<MessagingPage> {
               stream: MessagingService.getUserConversations(),
               builder: (context, snapshot) {
                 print('MessagingPage StreamBuilder state: ${snapshot.connectionState}');
-                if (snapshot.hasError) {
-                  print('MessagingPage StreamBuilder error: ${snapshot.error}');
-                }
-                if (snapshot.hasData) {
-                  print('MessagingPage StreamBuilder data: ${snapshot.data!.length} conversations');
-                  
-                  // Check for new messages when conversations update
-                  final newConversations = snapshot.data!;
-                  if (_previousConversations.isNotEmpty) {
-                    _checkForNewMessages(_previousConversations, newConversations);
-                  } else {
-                    // First load - just store the conversations
-                    _previousConversations = List.from(newConversations);
-                  }
-                }
                 
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -494,6 +516,16 @@ class _MessagingPageState extends State<MessagingPage> {
                 }
 
                 final allConversations = snapshot.data!;
+                
+                // Check for new messages when conversations update (only when we have stable data)
+                if (snapshot.connectionState == ConnectionState.active) {
+                  if (_previousConversations.isNotEmpty) {
+                    _checkForNewMessages(_previousConversations, allConversations);
+                  }
+                  // Update the previous conversations for next comparison
+                  _previousConversations = List.from(allConversations);
+                }
+                
                 final filteredConversations = _filterConversations(allConversations);
 
                 // Show empty state with filter context

@@ -260,6 +260,14 @@ class _ConversationPageState extends State<ConversationPage> {
 
                 final messages = snapshot.data ?? [];
 
+                // Mark conversation as read when messages arrive (since conversation is open)
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final conversationId = _realConversationId ?? widget.conversation.id;
+                  if (!conversationId.startsWith('temp_')) {
+                    _mobilePreferencesService.markConversationAsRead(conversationId);
+                  }
+                });
+
                 // Auto-scroll to bottom when messages update
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scrollController.hasClients) {
