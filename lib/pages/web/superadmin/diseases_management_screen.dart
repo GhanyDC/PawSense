@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 import 'package:pawsense/core/services/super_admin/skin_diseases_service.dart';
 import 'package:pawsense/core/widgets/shared/page_header.dart';
@@ -6,6 +9,7 @@ import 'package:pawsense/core/widgets/super_admin/disease_management/disease_sta
 import 'package:pawsense/core/widgets/super_admin/disease_management/disease_search_and_filter.dart';
 import 'package:pawsense/core/widgets/super_admin/disease_management/disease_card.dart';
 import 'package:pawsense/core/widgets/super_admin/disease_management/add_edit_disease_modal.dart';
+import 'package:pawsense/core/widgets/super_admin/disease_management/disease_detail_modal.dart';
 
 class DiseasesManagementScreen extends StatefulWidget {
   const DiseasesManagementScreen({super.key});
@@ -91,30 +95,6 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
     _loadDiseases();
   }
 
-  Future<void> _handleDuplicate(SkinDiseaseModel disease) async {
-    try {
-      await SkinDiseasesService.duplicateDisease(disease.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Disease duplicated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-      _loadDiseases();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error duplicating disease: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleDelete(SkinDiseaseModel disease) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -165,22 +145,105 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
   }
 
   void _handleExportCSV() {
-    // TODO: Implement CSV export in next phase
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('CSV export will be implemented in the next phase'),
-        backgroundColor: Colors.orange,
-      ),
+    if (_filteredDiseases.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No diseases to export'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Generate CSV content
+      final csvContent = _generateCSV(_filteredDiseases);
+
+      // Create blob and download
+      final bytes = utf8.encode(csvContent);
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.document.createElement('a') as html.AnchorElement
+        ..href = url
+        ..style.display = 'none'
+        ..download = 'pawsense_diseases_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+
+      html.document.body?.children.add(anchor);
+      anchor.click();
+
+      html.document.body?.children.remove(anchor);
+      html.Url.revokeObjectUrl(url);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Exported ${_filteredDiseases.length} diseases to CSV'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting CSV: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String _generateCSV(List<SkinDiseaseModel> diseases) {
+    final buffer = StringBuffer();
+    
+    // CSV Headers
+    buffer.writeln(
+      'ID,Name,Description,Detection Method,Species,Severity,Categories,Contagious,'
+      'Duration,Symptoms,Causes,Treatments,Image URL,View Count,Created At,Updated At'
     );
+
+    // CSV Rows
+    for (final disease in diseases) {
+      buffer.writeln(
+        '${_escapeCsv(disease.id)},'
+        '${_escapeCsv(disease.name)},'
+        '${_escapeCsv(disease.description)},'
+        '${_escapeCsv(disease.detectionMethod)},'
+        '${_escapeCsv(disease.species.join('; '))},'
+        '${_escapeCsv(disease.severity)},'
+        '${_escapeCsv(disease.categories.join('; '))},'
+        '${disease.isContagious ? 'Yes' : 'No'},'
+        '${_escapeCsv(disease.duration)},'
+        '${_escapeCsv(disease.symptoms.join('; '))},'
+        '${_escapeCsv(disease.causes.join('; '))},'
+        '${_escapeCsv(disease.treatments.join('; '))},'
+        '${_escapeCsv(disease.imageUrl)},'
+        '${disease.viewCount},'
+        '${DateFormat('yyyy-MM-dd HH:mm:ss').format(disease.createdAt)},'
+        '${DateFormat('yyyy-MM-dd HH:mm:ss').format(disease.updatedAt)}'
+      );
+    }
+
+    return buffer.toString();
+  }
+
+  String _escapeCsv(String value) {
+    // Escape double quotes and wrap in quotes if contains comma, newline, or quotes
+    if (value.contains(',') || value.contains('\n') || value.contains('"')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
   }
 
   void _handleViewDetails(SkinDiseaseModel disease) {
-    // TODO: Implement detail view in next phase
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Detail view for "${disease.name}" - coming in next phase'),
-        backgroundColor: Colors.blue,
-      ),
+    // Increment view count
+    SkinDiseasesService.incrementViewCount(disease.id);
+    
+    // Show detail modal
+    showDialog(
+      context: context,
+      builder: (context) => DiseaseDetailModal(disease: disease),
     );
   }
 
@@ -351,67 +414,69 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
       ),
       child: Row(
         children: [
-          // Image - Fixed 60px
-          const SizedBox(width: 60),
-          const SizedBox(width: 16),
-
-          // Name - Flex 2
+          // Disease Name - Flex 3
           Expanded(
-            flex: 2,
-            child: _buildHeaderText('Disease Name'),
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildHeaderText('DISEASE NAME'),
+            ),
+          ),
+
+          // Detection - Fixed 100px
+          SizedBox(
+            width: 100,
+            child: _buildHeaderText('DETECTION'),
           ),
           const SizedBox(width: 16),
 
-          // Detection - Fixed 120px
+          // Species - Fixed 120px
           SizedBox(
             width: 120,
-            child: _buildHeaderText('Detection'),
-          ),
-          const SizedBox(width: 16),
-
-          // Species - Flex 1
-          Expanded(
-            flex: 1,
-            child: _buildHeaderText('Species'),
+            child: _buildHeaderText('SPECIES'),
           ),
           const SizedBox(width: 16),
 
           // Severity - Fixed 100px
           SizedBox(
             width: 100,
-            child: _buildHeaderText('Severity'),
+            child: Center(child: _buildHeaderText('SEVERITY')),
           ),
           const SizedBox(width: 16),
 
-          // Categories - Flex 2
-          Expanded(
-            flex: 2,
-            child: _buildHeaderText('Categories'),
+          // Categories - Fixed 120px
+          SizedBox(
+            width: 120,
+            child: _buildHeaderText('CATEGORIES'),
           ),
           const SizedBox(width: 16),
 
-          // Contagious - Fixed 80px
+          // Contagious - Fixed 100px
+          SizedBox(
+            width: 100,
+            child: Center(child: _buildHeaderText('CONTAGIOUS')),
+          ),
+          const SizedBox(width: 16),
+
+          // Actions - Fixed 80px
           SizedBox(
             width: 80,
-            child: _buildHeaderText('Contagious'),
+            child: _buildHeaderText('ACTIONS', textAlign: TextAlign.right),
           ),
-          const SizedBox(width: 16),
-
-          // Actions - Fixed 48px
-          const SizedBox(width: 48),
-          const SizedBox(width: 16),
         ],
       ),
     );
   }
 
-  Widget _buildHeaderText(String text) {
+  Widget _buildHeaderText(String text, {TextAlign textAlign = TextAlign.left}) {
     return Text(
       text,
+      textAlign: textAlign,
       style: TextStyle(
-        fontSize: 13,
+        fontSize: 11,
         fontWeight: FontWeight.w600,
-        color: Colors.grey.shade700,
+        color: Colors.grey.shade600,
+        letterSpacing: 0.8,
       ),
     );
   }
@@ -427,7 +492,6 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
           disease: disease,
           onTap: () => _handleViewDetails(disease),
           onEdit: () => _handleEdit(disease),
-          onDuplicate: () => _handleDuplicate(disease),
           onDelete: () => _handleDelete(disease),
         );
       },
