@@ -56,25 +56,22 @@ class BreedOptions {
   static List<String> _extractBreedNames(List<PetBreed> breeds, String petType) {
     final species = petType.toLowerCase();
     
-    // Filter by species and extract names
+    // Filter by species (already filtered by active status from Firebase query)
+    // and extract names
     final filteredBreeds = breeds
         .where((breed) => breed.species.toLowerCase() == species && breed.isActive)
         .map((breed) => breed.name)
         .toList();
 
-    // Add fallback options if list is empty
+    // If list is empty, return fallback breeds
+    // This should only happen if no active breeds exist in database
     if (filteredBreeds.isEmpty) {
       return _getFallbackBreeds(petType);
     }
 
-    // Always include Mixed Breed and Unknown at the end
-    if (!filteredBreeds.contains('Mixed Breed')) {
-      filteredBreeds.add('Mixed Breed');
-    }
-    if (!filteredBreeds.contains('Unknown')) {
-      filteredBreeds.add('Unknown');
-    }
-
+    // Return only the breeds that are active in the database
+    // Do NOT add "Mixed Breed" or "Unknown" automatically
+    // They should only appear if they're marked as active by admin
     return filteredBreeds;
   }
 
