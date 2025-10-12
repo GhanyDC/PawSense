@@ -14,6 +14,7 @@ import 'package:pawsense/core/guards/auth_guard.dart';
 import 'package:pawsense/core/services/notifications/appointment_booking_integration.dart';
 import 'package:pawsense/core/services/user/assessment_result_service.dart';
 import 'package:pawsense/core/models/user/assessment_result_model.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
 import 'dart:async';
 
 /// Cache entry for clinic schedule with real-time invalidation support
@@ -1865,6 +1866,10 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           print('⚠️ Failed to create pending notification: $notificationError');
           // Don't block the success flow if notification fails
         }
+        
+        // Invalidate appointment history cache after successful booking
+        await _invalidateAppointmentHistoryCache();
+        
         // Success
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2083,6 +2088,24 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
       } else {
         context.go('/home');
       }
+    }
+  }
+
+  // Cache invalidation method
+  Future<void> _invalidateAppointmentHistoryCache() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final cache = DataCache();
+        
+        // Invalidate appointment history cache using the same pattern as home_page.dart
+        final appointmentCacheKey = 'user_appointments_${user.uid}';
+        cache.invalidate(appointmentCacheKey);
+        
+        print('DEBUG: Appointment history cache invalidated after booking for user: ${user.uid}');
+      }
+    } catch (e) {
+      print('DEBUG: Error invalidating appointment history cache: $e');
     }
   }
 }

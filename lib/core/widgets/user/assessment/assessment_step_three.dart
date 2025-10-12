@@ -21,6 +21,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:pawsense/core/services/user/skin_disease_service.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
 
 class AssessmentStepThree extends StatefulWidget {
   final Map<String, dynamic> assessmentData;
@@ -547,6 +549,10 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       // Small delay to ensure Firebase write has propagated
       await Future.delayed(const Duration(milliseconds: 500));
       
+      // Invalidate assessment history cache to ensure fresh data
+      await _invalidateAssessmentHistoryCache();
+      print('DEBUG: Assessment history cache invalidated');
+      
       // Navigate to home with history tab and force refresh with timestamp
       if (mounted) {
         final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -999,6 +1005,14 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
         Navigator.of(context).pop();
       }
 
+      // Invalidate assessment history cache since we just saved an assessment
+      await _invalidateAssessmentHistoryCache();
+      print('DEBUG: Assessment history cache invalidated after saving for appointment booking');
+
+      // Also invalidate appointment history cache as we're about to create an appointment
+      await _invalidateAppointmentHistoryCache();
+      print('DEBUG: Appointment history cache invalidated in preparation for booking');
+
       // Navigate to book appointment page with assessment result ID
       if (mounted) {
         context.go('/book-appointment?assessment_result_id=$assessmentResultId&skip_service=true');
@@ -1044,6 +1058,41 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
         );
       },
     );
+  }
+
+  // Cache invalidation methods
+  Future<void> _invalidateAssessmentHistoryCache() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final cache = DataCache();
+        
+        // Invalidate assessment results cache
+        final assessmentCacheKey = CacheKeys.userAssessments(user.uid);
+        cache.invalidate(assessmentCacheKey);
+        
+        print('DEBUG: Assessment history cache invalidated for user: ${user.uid}');
+      }
+    } catch (e) {
+      print('DEBUG: Error invalidating assessment history cache: $e');
+    }
+  }
+
+  Future<void> _invalidateAppointmentHistoryCache() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final cache = DataCache();
+        
+        // Invalidate appointment history cache using the same pattern as home_page.dart
+        final appointmentCacheKey = 'user_appointments_${user.uid}';
+        cache.invalidate(appointmentCacheKey);
+        
+        print('DEBUG: Appointment history cache invalidated for user: ${user.uid}');
+      }
+    } catch (e) {
+      print('DEBUG: Error invalidating appointment history cache: $e');
+    }
   }
 
   @override
