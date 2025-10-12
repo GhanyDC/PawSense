@@ -5,6 +5,7 @@ import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/models/breeds/pet_breed_model.dart';
 import 'package:pawsense/core/services/super_admin/pet_breeds_service.dart';
 import 'package:pawsense/core/widgets/shared/page_header.dart';
+import 'package:pawsense/core/widgets/shared/pagination_widget.dart';
 import 'package:pawsense/core/widgets/super_admin/breed_management/breed_statistics_cards.dart';
 import 'package:pawsense/core/widgets/super_admin/breed_management/breed_search_and_filter.dart';
 import 'package:pawsense/core/widgets/super_admin/breed_management/breed_card.dart';
@@ -23,6 +24,12 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   
   bool _isLoading = true;
   bool _isLoadingStats = true;
+  
+  // Pagination
+  int _currentPage = 1;
+  final int _itemsPerPage = 10;
+  int _totalBreeds = 0;
+  int _totalPages = 0;
   
   // Filters
   String _searchQuery = '';
@@ -50,7 +57,9 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
     setState(() => _isLoading = true);
     
     try {
-      final breeds = await PetBreedsService.fetchAllBreeds(
+      final result = await PetBreedsService.getPaginatedBreeds(
+        page: _currentPage,
+        itemsPerPage: _itemsPerPage,
         speciesFilter: _selectedSpecies == BreedSpecies.all ? null : _selectedSpecies.value,
         statusFilter: _selectedStatus == BreedStatus.all ? null : _selectedStatus.value,
         searchQuery: _searchQuery,
@@ -58,9 +67,14 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
       );
       
       setState(() {
-        _filteredBreeds = breeds;
+        _filteredBreeds = result['breeds'] as List<PetBreed>;
+        _totalBreeds = result['totalBreeds'] as int;
+        _totalPages = result['totalPages'] as int;
+        _currentPage = result['currentPage'] as int;
         _isLoading = false;
       });
+      
+      print('✅ Loaded ${_filteredBreeds.length} breeds on page $_currentPage of $_totalPages (total: $_totalBreeds)');
     } catch (e) {
       print('Error loading breeds: $e');
       setState(() => _isLoading = false);
@@ -86,23 +100,42 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   void _onSearchChanged(String query) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(Duration(milliseconds: 500), () {
-      setState(() => _searchQuery = query);
+      setState(() {
+        _searchQuery = query;
+        _currentPage = 1; // Reset to first page on search
+      });
       _loadBreeds();
     });
   }
   
   void _onSpeciesChanged(BreedSpecies species) {
-    setState(() => _selectedSpecies = species);
+    setState(() {
+      _selectedSpecies = species;
+      _currentPage = 1; // Reset to first page on filter change
+    });
     _loadBreeds();
   }
   
   void _onStatusChanged(BreedStatus status) {
-    setState(() => _selectedStatus = status);
+    setState(() {
+      _selectedStatus = status;
+      _currentPage = 1; // Reset to first page on filter change
+    });
     _loadBreeds();
   }
   
   void _onSortChanged(BreedSortOption sort) {
-    setState(() => _selectedSort = sort);
+    setState(() {
+      _selectedSort = sort;
+      _currentPage = 1; // Reset to first page on sort change
+    });
+    _loadBreeds();
+  }
+
+  void _onPageChanged(int page) {
+    setState(() {
+      _currentPage = page;
+    });
     _loadBreeds();
   }
   
@@ -275,6 +308,18 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
                   
                   // Breeds List/Grid
                   _isLoading ? _buildLoadingState() : _buildBreedsList(),
+                  
+                  // Pagination
+                  if (!_isLoading && _totalBreeds > 0) ...[
+                    SizedBox(height: kSpacingLarge),
+                    PaginationWidget(
+                      currentPage: _currentPage,
+                      totalPages: _totalPages,
+                      totalItems: _totalBreeds,
+                      onPageChanged: _onPageChanged,
+                      isLoading: _isLoading,
+                    ),
+                  ],
                 ],
               ),
             ),

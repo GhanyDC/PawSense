@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 import 'package:pawsense/core/services/super_admin/skin_diseases_service.dart';
 import 'package:pawsense/core/widgets/shared/page_header.dart';
+import 'package:pawsense/core/widgets/shared/pagination_widget.dart';
 import 'package:pawsense/core/widgets/super_admin/disease_management/disease_statistics_cards.dart';
 import 'package:pawsense/core/widgets/super_admin/disease_management/disease_search_and_filter.dart';
 import 'package:pawsense/core/widgets/super_admin/disease_management/disease_card.dart';
@@ -24,6 +25,12 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
   bool _isLoadingStats = true;
   List<SkinDiseaseModel> _filteredDiseases = [];
   Map<String, int> _statistics = {};
+
+  // Pagination states
+  int _currentPage = 1;
+  final int _itemsPerPage = 10;
+  int _totalDiseases = 0;
+  int _totalPages = 0;
 
   // Filter states
   String _searchQuery = '';
@@ -67,7 +74,9 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
     });
 
     try {
-      final diseases = await SkinDiseasesService.fetchAllDiseases(
+      final result = await SkinDiseasesService.getPaginatedDiseases(
+        page: _currentPage,
+        itemsPerPage: _itemsPerPage,
         detectionFilter: _detectionFilter,
         speciesFilter: _speciesFilter.isEmpty ? null : _speciesFilter,
         severityFilter: _severityFilter,
@@ -79,9 +88,14 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
       );
 
       setState(() {
-        _filteredDiseases = diseases;
+        _filteredDiseases = result['diseases'] as List<SkinDiseaseModel>;
+        _totalDiseases = result['totalDiseases'] as int;
+        _totalPages = result['totalPages'] as int;
+        _currentPage = result['currentPage'] as int;
         _isLoading = false;
       });
+      
+      print('✅ Loaded ${_filteredDiseases.length} diseases on page $_currentPage of $_totalPages (total: $_totalDiseases)');
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -98,6 +112,13 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
   }
 
   void _applyFilters() {
+    _loadDiseases();
+  }
+
+  void _onPageChanged(int page) {
+    setState(() {
+      _currentPage = page;
+    });
     _loadDiseases();
   }
 
@@ -420,6 +441,18 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
                   ],
                 ),
               ),
+
+              // Pagination
+              if (!_isLoading && _totalDiseases > 0) ...[
+                const SizedBox(height: 24),
+                PaginationWidget(
+                  currentPage: _currentPage,
+                  totalPages: _totalPages,
+                  totalItems: _totalDiseases,
+                  onPageChanged: _onPageChanged,
+                  isLoading: _isLoading,
+                ),
+              ],
             ],
           ),
         ),
