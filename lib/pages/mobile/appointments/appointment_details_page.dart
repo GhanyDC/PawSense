@@ -606,7 +606,7 @@ class _AppointmentDetailsPageState extends State<AppointmentDetailsPage> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () => context.go('/home?tab=history'),
+            onPressed: () => context.go('/home?tab=history&subtab=appointments'),
             icon: const Icon(Icons.arrow_back),
             label: const Text('Back to Appointments'),
             style: ElevatedButton.styleFrom(
