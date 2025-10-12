@@ -12,6 +12,7 @@ class HistorySection extends StatefulWidget {
   final bool isAppointmentHistoryLoading;
   final int initialSubtabIndex;
   final VoidCallback? onViewAllPressed;
+  final VoidCallback? onAppointmentUpdated;
 
   const HistorySection({
     super.key,
@@ -21,6 +22,7 @@ class HistorySection extends StatefulWidget {
     this.isAppointmentHistoryLoading = false,
     this.initialSubtabIndex = 0,
     this.onViewAllPressed,
+    this.onAppointmentUpdated,
   });
 
   @override
@@ -100,7 +102,10 @@ class _HistorySectionState extends State<HistorySection> {
           ] else ...[
             widget.isAppointmentHistoryLoading
                 ? _buildAppointmentLoadingState()
-                : AppointmentHistoryList(appointmentHistory: widget.appointmentHistory),
+                : AppointmentHistoryList(
+                    appointmentHistory: widget.appointmentHistory,
+                    onAppointmentUpdated: widget.onAppointmentUpdated,
+                  ),
           ],
         ],
       ),

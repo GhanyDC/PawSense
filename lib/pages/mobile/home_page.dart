@@ -587,7 +587,7 @@ class _UserHomePageState extends State<UserHomePage> {
         subtitle: subtitle,
         status: historyStatus,
         timestamp: appointment.appointmentDate,
-        clinicName: appointment.serviceName, // Use service name as clinic info
+        clinicName: appointment.serviceName, // Store service name for reference
       );
     }).toList();
   }
@@ -1032,6 +1032,10 @@ class _UserHomePageState extends State<UserHomePage> {
       initialSubtabIndex: _currentHistorySubtabIndex,
       onViewAllPressed: () {
         // Handle view all history
+      },
+      onAppointmentUpdated: () {
+        // Refresh appointment history when an appointment is updated (e.g., cancelled)
+        refreshAppointmentHistory(forceRefresh: true);
       },
     );
   }
