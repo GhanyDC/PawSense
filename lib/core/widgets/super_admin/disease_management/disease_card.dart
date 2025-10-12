@@ -123,20 +123,43 @@ class _DiseaseCardState extends State<DiseaseCard> {
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(8),
-        image: widget.disease.imageUrl.isNotEmpty
-            ? DecorationImage(
-                image: NetworkImage(widget.disease.imageUrl),
-                fit: BoxFit.cover,
-              )
-            : null,
       ),
-      child: widget.disease.imageUrl.isEmpty
-          ? Icon(
-              Icons.medical_services_outlined,
-              color: Colors.grey.shade400,
-              size: 28,
-            )
-          : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: widget.disease.imageUrl.isNotEmpty
+            ? Image.network(
+                widget.disease.imageUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholderIcon();
+                },
+              )
+            : _buildPlaceholderIcon(),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderIcon() {
+    return Icon(
+      Icons.medical_services_outlined,
+      color: Colors.grey.shade400,
+      size: 28,
     );
   }
 
