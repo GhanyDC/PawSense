@@ -423,6 +423,7 @@ class PatientRecordService {
           appointmentCount: appointmentCount,
           healthStatus: healthStatus,
           assessmentResultId: assessmentResultId,
+          petCreatedAt: pet.createdAt, // Add pet creation date
         );
 
         uniquePatients[appointment.petId] = patientRecord;
@@ -518,6 +519,7 @@ class PatientRecordService {
         appointmentCount: appointmentCount,
         healthStatus: healthStatus,
         assessmentResultId: appointment.assessmentResultId,
+        petCreatedAt: pet.createdAt,
       );
     } catch (e) {
       print('❌ Error fetching patient by pet ID: $e');
@@ -747,6 +749,7 @@ class PatientRecord {
   final int appointmentCount;
   final PatientHealthStatus healthStatus;
   final String? assessmentResultId;
+  final DateTime petCreatedAt; // Pet registration date for sorting
 
   PatientRecord({
     required this.petId,
@@ -765,6 +768,7 @@ class PatientRecord {
     required this.appointmentCount,
     required this.healthStatus,
     this.assessmentResultId,
+    required this.petCreatedAt,
   });
 
   PatientRecord copyWith({
@@ -784,6 +788,7 @@ class PatientRecord {
     int? appointmentCount,
     PatientHealthStatus? healthStatus,
     String? assessmentResultId,
+    DateTime? petCreatedAt,
   }) {
     return PatientRecord(
       petId: petId ?? this.petId,
@@ -802,6 +807,7 @@ class PatientRecord {
       appointmentCount: appointmentCount ?? this.appointmentCount,
       healthStatus: healthStatus ?? this.healthStatus,
       assessmentResultId: assessmentResultId ?? this.assessmentResultId,
+      petCreatedAt: petCreatedAt ?? this.petCreatedAt,
     );
   }
 

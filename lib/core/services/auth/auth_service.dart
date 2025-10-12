@@ -318,6 +318,14 @@ class AuthService {
 
       final uid = signInResult.user!.uid;
 
+      // Set display name for email purposes
+      if (firstName != null && lastName != null) {
+        final displayName = '${firstName.trim()} ${lastName.trim()}';
+        await signInResult.user!.updateDisplayName(displayName);
+      } else if (username.isNotEmpty) {
+        await signInResult.user!.updateDisplayName(username);
+      }
+
       // Create user profile
       final userModel = UserModel(
         uid: uid,
@@ -413,6 +421,21 @@ class AuthService {
         
         if (userData.role == 'admin') {
           await _validateClinicApprovalStatus(result.user!.uid);
+        }
+        
+        // Update display name for existing users (migration fix)
+        if (userData.firstName != null && userData.lastName != null) {
+          final currentDisplayName = result.user!.displayName;
+          final expectedDisplayName = '${userData.firstName!.trim()} ${userData.lastName!.trim()}';
+          
+          if (currentDisplayName != expectedDisplayName) {
+            try {
+              await result.user!.updateDisplayName(expectedDisplayName);
+              print('✅ Updated display name for user ${result.user!.uid}: $expectedDisplayName');
+            } catch (e) {
+              print('⚠️ Failed to update display name: $e');
+            }
+          }
         }
         
         // Initialize messaging preferences after successful login with user ID
@@ -531,6 +554,14 @@ class AuthService {
 
       if (result.user != null) {
         final uid = result.user!.uid;
+
+        // Set display name for email purposes
+        if (firstName != null && lastName != null) {
+          final displayName = '${firstName.trim()} ${lastName.trim()}';
+          await result.user!.updateDisplayName(displayName);
+        } else if (username.isNotEmpty) {
+          await result.user!.updateDisplayName(username);
+        }
 
         final userModel = UserModel(
           uid: uid,
