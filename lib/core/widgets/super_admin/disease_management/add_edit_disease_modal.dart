@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 import 'package:pawsense/core/services/super_admin/skin_diseases_service.dart';
 
@@ -21,6 +23,7 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
   late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  String? _errorMessage; // Error message to display in modal
 
   // Tab 1: Basic Info
   final _nameController = TextEditingController();
@@ -51,6 +54,8 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
 
   // Tab 4: Media
   final _imageUrlController = TextEditingController();
+  File? _selectedImageFile;
+  bool _isUploadingImage = false;
 
   // Available options
   final List<String> _availableCategories = [
@@ -421,12 +426,25 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
 
   void _showError(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() {
+        _errorMessage = message;
+      });
+      // Auto-hide error after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          setState(() {
+            _errorMessage = null;
+          });
+        }
+      });
+    }
+  }
+
+  void _clearError() {
+    if (mounted) {
+      setState(() {
+        _errorMessage = null;
+      });
     }
   }
 
@@ -457,6 +475,9 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
             // Header
             _buildHeader(),
 
+            // Error Banner (displayed inside modal)
+            if (_errorMessage != null) _buildErrorBanner(),
+
             // Tab Bar
             _buildTabBar(),
 
@@ -480,6 +501,49 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
             _buildFooter(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.red.shade200),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.error_outline,
+            color: Colors.red.shade700,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.red.shade900,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _clearError,
+            icon: Icon(
+              Icons.close,
+              size: 18,
+              color: Colors.red.shade700,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }
@@ -990,6 +1054,112 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
     );
   }
 
+  Future<void> _pickAndSaveImage() async {
+    try {
+      setState(() {
+        _isUploadingImage = true;
+        _errorMessage = null;
+      });
+
+      // Validate that disease name is filled first
+      if (_nameController.text.trim().isEmpty) {
+        setState(() {
+          _isUploadingImage = false;
+        });
+        _showError('⚠️ Please enter a disease name first before uploading an image');
+        return;
+      }
+
+      // Pick image file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null) {
+        // Get file extension
+        final extension = result.files.single.extension ?? 'jpg';
+        
+        // Generate filename from disease name (sanitize it)
+        final sanitizedName = _nameController.text.trim()
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+            .replaceAll(RegExp(r'-+'), '-')
+            .replaceAll(RegExp(r'^-|-$'), '');
+        final filename = '$sanitizedName.$extension';
+
+        // On desktop/mobile platforms, save to assets folder
+        if (result.files.single.path != null) {
+          try {
+            final pickedFile = File(result.files.single.path!);
+            
+            // Get the project's assets directory path
+            final projectPath = Directory.current.path;
+            final assetsDir = Directory('$projectPath\\assets\\img\\skin_diseases');
+            
+            // Create directory if it doesn't exist
+            if (!await assetsDir.exists()) {
+              await assetsDir.create(recursive: true);
+            }
+
+            // Copy file to assets directory
+            final destinationPath = '${assetsDir.path}\\$filename';
+            final savedFile = await pickedFile.copy(destinationPath);
+
+            setState(() {
+              _selectedImageFile = savedFile;
+              _imageUrlController.text = filename;
+              _isUploadingImage = false;
+            });
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('✅ Image saved successfully as: $filename'),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          } catch (e) {
+            // If saving fails, provide instructions
+            setState(() {
+              _imageUrlController.text = filename;
+              _isUploadingImage = false;
+            });
+            
+            _showError(
+              'Auto-save failed. Please manually save your image to:\n'
+              'assets\\img\\skin_diseases\\$filename\n\n'
+              'Error: ${e.toString()}'
+            );
+          }
+        } else {
+          // Web platform - file.bytes available but no path
+          setState(() {
+            _imageUrlController.text = filename;
+            _isUploadingImage = false;
+          });
+          
+          _showError(
+            'Running on web platform. Please manually save your image to:\n'
+            'assets\\img\\skin_diseases\\$filename\n\n'
+            'Then restart the app to see the preview.'
+          );
+        }
+      } else {
+        setState(() {
+          _isUploadingImage = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isUploadingImage = false;
+      });
+      _showError('Error: ${e.toString()}');
+    }
+  }
+
   Widget _buildMediaTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -999,7 +1169,7 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
           _buildSectionTitle('Image', required: true),
           const SizedBox(height: 8),
           Text(
-            'Provide a URL or filename for the disease image',
+            'Upload an image file or provide a URL',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey.shade600,
@@ -1007,15 +1177,63 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
           ),
           const SizedBox(height: 16),
 
+          // Upload Image Button
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isUploadingImage ? null : _pickAndSaveImage,
+                  icon: _isUploadingImage
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.upload_file),
+                  label: Text(_isUploadingImage ? 'Uploading...' : 'Upload Image from Computer'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Divider with "OR"
+          Row(
+            children: [
+              Expanded(child: Divider(color: Colors.grey.shade300)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'OR',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+              Expanded(child: Divider(color: Colors.grey.shade300)),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
           // Image URL Input
           TextFormField(
             controller: _imageUrlController,
             decoration: InputDecoration(
-              hintText: 'https://example.com/image.jpg or filename.jpg',
-              prefixIcon: const Icon(Icons.image_outlined),
+              hintText: 'Enter filename (e.g., ringworm.jpg) or URL',
+              prefixIcon: const Icon(Icons.link),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
+              helperText: 'Filename only if image already exists in assets folder',
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
@@ -1024,14 +1242,16 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
               return null;
             },
             onChanged: (value) {
-              setState(() {}); // Rebuild to update preview
+              setState(() {
+                _selectedImageFile = null; // Clear selected file when typing
+              });
             },
           ),
 
           const SizedBox(height: 24),
 
           // Image Preview
-          if (_imageUrlController.text.trim().isNotEmpty)
+          if (_imageUrlController.text.trim().isNotEmpty || _selectedImageFile != null)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1085,14 +1305,12 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
                   ],
                 ),
                 const SizedBox(height: 12),
-                _buildGuideline('Use clear, high-quality images'),
-                _buildGuideline(
-                    'For network images, use full URLs starting with http:// or https://'),
-                _buildGuideline(
-                    'For local assets, use just the filename (e.g., ringworm.jpg)'),
-                _buildGuideline(
-                    'Local images should be placed in assets/img/skin_diseases/'),
+                _buildGuideline('Use clear, high-quality images showing the disease clearly'),
+                _buildGuideline('Click "Upload Image" to select and save image to assets folder'),
+                _buildGuideline('Uploaded images are automatically saved with proper naming'),
+                _buildGuideline('For network images, use full URLs starting with http:// or https://'),
                 _buildGuideline('Recommended size: 800x600 pixels or larger'),
+                _buildGuideline('Supported formats: JPG, PNG, WebP'),
               ],
             ),
           ),
@@ -1102,6 +1320,30 @@ class _AddEditDiseaseModalState extends State<AddEditDiseaseModal>
   }
 
   Widget _buildImagePreview() {
+    // If there's a selected file (just uploaded), show it
+    if (_selectedImageFile != null && _selectedImageFile!.existsSync()) {
+      return Image.file(
+        _selectedImageFile!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, color: Colors.red.shade400, size: 48),
+                const SizedBox(height: 8),
+                Text(
+                  'Failed to load image file',
+                  style: TextStyle(color: Colors.red.shade700),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    // Otherwise, try to load from URL or asset path
     final imageUrl = _imageUrlController.text.trim();
     final isNetworkImage =
         imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
