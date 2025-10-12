@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/models/breeds/pet_breed_model.dart';
 import 'package:pawsense/core/services/super_admin/pet_breeds_service.dart';
 import 'package:pawsense/core/widgets/shared/page_header.dart';
-import 'package:pawsense/core/widgets/shared/pagination_widget.dart';
 import 'package:pawsense/core/widgets/super_admin/breed_management/breed_statistics_cards.dart';
 import 'package:pawsense/core/widgets/super_admin/breed_management/breed_search_and_filter.dart';
 import 'package:pawsense/core/widgets/super_admin/breed_management/breed_card.dart';
@@ -24,12 +26,6 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   
   bool _isLoading = true;
   bool _isLoadingStats = true;
-  
-  // Pagination
-  int _currentPage = 1;
-  final int _itemsPerPage = 10;
-  int _totalBreeds = 0;
-  int _totalPages = 0;
   
   // Filters
   String _searchQuery = '';
@@ -57,9 +53,7 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
     setState(() => _isLoading = true);
     
     try {
-      final result = await PetBreedsService.getPaginatedBreeds(
-        page: _currentPage,
-        itemsPerPage: _itemsPerPage,
+      final breeds = await PetBreedsService.fetchAllBreeds(
         speciesFilter: _selectedSpecies == BreedSpecies.all ? null : _selectedSpecies.value,
         statusFilter: _selectedStatus == BreedStatus.all ? null : _selectedStatus.value,
         searchQuery: _searchQuery,
@@ -67,14 +61,9 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
       );
       
       setState(() {
-        _filteredBreeds = result['breeds'] as List<PetBreed>;
-        _totalBreeds = result['totalBreeds'] as int;
-        _totalPages = result['totalPages'] as int;
-        _currentPage = result['currentPage'] as int;
+        _filteredBreeds = breeds;
         _isLoading = false;
       });
-      
-      print('✅ Loaded ${_filteredBreeds.length} breeds on page $_currentPage of $_totalPages (total: $_totalBreeds)');
     } catch (e) {
       print('Error loading breeds: $e');
       setState(() => _isLoading = false);
@@ -100,42 +89,23 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
   void _onSearchChanged(String query) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(Duration(milliseconds: 500), () {
-      setState(() {
-        _searchQuery = query;
-        _currentPage = 1; // Reset to first page on search
-      });
+      setState(() => _searchQuery = query);
       _loadBreeds();
     });
   }
   
   void _onSpeciesChanged(BreedSpecies species) {
-    setState(() {
-      _selectedSpecies = species;
-      _currentPage = 1; // Reset to first page on filter change
-    });
+    setState(() => _selectedSpecies = species);
     _loadBreeds();
   }
   
   void _onStatusChanged(BreedStatus status) {
-    setState(() {
-      _selectedStatus = status;
-      _currentPage = 1; // Reset to first page on filter change
-    });
+    setState(() => _selectedStatus = status);
     _loadBreeds();
   }
   
   void _onSortChanged(BreedSortOption sort) {
-    setState(() {
-      _selectedSort = sort;
-      _currentPage = 1; // Reset to first page on sort change
-    });
-    _loadBreeds();
-  }
-
-  void _onPageChanged(int page) {
-    setState(() {
-      _currentPage = page;
-    });
+    setState(() => _selectedSort = sort);
     _loadBreeds();
   }
   
@@ -223,6 +193,133 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
       _showErrorSnackBar('Failed to update status: $e');
     }
   }
+
+  Future<void> _handleExportCSV() async {
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Preparing export...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+
+    try {
+      // Fetch ALL filtered breeds (not just current page)
+      final result = await PetBreedsService.getPaginatedBreeds(
+        page: 1,
+        itemsPerPage: 999999, // Get all matching records
+        speciesFilter: _selectedSpecies == BreedSpecies.all ? null : _selectedSpecies.value,
+        statusFilter: _selectedStatus == BreedStatus.all ? null : _selectedStatus.value,
+        searchQuery: _searchQuery,
+        sortBy: _selectedSort.value,
+      );
+
+      final allFilteredBreeds = result['breeds'] as List<PetBreed>;
+
+      if (allFilteredBreeds.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No breeds to export'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Generate CSV content
+      final csvContent = _generateCSV(allFilteredBreeds);
+
+      // Create blob and download
+      final bytes = utf8.encode(csvContent);
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.document.createElement('a') as html.AnchorElement
+        ..href = url
+        ..style.display = 'none'
+        ..download = 'pawsense_breeds_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+
+      html.document.body?.children.add(anchor);
+      anchor.click();
+
+      html.document.body?.children.remove(anchor);
+      html.Url.revokeObjectUrl(url);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Exported ${allFilteredBreeds.length} breeds to CSV'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      print('📊 Exported ${allFilteredBreeds.length} breeds to CSV');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting CSV: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ Error exporting CSV: $e');
+    }
+  }
+
+  String _generateCSV(List<PetBreed> breeds) {
+    final buffer = StringBuffer();
+    
+    // CSV Headers
+    buffer.writeln(
+      'ID,Name,Species,Status,Created By,Created At,Updated At'
+    );
+
+    // CSV Rows
+    for (final breed in breeds) {
+      buffer.writeln(
+        '${_escapeCsv(breed.id)},'
+        '${_escapeCsv(breed.name)},'
+        '${_escapeCsv(breed.species)},'
+        '${_escapeCsv(breed.status)},'
+        '${_escapeCsv(breed.createdBy)},'
+        '${DateFormat('yyyy-MM-dd HH:mm:ss').format(breed.createdAt)},'
+        '${DateFormat('yyyy-MM-dd HH:mm:ss').format(breed.updatedAt)}'
+      );
+    }
+
+    return buffer.toString();
+  }
+
+  String _escapeCsv(String value) {
+    // Escape double quotes and wrap in quotes if contains comma, newline, or quotes
+    if (value.contains(',') || value.contains('\n') || value.contains('"')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
   
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -303,23 +400,12 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> {
                     onStatusChanged: _onStatusChanged,
                     selectedSort: _selectedSort,
                     onSortChanged: _onSortChanged,
+                    onExportCSV: _handleExportCSV,
                   ),
                   SizedBox(height: kSpacingLarge),
                   
                   // Breeds List/Grid
                   _isLoading ? _buildLoadingState() : _buildBreedsList(),
-                  
-                  // Pagination
-                  if (!_isLoading && _totalBreeds > 0) ...[
-                    SizedBox(height: kSpacingLarge),
-                    PaginationWidget(
-                      currentPage: _currentPage,
-                      totalPages: _totalPages,
-                      totalItems: _totalBreeds,
-                      onPageChanged: _onPageChanged,
-                      isLoading: _isLoading,
-                    ),
-                  ],
                 ],
               ),
             ),

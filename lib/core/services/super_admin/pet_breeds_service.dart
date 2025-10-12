@@ -6,17 +6,15 @@ class PetBreedsService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'petBreeds';
 
-  /// Get paginated breeds with optional filtering and sorting
-  static Future<Map<String, dynamic>> getPaginatedBreeds({
-    int page = 1,
-    int itemsPerPage = 10,
+  /// Get all breeds with optional filtering and sorting
+  static Future<List<PetBreed>> fetchAllBreeds({
     String? speciesFilter,
     String? statusFilter,
     String? searchQuery,
     String sortBy = 'name_asc',
   }) async {
     try {
-      print('🔍 Fetching paginated breeds: page=$page, perPage=$itemsPerPage, species=$speciesFilter, status=$statusFilter, search=$searchQuery, sort=$sortBy');
+      print('🔍 Fetching breeds: species=$speciesFilter, status=$statusFilter, search=$searchQuery, sort=$sortBy');
 
       Query query = _firestore.collection(_collection);
 
@@ -51,25 +49,52 @@ class PetBreedsService {
       // Apply sorting
       breeds = _sortBreeds(breeds, sortBy);
 
+      print('✅ Returning ${breeds.length} breeds');
+      return breeds;
+    } catch (e) {
+      print('❌ Error fetching breeds: $e');
+      return [];
+    }
+  }
+
+  /// Get paginated breeds with optional filtering and sorting
+  static Future<Map<String, dynamic>> getPaginatedBreeds({
+    int page = 1,
+    int itemsPerPage = 10,
+    String? speciesFilter,
+    String? statusFilter,
+    String? searchQuery,
+    String sortBy = 'name_asc',
+  }) async {
+    try {
+      // Fetch all matching breeds first
+      final allBreeds = await fetchAllBreeds(
+        speciesFilter: speciesFilter,
+        statusFilter: statusFilter,
+        searchQuery: searchQuery,
+        sortBy: sortBy,
+      );
+
       // Calculate pagination
-      final totalBreeds = breeds.length;
+      final totalBreeds = allBreeds.length;
       final totalPages = (totalBreeds / itemsPerPage).ceil();
-      final startIndex = (page - 1) * itemsPerPage;
-      final endIndex = (startIndex + itemsPerPage).clamp(0, totalBreeds);
+      final validPage = page.clamp(1, totalPages > 0 ? totalPages : 1);
 
       // Get paginated subset
-      final paginatedBreeds = breeds.sublist(
+      final startIndex = (validPage - 1) * itemsPerPage;
+      final endIndex = (startIndex + itemsPerPage).clamp(0, totalBreeds);
+      final paginatedBreeds = allBreeds.sublist(
         startIndex.clamp(0, totalBreeds),
         endIndex,
       );
 
-      print('✅ Returning page $page of $totalPages (${paginatedBreeds.length} breeds)');
+      print('📄 Breeds Pagination: page $validPage/$totalPages, showing ${paginatedBreeds.length}/$totalBreeds breeds');
 
       return {
         'breeds': paginatedBreeds,
         'totalBreeds': totalBreeds,
         'totalPages': totalPages,
-        'currentPage': page,
+        'currentPage': validPage,
       };
     } catch (e) {
       print('❌ Error fetching paginated breeds: $e');
@@ -79,29 +104,6 @@ class PetBreedsService {
         'totalPages': 0,
         'currentPage': 1,
       };
-    }
-  }
-
-  /// Get all breeds with optional filtering and sorting (kept for backward compatibility)
-  static Future<List<PetBreed>> fetchAllBreeds({
-    String? speciesFilter,
-    String? statusFilter,
-    String? searchQuery,
-    String sortBy = 'name_asc',
-  }) async {
-    try {
-      final result = await getPaginatedBreeds(
-        page: 1,
-        itemsPerPage: 999999, // Get all
-        speciesFilter: speciesFilter,
-        statusFilter: statusFilter,
-        searchQuery: searchQuery,
-        sortBy: sortBy,
-      );
-      return result['breeds'] as List<PetBreed>;
-    } catch (e) {
-      print('❌ Error fetching all breeds: $e');
-      return [];
     }
   }
 

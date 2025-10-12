@@ -185,20 +185,62 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
     }
   }
 
-  void _handleExportCSV() {
-    if (_filteredDiseases.isEmpty) {
+  Future<void> _handleExportCSV() async {
+    // Show loading indicator
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No diseases to export'),
-          backgroundColor: Colors.orange,
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Preparing export...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+          backgroundColor: Colors.blue,
         ),
       );
-      return;
     }
 
     try {
+      // Fetch ALL filtered diseases (not just current page)
+      final result = await SkinDiseasesService.getPaginatedDiseases(
+        page: 1,
+        itemsPerPage: 999999, // Get all matching records
+        detectionFilter: _detectionFilter,
+        speciesFilter: _speciesFilter.isEmpty ? null : _speciesFilter,
+        severityFilter: _severityFilter,
+        categoriesFilter: _categoriesFilter.isEmpty ? null : _categoriesFilter,
+        contagiousFilter: _contagiousFilter,
+        searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
+        sortBy: _sortBy,
+      );
+
+      final allFilteredDiseases = result['diseases'] as List<SkinDiseaseModel>;
+
+      if (allFilteredDiseases.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No diseases to export'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
       // Generate CSV content
-      final csvContent = _generateCSV(_filteredDiseases);
+      final csvContent = _generateCSV(allFilteredDiseases);
 
       // Create blob and download
       final bytes = utf8.encode(csvContent);
@@ -216,15 +258,20 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
       html.Url.revokeObjectUrl(url);
 
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Exported ${_filteredDiseases.length} diseases to CSV'),
+            content: Text('✅ Exported ${allFilteredDiseases.length} diseases to CSV'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
+
+      print('📊 Exported ${allFilteredDiseases.length} diseases to CSV');
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error exporting CSV: $e'),
@@ -232,6 +279,7 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> {
           ),
         );
       }
+      print('❌ Error exporting CSV: $e');
     }
   }
 
