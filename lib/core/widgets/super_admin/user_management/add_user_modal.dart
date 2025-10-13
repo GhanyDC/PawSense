@@ -491,10 +491,6 @@ class _AddUserModalState extends State<AddUserModal> {
                     value: 'admin',
                     child: Text('Admin'),
                   ),
-                  DropdownMenuItem(
-                    value: 'super_admin',
-                    child: Text('Super Admin'),
-                  ),
                 ],
                 onChanged: (value) {
                   if (value != null) {

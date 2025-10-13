@@ -20,9 +20,13 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          PageHeader(
-            title: 'System Analytics',
-            subtitle: 'Comprehensive system performance and usage analytics',
+          
+          Padding(
+            padding: const EdgeInsets.fromLTRB(kSpacingLarge, kSpacingLarge, kSpacingLarge, 0),
+            child: PageHeader(
+              title: 'System Analytics',
+              subtitle: 'Comprehensive system performance and usage analytics',
+            ),
           ),
           Expanded(
             child: SingleChildScrollView(

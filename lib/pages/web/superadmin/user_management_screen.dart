@@ -204,7 +204,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
           'total': _totalUsers,
           'active': _getMockUsersWithStatus().where((u) => u['isActive'] == true).length,
           'suspended': _getMockUsersWithStatus().where((u) => u['isActive'] == false).length,
-          'admins': _getMockUsersWithStatus().where((u) => (u['user'] as UserModel).role == 'admin' || (u['user'] as UserModel).role == 'super_admin').length,
+          'admins': _getMockUsersWithStatus().where((u) => (u['user'] as UserModel).role == 'admin').length,
           'users': _getMockUsersWithStatus().where((u) => (u['user'] as UserModel).role == 'user').length,
         };
         _isLoading = false;
@@ -710,21 +710,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
             PageHeader(
               title: 'User Management',
               subtitle: 'Manage and monitor all users in the system',
-              actions: [
-                ElevatedButton.icon(
-                  onPressed: _showAddUserModal,
-                  icon: const Icon(Icons.person_add, size: kIconSizeMedium),
-                  label: const Text('Add User'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: kSpacingMedium, vertical: kSpacingSmall),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ],
+              // actions: [
+              //   ElevatedButton.icon(
+              //     onPressed: _showAddUserModal,
+              //     icon: const Icon(Icons.person_add, size: kIconSizeMedium),
+              //     label: const Text('Add User'),
+              //     style: ElevatedButton.styleFrom(
+              //       backgroundColor: AppColors.primary,
+              //       foregroundColor: AppColors.white,
+              //       padding: const EdgeInsets.symmetric(horizontal: kSpacingMedium, vertical: kSpacingSmall),
+              //       shape: RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.circular(8),
+              //       ),
+              //     ),
+              //   ),
+              // ],
             ),
             
             SizedBox(height: kSpacingLarge),
@@ -736,7 +736,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
               inactiveUsers: _userStats['suspended'] ?? _usersWithStatus.where((u) => u['isActive'] == false).length,
               adminUsers: _userStats['admins'] ?? _usersWithStatus.where((u) {
                 final user = u['user'] as UserModel;
-                return user.role == 'admin' || user.role == 'super_admin';
+                return user.role == 'admin';
               }).length,
             ),
             

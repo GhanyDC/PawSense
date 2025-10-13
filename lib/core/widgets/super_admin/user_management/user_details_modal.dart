@@ -424,7 +424,6 @@ class _UserDetailsModalState extends State<UserDetailsModal>
             items: const [
               DropdownMenuItem(value: 'user', child: Text('User')),
               DropdownMenuItem(value: 'admin', child: Text('Admin')),
-              DropdownMenuItem(value: 'super_admin', child: Text('Super Admin')),
             ],
             onChanged: _isEditing ? (value) {
               if (value != null) {
@@ -1024,8 +1023,6 @@ class _UserDetailsModalState extends State<UserDetailsModal>
 
   String _formatRoleName(String role) {
     switch (role) {
-      case 'super_admin':
-        return 'Super Admin';
       case 'admin':
         return 'Admin';
       case 'user':
@@ -1053,8 +1050,6 @@ class _UserDetailsModalState extends State<UserDetailsModal>
 
   Color _getRoleColor() {
     switch (widget.user.role) {
-      case 'super_admin':
-        return AppColors.roleSuperAdmin;
       case 'admin':
         return AppColors.roleAdmin;
       case 'user':
@@ -1066,8 +1061,6 @@ class _UserDetailsModalState extends State<UserDetailsModal>
 
   Color _getRoleBackgroundColor() {
     switch (widget.user.role) {
-      case 'super_admin':
-        return AppColors.roleSuperAdminBg;
       case 'admin':
         return AppColors.roleAdminBg;
       case 'user':

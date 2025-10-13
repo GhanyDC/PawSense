@@ -212,8 +212,6 @@ class UserCard extends StatelessWidget {
 
   String _formatRoleName(String role) {
     switch (role) {
-      case 'super_admin':
-        return 'Super Admin';
       case 'admin':
         return 'Admin';
       case 'user':
@@ -241,8 +239,6 @@ class UserCard extends StatelessWidget {
 
   Color _getRoleColor() {
     switch (user.role) {
-      case 'super_admin':
-        return AppColors.roleSuperAdmin;
       case 'admin':
         return AppColors.roleAdmin;
       case 'user':
@@ -254,8 +250,6 @@ class UserCard extends StatelessWidget {
 
   Color _getRoleBackgroundColor() {
     switch (user.role) {
-      case 'super_admin':
-        return AppColors.roleSuperAdminBg;
       case 'admin':
         return AppColors.roleAdminBg;
       case 'user':
