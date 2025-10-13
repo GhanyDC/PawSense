@@ -84,6 +84,8 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
 
       if (assessmentDoc.exists) {
         final data = assessmentDoc.data()!;
+        print('📄 Assessment document fields: ${data.keys.toList()}');
+        
         final analysisResults = data['analysisResults'] as List<dynamic>? ?? [];
         
         setState(() {
@@ -96,14 +98,41 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             };
           }).toList();
           
-          // Load image assessment data for training validation
+          // Load image assessment data from multiple possible sources
+          // Priority: 1. Direct URL fields, 2. detectionResults, 3. imageUrls array
+          
+          // Try direct URL fields first
           _originalImageUrl = data['originalImageUrl'] as String?;
           _annotatedImageUrl = data['annotatedImageUrl'] as String?;
+          
+          // If not found, check detectionResults array for images with bounding boxes
+          if (_originalImageUrl == null || _originalImageUrl!.isEmpty) {
+            final detectionResults = data['detectionResults'] as List<dynamic>? ?? [];
+            if (detectionResults.isNotEmpty) {
+              final firstDetection = detectionResults[0] as Map<String, dynamic>?;
+              if (firstDetection != null) {
+                _originalImageUrl = firstDetection['imageUrl'] as String?;
+                print('📸 Found image in detectionResults: $_originalImageUrl');
+              }
+            }
+          }
+          
+          // If still not found, check imageUrls array
+          if (_originalImageUrl == null || _originalImageUrl!.isEmpty) {
+            final imageUrls = data['imageUrls'] as List<dynamic>? ?? [];
+            if (imageUrls.isNotEmpty) {
+              _originalImageUrl = imageUrls[0] as String?;
+              print('📸 Found image in imageUrls array: $_originalImageUrl');
+            }
+          }
+          
+          // Load metadata
           _assessmentMetadata = data['metadata'] as Map<String, dynamic>?;
           
-          print('AI Assessment loaded: hasAssessment=$_hasAIAssessment, predictions=${_aiPredictions.length}, originalImageUrl=$_originalImageUrl');
+          print('✅ AI Assessment loaded: hasAssessment=$_hasAIAssessment, predictions=${_aiPredictions.length}');
+          print('🖼️ Image URLs - Original: $_originalImageUrl, Annotated: $_annotatedImageUrl');
           
-          // Load assessment images if available
+          // Load assessment images if available from 'images' array
           final images = data['images'] as List<dynamic>? ?? [];
           _assessmentImages = images.map((img) {
             return {
@@ -114,14 +143,35 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             };
           }).toList();
           
+          // Also add images from detectionResults to _assessmentImages if available
+          final detectionResults = data['detectionResults'] as List<dynamic>? ?? [];
+          for (var detection in detectionResults) {
+            final imageUrl = detection['imageUrl'] as String?;
+            if (imageUrl != null && imageUrl.isNotEmpty) {
+              _assessmentImages.add({
+                'url': imageUrl,
+                'type': 'detection',
+                'timestamp': Timestamp.now(),
+                'description': 'Image with detections',
+              });
+            }
+          }
+          
+          print('📦 Total assessment images: ${_assessmentImages.length}');
+          
           // Initialize validation map
           for (var i = 0; i < _aiPredictions.length; i++) {
             _predictionValidation[i.toString()] = false;
           }
         });
+      } else {
+        print('❌ Assessment document does not exist');
       }
     } catch (e) {
-      print('Error loading AI assessment: $e');
+      print('❌ Error loading AI assessment: $e');
+      if (e is FirebaseException) {
+        print('Firebase error code: ${e.code}, message: ${e.message}');
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -501,6 +551,121 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
     final newHour = (totalMinutes ~/ 60) % 24;
     final newMinute = totalMinutes % 60;
     return '${newHour.toString().padLeft(2, '0')}:${newMinute.toString().padLeft(2, '0')}';
+  }
+
+  void _showImageZoomDialog(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierDismissible: true, // Allow closing by tapping outside
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.of(context).pop(), // Close on tap anywhere
+        child: Dialog(
+          backgroundColor: Colors.black87,
+          insetPadding: EdgeInsets.zero, // Remove all padding for full screen
+          child: Container(
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            color: Colors.transparent,
+            child: Stack(
+              children: [
+                // Image - Full screen (prevents closing when tapped)
+                Center(
+                  child: GestureDetector(
+                    onTap: () {}, // Prevent closing when tapping on image
+                    child: SizedBox(
+                      width: MediaQuery.of(context).size.width,
+                      height: MediaQuery.of(context).size.height,
+                      child: InteractiveViewer(
+                        panEnabled: true,
+                        minScale: 0.5,
+                        maxScale: 4.0,
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.black87,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.black87,
+                              child: const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.broken_image, size: 80, color: Colors.white),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'Failed to load image',
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Close button
+                Positioned(
+                  top: 40,
+                  right: 20,
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ),
+                // Hint text at bottom
+                Positioned(
+                  bottom: 40,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: const Text(
+                        'Pinch to zoom • Drag to pan',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1181,52 +1346,81 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                                       const SizedBox(height: 12),
                                       
                                       // Display assessment images (always show container)
-                                      Container(
-                                        width: double.infinity,
-                                        height: 200,
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
-                                              ? Image.network(
-                                                  _originalImageUrl!,
-                                                  fit: BoxFit.cover,
-                                                  loadingBuilder: (context, child, loadingProgress) {
-                                                    if (loadingProgress == null) return child;
-                                                    return const Center(
-                                                      child: CircularProgressIndicator(),
-                                                    );
-                                                  },
-                                                  errorBuilder: (context, error, stackTrace) {
-                                                    return Container(
-                                                      color: Colors.grey.withOpacity(0.1),
-                                                      child: const Center(
-                                                        child: Column(
-                                                          mainAxisAlignment: MainAxisAlignment.center,
-                                                          children: [
-                                                            Icon(Icons.broken_image, size: 40, color: Colors.grey),
-                                                            Text('Image not available', style: TextStyle(color: Colors.grey)),
-                                                          ],
+                                      InkWell(
+                                        onTap: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
+                                            ? () => _showImageZoomDialog(_originalImageUrl!)
+                                            : null,
+                                        child: Container(
+                                          width: double.infinity,
+                                          height: 300,
+                                          decoration: BoxDecoration(
+                                            border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Stack(
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
+                                                    ? Image.network(
+                                                        _originalImageUrl!,
+                                                        width: double.infinity,
+                                                        height: double.infinity,
+                                                        fit: BoxFit.cover,
+                                                        loadingBuilder: (context, child, loadingProgress) {
+                                                          if (loadingProgress == null) return child;
+                                                          return const Center(
+                                                            child: CircularProgressIndicator(),
+                                                          );
+                                                        },
+                                                        errorBuilder: (context, error, stackTrace) {
+                                                          return Container(
+                                                            color: Colors.grey.withOpacity(0.1),
+                                                            child: const Center(
+                                                              child: Column(
+                                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                                children: [
+                                                                  Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                                                                  Text('Image not available', style: TextStyle(color: Colors.grey)),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      )
+                                                    : Container(
+                                                        color: Colors.grey.withOpacity(0.1),
+                                                        child: const Center(
+                                                          child: Column(
+                                                            mainAxisAlignment: MainAxisAlignment.center,
+                                                            children: [
+                                                              Icon(Icons.image, size: 40, color: Colors.grey),
+                                                              Text('No assessment image available', style: TextStyle(color: Colors.grey)),
+                                                            ],
+                                                          ),
                                                         ),
                                                       ),
-                                                    );
-                                                  },
-                                                )
-                                              : Container(
-                                                  color: Colors.grey.withOpacity(0.1),
-                                                  child: const Center(
-                                                    child: Column(
-                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                      children: [
-                                                        Icon(Icons.image, size: 40, color: Colors.grey),
-                                                        Text('No assessment image available', style: TextStyle(color: Colors.grey)),
-                                                      ],
+                                              ),
+                                              // Zoom icon overlay when image is available
+                                              if (_originalImageUrl != null && _originalImageUrl!.isNotEmpty)
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withOpacity(0.6),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.zoom_in,
+                                                      color: Colors.white,
+                                                      size: 20,
                                                     ),
                                                   ),
                                                 ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 8),
