@@ -175,10 +175,10 @@ class RealTimeNotificationService {
     // This should be optimized to only fetch recent appointments
     // and only when appointment status changes
     try {
-      final upcomingAppointments = await _firestore
-          .collection('appointments')
+      final upcomingAppointments = await FirebaseFirestore.instance
+          .collection('appointmentBookings')
           .where('userId', isEqualTo: userId)
-          .where('status', whereIn: ['pending', 'confirmed'])
+          .where('status', isEqualTo: 'confirmed') // Only send reminders for confirmed appointments
           .where('appointmentDate', isGreaterThan: Timestamp.now())
           .limit(10) // Only recent upcoming appointments
           .get();

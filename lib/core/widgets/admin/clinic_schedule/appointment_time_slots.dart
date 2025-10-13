@@ -275,9 +275,12 @@ class _AppointmentTimeSlotsState extends State<AppointmentTimeSlots> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 24),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 Icons.schedule_outlined,
@@ -292,6 +295,7 @@ class _AppointmentTimeSlotsState extends State<AppointmentTimeSlots> {
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w500,
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),

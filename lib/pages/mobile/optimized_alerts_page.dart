@@ -107,16 +107,42 @@ class _OptimizedAlertsPageState extends State<OptimizedAlertsPage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
+      print('🔍 DEBUG: Notification tapped - ID: ${notification.id}');
+      print('🔍 DEBUG: Notification type: ${notification.type}');
+      print('🔍 DEBUG: Notification metadata: ${notification.metadata}');
+
       // Mark as read if not already read
       if (!notification.isRead) {
         await _notificationService.markAsRead(notification.id, user.uid);
       }
 
+      // Check if this is an appointment-related notification
+      if (_isAppointmentNotification(notification)) {
+        print('🔍 DEBUG: This is an appointment notification');
+        // Try to get appointment ID from metadata
+        final appointmentId = notification.metadata?['appointmentId'] as String?;
+        
+        print('🔍 DEBUG: Appointment ID from metadata: $appointmentId');
+        
+        if (appointmentId != null && mounted) {
+          print('🔍 DEBUG: Navigating to appointment details: /appointments/details/$appointmentId');
+          // Navigate directly to appointment details
+          context.push('/appointments/details/$appointmentId');
+          return;
+        } else {
+          print('⚠️ DEBUG: No appointmentId found in metadata, falling back to notification details');
+        }
+      } else {
+        print('🔍 DEBUG: This is NOT an appointment notification');
+      }
+
       // Navigate to notification target if available
       if (notification.actionUrl != null && mounted) {
+        print('🔍 DEBUG: Using actionUrl: ${notification.actionUrl}');
         // Import go_router and use context.push
         context.push(notification.actionUrl!);
       } else {
+        print('🔍 DEBUG: No actionUrl, navigating to notification details');
         // If no specific action URL, navigate to notification detail page
         context.push('/alerts/details/${notification.id}', extra: notification);
       }
@@ -131,6 +157,14 @@ class _OptimizedAlertsPageState extends State<OptimizedAlertsPage> {
         );
       }
     }
+  }
+
+  /// Check if notification is appointment-related
+  bool _isAppointmentNotification(AlertData notification) {
+    return notification.type == AlertType.appointment ||
+           notification.type == AlertType.appointmentPending ||
+           notification.type == AlertType.reschedule ||
+           notification.type == AlertType.reappointment;
   }
 
   /// Handle pull to refresh

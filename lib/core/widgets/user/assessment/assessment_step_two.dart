@@ -624,9 +624,9 @@ class _AssessmentStepTwoState extends State<AssessmentStepTwo> {
                 if (_selectedImages.isEmpty)
                   _buildPhotoDropZone(),
                 
-                // Preparation Tips (Collapsible)
-                const SizedBox(height: kSpacingMedium),
-                _buildPreparationTips(),
+                // // Preparation Tips (Collapsible)
+                // const SizedBox(height: kSpacingMedium),
+                // _buildPreparationTips(),
                 
                 // Disclaimer at bottom
                 const SizedBox(height: kSpacingMedium),

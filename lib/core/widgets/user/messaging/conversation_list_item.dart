@@ -68,8 +68,8 @@ class ConversationListItem extends StatelessWidget {
                       children: [
                         Text(
                           conversation.clinicName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
+                          style: TextStyle(
+                            fontWeight: conversation.unreadCount > 0 ? FontWeight.w700 : FontWeight.w600,
                             fontSize: 14,
                             color: AppColors.textPrimary,
                           ),
@@ -81,9 +81,12 @@ class ConversationListItem extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             conversation.lastMessage!,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: conversation.unreadCount > 0 
+                                  ? AppColors.textPrimary.withValues(alpha: 0.8)
+                                  : AppColors.textSecondary,
                               fontSize: 12,
+                              fontWeight: conversation.unreadCount > 0 ? FontWeight.w500 : FontWeight.w400,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -96,36 +99,60 @@ class ConversationListItem extends StatelessWidget {
                   // Time and unread indicator
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       if (conversation.lastMessageTime != null)
                         Text(
                           _formatTime(conversation.lastMessageTime!),
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
+                          style: TextStyle(
+                            color: conversation.unreadCount > 0 
+                                ? AppColors.primary.withValues(alpha: 0.8)
+                                : AppColors.textSecondary,
                             fontSize: 11,
+                            fontWeight: conversation.unreadCount > 0 ? FontWeight.w500 : FontWeight.w400,
                           ),
                         ),
-                      if (conversation.unreadCount > 0) ...[
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            conversation.unreadCount.toString(),
-                            style: const TextStyle(
-                              color: AppColors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (conversation.unreadCount > 0) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.3),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                conversation.unreadCount > 99 ? '99+' : conversation.unreadCount.toString(),
+                                style: const TextStyle(
+                                  color: AppColors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
+                            const SizedBox(width: 4),
+                          ],
+                          Icon(
+                            Icons.chevron_right,
+                            color: conversation.unreadCount > 0 
+                                ? AppColors.primary.withValues(alpha: 0.6)
+                                : AppColors.textSecondary.withValues(alpha: 0.4),
+                            size: 16,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ],
                   ),
                 ],

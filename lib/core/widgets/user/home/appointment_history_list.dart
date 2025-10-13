@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
+import 'package:pawsense/core/widgets/user/home/appointment_history_detail_modal.dart';
 
 enum AppointmentStatus {
   confirmed,
@@ -30,10 +30,12 @@ class AppointmentHistoryData {
 
 class AppointmentHistoryList extends StatelessWidget {
   final List<AppointmentHistoryData> appointmentHistory;
+  final VoidCallback? onAppointmentUpdated;
 
   const AppointmentHistoryList({
     super.key,
     required this.appointmentHistory,
+    this.onAppointmentUpdated,
   });
 
   @override
@@ -51,13 +53,25 @@ class AppointmentHistoryList extends StatelessWidget {
         ...sortedAppointments.map((item) => AppointmentHistoryItem(
           data: item,
           onTap: () {
-            context.go('/appointment-history/${item.id}');
+            _showAppointmentDetails(context, item.id);
           },
           onDetailsPressed: () {
-            context.go('/appointment-history/${item.id}');
+            _showAppointmentDetails(context, item.id);
           },
+          onAppointmentUpdated: onAppointmentUpdated,
         )),
       ],
+    );
+  }
+
+  void _showAppointmentDetails(BuildContext context, String appointmentId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AppointmentHistoryDetailModal(
+          appointmentId: appointmentId,
+          onAppointmentUpdated: onAppointmentUpdated,
+        ),
+      ),
     );
   }
 
@@ -93,12 +107,14 @@ class AppointmentHistoryItem extends StatelessWidget {
   final AppointmentHistoryData data;
   final VoidCallback? onTap;
   final VoidCallback? onDetailsPressed;
+  final VoidCallback? onAppointmentUpdated;
 
   const AppointmentHistoryItem({
     super.key,
     required this.data,
     this.onTap,
     this.onDetailsPressed,
+    this.onAppointmentUpdated,
   });
 
   @override

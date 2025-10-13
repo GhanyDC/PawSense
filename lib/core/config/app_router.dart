@@ -43,6 +43,8 @@ import 'package:pawsense/core/widgets/admin/notifications/admin_notification_dro
 import 'package:pawsense/pages/web/superadmin/clinic_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/system_analytics_screen.dart';
 import 'package:pawsense/pages/web/superadmin/user_management_screen.dart';
+import 'package:pawsense/pages/web/superadmin/breed_management_screen.dart';
+import 'package:pawsense/pages/web/superadmin/diseases_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/system_settings_screen.dart';
 import 'package:flutter/foundation.dart';
 import '../widgets/shared/navigation/admin_shell.dart';
@@ -358,12 +360,18 @@ class AppRouter {
               child: const UserManagementScreen(),
             ),
           ),
-
           GoRoute(
-            path: '/super-admin/support',
-            builder: (context, state) => SupportCenterScreen(),
+            path: '/super-admin/pet-breeds',
+            builder: (context, state) => const BreedManagementScreen(),
             pageBuilder: (context, state) => NoTransitionPage(
-              child: SupportCenterScreen(),
+              child: const BreedManagementScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/super-admin/skin-diseases',
+            builder: (context, state) => const DiseasesManagementScreen(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: const DiseasesManagementScreen(),
             ),
           ),
           GoRoute(

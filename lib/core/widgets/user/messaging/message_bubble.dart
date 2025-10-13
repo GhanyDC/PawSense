@@ -48,7 +48,9 @@ class MessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isCurrentUser 
                     ? AppColors.primary 
-                    : AppColors.white,
+                    : (message.status == MessageStatus.sent && !isCurrentUser)
+                        ? AppColors.primary.withValues(alpha: 0.05)
+                        : AppColors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -57,7 +59,21 @@ class MessageBubble extends StatelessWidget {
                 ),
                 border: isCurrentUser 
                     ? null 
-                    : Border.all(color: AppColors.border),
+                    : Border.all(
+                        color: (message.status == MessageStatus.sent && !isCurrentUser)
+                            ? AppColors.primary.withValues(alpha: 0.3)
+                            : AppColors.border,
+                        width: (message.status == MessageStatus.sent && !isCurrentUser) ? 1.5 : 1,
+                      ),
+                boxShadow: (message.status == MessageStatus.sent && !isCurrentUser)
+                    ? [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ]
+                    : null,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,17 +85,37 @@ class MessageBubble extends StatelessWidget {
                           ? AppColors.white 
                           : AppColors.textPrimary,
                       fontSize: 14,
+                      fontWeight: (message.status == MessageStatus.sent && !isCurrentUser)
+                          ? FontWeight.w500
+                          : FontWeight.w400,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    _formatMessageTime(message.timestamp),
-                    style: TextStyle(
-                      color: isCurrentUser 
-                          ? AppColors.white.withValues(alpha: 0.7)
-                          : AppColors.textSecondary,
-                      fontSize: 10,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatMessageTime(message.timestamp),
+                        style: TextStyle(
+                          color: isCurrentUser 
+                              ? AppColors.white.withValues(alpha: 0.7)
+                              : AppColors.textSecondary,
+                          fontSize: 10,
+                        ),
+                      ),
+                      if (isCurrentUser) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          message.status == MessageStatus.read ? Icons.done_all : Icons.done,
+                          size: 12,
+                          color: message.status == MessageStatus.read 
+                              ? AppColors.success.withValues(alpha: 0.8)
+                              : message.status == MessageStatus.delivered
+                                  ? AppColors.info.withValues(alpha: 0.8)
+                                  : AppColors.white.withValues(alpha: 0.6),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

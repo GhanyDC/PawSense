@@ -11,7 +11,8 @@ class RoleManager {
         RouteInfo('/super-admin/system-analytics', 'System Analytics', Icons.analytics),
         RouteInfo('/super-admin/clinic-management', 'Clinic Management', Icons.business),
         RouteInfo('/super-admin/user-management', 'User Management', Icons.people_outline),
-        RouteInfo('/super-admin/support', 'Support Center', Icons.help_outline),
+        RouteInfo('/super-admin/pet-breeds', 'Pet Breeds', Icons.pets),
+        RouteInfo('/super-admin/skin-diseases', 'Skin Diseases', Icons.medical_services),
         RouteInfo('/super-admin/system-settings', 'System Settings', Icons.settings_outlined),
       ],
       permissions: [

@@ -11,77 +11,85 @@ class MobileConversationListItem extends StatefulWidget {
   final Conversation conversation;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
-  final bool isCurrentlySelected; // Add this to track if conversation is currently open
+  final bool isCurrentlySelected;
 
   const MobileConversationListItem({
     super.key,
     required this.conversation,
     required this.onTap,
     this.onDelete,
-    this.isCurrentlySelected = false, // Default to false
+    this.isCurrentlySelected = false,
   });
 
   @override
   State<MobileConversationListItem> createState() => _MobileConversationListItemState();
 }
 
-class _MobileConversationListItemState extends State<MobileConversationListItem>
-    with TickerProviderStateMixin {
-  final MobileMessagingPreferencesService _mobilePreferencesService = 
+class _MobileConversationListItemState extends State<MobileConversationListItem> {
+  final MobileMessagingPreferencesService _preferencesService = 
       MobileMessagingPreferencesService.instance;
   
   StreamSubscription<Set<String>>? _readConversationsSubscription;
-  StreamSubscription<bool>? _dataChangedSubscription;
-
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+  UserModel? _currentUser;
 
   @override
   void initState() {
     super.initState();
-    _initializePreferences();
+    _loadCurrentUser();
+    _setupReadStatusListener();
+  }
+
+  @override
+  void didUpdateWidget(MobileConversationListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
     
-    // Setup pulse animation for unread indicator
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-    _pulseAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.2,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
+    // If the conversation data changed (new message), trigger a rebuild
+    if (oldWidget.conversation.lastMessage != widget.conversation.lastMessage ||
+        oldWidget.conversation.lastMessageTime != widget.conversation.lastMessageTime ||
+        oldWidget.conversation.lastMessageSenderId != widget.conversation.lastMessageSenderId) {
+      
+      // Check if this should now be marked as unread due to new clinic message
+      if (_currentUser != null && 
+          widget.conversation.lastMessageSenderId != null &&
+          widget.conversation.lastMessageSenderId != _currentUser!.uid) {
+        
+        // If it's currently marked as read but we have a new clinic message, mark as unread
+        final isCurrentlyRead = _preferencesService.isConversationRead(widget.conversation.id);
+        if (isCurrentlyRead) {
+          print('🔄 Conversation ${widget.conversation.clinicName} has new clinic message, marking as unread');
+          _preferencesService.markConversationAsUnread(widget.conversation.id);
+        }
+      }
+      
+      // Force rebuild
+      if (mounted) {
+        setState(() {});
+      }
+    }
   }
 
   @override
   void dispose() {
     _readConversationsSubscription?.cancel();
-    _dataChangedSubscription?.cancel();
-    _pulseController.dispose();
     super.dispose();
   }
 
-  void _initializePreferences() async {
-    if (!mounted) return;
-    
-    // Listen to real-time data changes
-    _dataChangedSubscription = _mobilePreferencesService.dataChangedStream.listen(
-      (changed) {
-        if (mounted && changed) {
-          setState(() {
-            // Trigger rebuild when data changes
-          });
-        }
-      },
-      onError: (error) {
-        print('Error in data changed stream: $error');
-      },
-    );
-    
-    // Listen to changes in read conversations
-    _readConversationsSubscription = _mobilePreferencesService.readConversationsStream.listen(
+  Future<void> _loadCurrentUser() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (mounted) {
+        setState(() {
+          _currentUser = user;
+        });
+      }
+    } catch (e) {
+      print('Error loading current user: $e');
+    }
+  }
+
+  void _setupReadStatusListener() {
+    // Listen to changes in read conversations for UI updates
+    _readConversationsSubscription = _preferencesService.readConversationsStream.listen(
       (readConversations) {
         if (mounted) {
           setState(() {
@@ -94,14 +102,17 @@ class _MobileConversationListItemState extends State<MobileConversationListItem>
       },
     );
 
-    // Initialize if needed
-    if (!_mobilePreferencesService.isInitialized) {
+    // Initialize service if needed
+    _initializeServiceIfNeeded();
+  }
+
+  void _initializeServiceIfNeeded() async {
+    if (!_preferencesService.isInitialized && _currentUser != null) {
       try {
-        final user = await AuthGuard.getCurrentUser();
-        if (mounted && user != null) {
-          await _mobilePreferencesService.initializeForUser(user.uid);
-        } else {
-          print('Warning: Could not initialize mobile messaging preferences - no user');
+        await _preferencesService.initializeForUser(_currentUser!.uid);
+        // Trigger a rebuild after initialization
+        if (mounted) {
+          setState(() {});
         }
       } catch (e) {
         print('Warning: Could not initialize mobile messaging preferences: $e');
@@ -109,243 +120,172 @@ class _MobileConversationListItemState extends State<MobileConversationListItem>
     }
   }
 
-  /// Mark conversation as read when tapped (following admin logic)
-  void _markAsRead(String conversationId) {
-    if (!mounted) return; // Ensure widget is still mounted
-    
-    _mobilePreferencesService.markConversationAsRead(conversationId);
-    print('✅ Marked conversation $conversationId as read via mobile service');
-  }
-
   void _onTap() {
-    // Mark conversation as read when tapped (admin pattern)
-    _markAsRead(widget.conversation.id);
+    // Mark conversation as read when tapped
+    _preferencesService.markConversationAsRead(widget.conversation.id);
     widget.onTap();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<UserModel?>(
-      future: AuthGuard.getCurrentUser(),
-      builder: (context, userSnapshot) {
-        // Get current user to determine if last message was from clinic
-        final isReadInStorage = _mobilePreferencesService.isConversationRead(widget.conversation.id);
-        
-        bool hasUnreadFromClinic = false;
-        if (userSnapshot.hasData && userSnapshot.data != null) {
-          final currentUser = userSnapshot.data!;
-          
-          // Mobile user logic: Only show as unread if the last message was from clinic
-          // Ignore server unread count since it's designed for admin perspective
-          hasUnreadFromClinic = widget.conversation.lastMessageSenderId != currentUser.uid &&
-                                widget.conversation.lastMessageSenderId != null &&
-                                !isReadInStorage;
-          
-          // Fix-up logic: If last message is from clinic but marked as read, 
-          // this might be an old state that needs correction
-          if (widget.conversation.lastMessageSenderId != currentUser.uid &&
-              widget.conversation.lastMessageSenderId != null &&
-              isReadInStorage) {
-            print('🔧 Fix-up: Clinic message but marked as read - clearing read status for ${widget.conversation.clinicName} (ID: ${widget.conversation.id})');
-            // Clear the read status since there's a clinic message
-            _mobilePreferencesService.markConversationAsUnread(widget.conversation.id);
-            hasUnreadFromClinic = true; // Override for this render
-          }
-                                
-          // Debug logging only for conversations that should potentially show as unread
-          if (widget.conversation.lastMessageSenderId != currentUser.uid && widget.conversation.lastMessageSenderId != null) {
-            print('🔍 Debug conversation ${widget.conversation.clinicName}: lastSender=${widget.conversation.lastMessageSenderId}, currentUser=${currentUser.uid}, showAsUnread=$hasUnreadFromClinic, isRead=$isReadInStorage');
-          }
-        }
-        
-        final shouldShowAsUnread = hasUnreadFromClinic && !widget.isCurrentlySelected;
+    // Determine if conversation should show as unread
+    final isUnread = _isConversationUnread();
+    
+    return _buildConversationItem(isUnread);
+  }
 
-        // Control pulse animation based on unread status
-        if (shouldShowAsUnread && !_pulseController.isAnimating) {
-          _pulseController.repeat(reverse: true);
-        } else if (!shouldShowAsUnread && _pulseController.isAnimating) {
-          _pulseController.stop();
-          _pulseController.reset();
-        }
+  /// Simple logic to determine if conversation is unread
+  bool _isConversationUnread() {
+    if (_currentUser == null) return false;
+    
+    // Check if conversation is marked as read in storage
+    final isReadInStorage = _preferencesService.isConversationRead(widget.conversation.id);
+    
+    // Show as unread if last message was from clinic (not from current user)
+    final lastMessageFromClinic = widget.conversation.lastMessageSenderId != null &&
+                                 widget.conversation.lastMessageSenderId != _currentUser!.uid;
+    
+    final shouldBeUnread = lastMessageFromClinic && !isReadInStorage;
+    
+    // Debug logging for conversations that should potentially be unread
+    if (lastMessageFromClinic) {
+      print('📱 Conversation ${widget.conversation.clinicName}: lastSender=${widget.conversation.lastMessageSenderId}, currentUser=${_currentUser!.uid}, isRead=$isReadInStorage, shouldBeUnread=$shouldBeUnread');
+    }
+    
+    return shouldBeUnread;
+  }
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.only(bottom: kMobilePaddingSmall),
-          child: Material(
-            color: shouldShowAsUnread ? AppColors.primary.withValues(alpha: 0.08) : AppColors.white,
-            borderRadius: kMobileBorderRadiusSmallPreset,
-            elevation: shouldShowAsUnread ? 3 : 1,
-            shadowColor: shouldShowAsUnread 
-                ? AppColors.primary.withValues(alpha: 0.2)
-                : AppColors.textSecondary.withValues(alpha: 0.1),
-            child: InkWell(
-              onTap: _onTap,
-              borderRadius: kMobileBorderRadiusSmallPreset,
-              child: Container(
-                decoration: shouldShowAsUnread
-                    ? BoxDecoration(
-                        borderRadius: kMobileBorderRadiusSmallPreset,
-                        border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.2),
-                          width: 1,
-                        ),
-                      )
-                    : null,
-                padding: const EdgeInsets.all(kMobilePaddingSmall),
-                child: Row(
-                  children: [
-                    // Clinic avatar with animated unread indicator
-                    Stack(
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: shouldShowAsUnread 
-                                ? AppColors.primary.withValues(alpha: 0.15)
-                                : AppColors.primary.withValues(alpha: 0.1),
-                          ),
-                          child: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: Colors.transparent,
-                            child: Icon(
-                              Icons.local_hospital,
-                              color: shouldShowAsUnread ? AppColors.primary : AppColors.primary.withValues(alpha: 0.8),
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                        if (shouldShowAsUnread)
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: AnimatedBuilder(
-                              animation: _pulseAnimation,
-                              builder: (context, child) {
-                                return Transform.scale(
-                                  scale: _pulseAnimation.value,
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: AppColors.white,
-                                        width: 2,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.primary.withValues(alpha: 0.4),
-                                          blurRadius: 6,
-                                          spreadRadius: 1,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                      ],
+  /// Build the conversation item UI
+  Widget _buildConversationItem(bool isUnread) {
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: kMobilePaddingSmall),
+      child: Material(
+        color: isUnread 
+            ? AppColors.primary.withValues(alpha: 0.04)
+            : AppColors.white,
+        borderRadius: kMobileBorderRadiusSmallPreset,
+        elevation: isUnread ? 2 : 1,
+        shadowColor: isUnread 
+            ? AppColors.primary.withValues(alpha: 0.15)
+            : AppColors.textSecondary.withValues(alpha: 0.05),
+        child: InkWell(
+          onTap: _onTap,
+          borderRadius: kMobileBorderRadiusSmallPreset,
+          child: Container(
+            decoration: isUnread
+                ? BoxDecoration(
+                    borderRadius: kMobileBorderRadiusSmallPreset,
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      width: 1,
                     ),
-                    const SizedBox(width: kMobileSizedBoxLarge),
-
-                    // Conversation details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.conversation.clinicName,
-                            style: TextStyle(
-                              fontWeight: shouldShowAsUnread ? FontWeight.w700 : FontWeight.w600,
-                              fontSize: 14,
-                              color: shouldShowAsUnread ? AppColors.primary : AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.conversation.lastMessage ?? 'No messages yet',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: shouldShowAsUnread 
-                                  ? AppColors.textPrimary.withValues(alpha: 0.8)
-                                  : AppColors.textSecondary,
-                              fontWeight: shouldShowAsUnread ? FontWeight.w500 : FontWeight.normal,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                  )
+                : null,
+            padding: const EdgeInsets.all(kMobilePaddingSmall),
+            child: Row(
+              children: [
+                // Clinic avatar with unread indicator
+                Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: isUnread 
+                          ? AppColors.primary.withValues(alpha: 0.1)
+                          : AppColors.primary.withValues(alpha: 0.08),
+                      child: Icon(
+                        Icons.local_hospital,
+                        color: isUnread 
+                            ? AppColors.primary 
+                            : AppColors.primary.withValues(alpha: 0.7),
+                        size: 18,
                       ),
                     ),
-
-                    // Time and unread indicator
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (widget.conversation.lastMessageTime != null)
-                          Text(
-                            _formatTime(widget.conversation.lastMessageTime!),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: shouldShowAsUnread ? AppColors.primary : AppColors.textSecondary,
-                              fontWeight: shouldShowAsUnread ? FontWeight.w600 : FontWeight.normal,
+                    if (isUnread)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.white,
+                              width: 1.5,
                             ),
                           ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (shouldShowAsUnread)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary,
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primary.withValues(alpha: 0.3),
-                                      blurRadius: 4,
-                                      spreadRadius: 1,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                                child: const Text(
-                                  'NEW',
-                                  style: TextStyle(
-                                    color: AppColors.white,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            if (widget.onDelete != null) ...[
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _showDeleteConfirmation(context),
-                                child: Icon(
-                                  Icons.more_vert,
-                                  size: 16,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
                         ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
-              ),
+                const SizedBox(width: kMobileSizedBoxLarge),
+
+                // Conversation details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.conversation.clinicName,
+                        style: TextStyle(
+                          fontWeight: isUnread ? FontWeight.w600 : FontWeight.w500,
+                          fontSize: 14,
+                          color: isUnread 
+                              ? AppColors.textPrimary 
+                              : AppColors.textPrimary.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.conversation.lastMessage ?? 'No messages yet',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isUnread 
+                              ? AppColors.textPrimary.withValues(alpha: 0.7)
+                              : AppColors.textSecondary,
+                          fontWeight: isUnread ? FontWeight.w400 : FontWeight.normal,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Time and options
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (widget.conversation.lastMessageTime != null)
+                      Text(
+                        _formatTime(widget.conversation.lastMessageTime!),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isUnread 
+                              ? AppColors.primary 
+                              : AppColors.textSecondary,
+                          fontWeight: isUnread ? FontWeight.w500 : FontWeight.normal,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    if (widget.onDelete != null)
+                      GestureDetector(
+                        onTap: () => _showDeleteConfirmation(context),
+                        child: Icon(
+                          Icons.more_vert,
+                          size: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

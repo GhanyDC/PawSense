@@ -63,7 +63,8 @@ class _AppointmentHistoryDetailPageState extends State<AppointmentHistoryDetailP
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
-              context.go('/home?tab=history');
+              // Navigate back to home page with history tab and appointment history subtab
+              context.go('/home?tab=history&subtab=appointments');
             }
           },
         ),

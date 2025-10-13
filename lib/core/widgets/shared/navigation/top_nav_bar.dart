@@ -228,9 +228,7 @@ class _TopNavBarState extends State<TopNavBar> {
   Widget build(BuildContext context) {
     // Determine clinic title based on user role
     String displayTitle;
-    if (widget.userRole.toLowerCase() == 'admin') {
-      displayTitle = 'Veterinary Clinic Administrator';
-    } else if (widget.userRole.toLowerCase() == 'super_admin' || widget.userRole.toLowerCase() == 'super admin') {
+    if (widget.userRole.toLowerCase() == 'super_admin' || widget.userRole.toLowerCase() == 'super admin') {
       displayTitle = 'Super Administrator';
     } else {
       displayTitle = widget.clinicTitle;

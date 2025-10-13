@@ -218,6 +218,18 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
         });
       }
       
+      // Check if this is an appointment-related notification
+      if (_isAppointmentNotification(alert)) {
+        // Try to get appointment ID from metadata
+        final appointmentId = alert.metadata?['appointmentId'] as String?;
+        
+        if (appointmentId != null && mounted) {
+          // Navigate directly to appointment details
+          context.push('/appointments/details/$appointmentId');
+          return;
+        }
+      }
+      
       // Navigate to alert details page with notification data
       context.push(
         '/alerts/details/${alert.id}',
@@ -227,6 +239,14 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
       print('Error handling alert tap: $e');
       _showErrorMessage('Failed to open notification details');
     }
+  }
+
+  /// Check if notification is appointment-related
+  bool _isAppointmentNotification(AlertData alert) {
+    return alert.type == AlertType.appointment ||
+           alert.type == AlertType.appointmentPending ||
+           alert.type == AlertType.reschedule ||
+           alert.type == AlertType.reappointment;
   }
 
   Future<void> _handleMarkAsRead(AlertData alert) async {
