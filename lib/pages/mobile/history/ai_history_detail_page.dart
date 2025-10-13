@@ -488,24 +488,8 @@ class _AIHistoryDetailPageState extends State<AIHistoryDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.medical_services,
-                color: AppColors.warning,
-                size: 20,
-              ),
-              const SizedBox(width: kMobileSizedBoxMedium),
-              Text(
-                'Reported Symptoms',
-                style: kMobileTextStyleTitle.copyWith(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+          
+          
           const SizedBox(height: kMobileSizedBoxLarge),
           Wrap(
             spacing: 8,
@@ -551,24 +535,7 @@ class _AIHistoryDetailPageState extends State<AIHistoryDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.visibility,
-                color: AppColors.primary,
-                size: 20,
-              ),
-              const SizedBox(width: kMobileSizedBoxMedium),
-              Text(
-                'AI Detection Results',
-                style: kMobileTextStyleTitle.copyWith(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+          
           const SizedBox(height: kMobileSizedBoxLarge),
           ...assessment.detectionResults.asMap().entries.map((entry) {
             final index = entry.key;

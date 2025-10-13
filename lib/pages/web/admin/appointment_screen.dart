@@ -79,6 +79,9 @@ class _OptimizedAppointmentManagementScreenState
   // Debounce timer for search
   Timer? _searchDebounce;
 
+  // ValueNotifier for table updates only (prevents full screen rebuild)
+  final ValueNotifier<bool> _tableUpdateNotifier = ValueNotifier<bool>(false);
+
   @override
   bool get wantKeepAlive => true;
 
@@ -96,6 +99,7 @@ class _OptimizedAppointmentManagementScreenState
     _realtimeListener.unregisterStatusCountCallback(_updateStatusCountsRealTime);
     _realtimeListener.unregisterAppointmentListCallback(_refreshDataSilently);
     _searchDebounce?.cancel();
+    _tableUpdateNotifier.dispose();
     super.dispose();
   }
 
@@ -386,19 +390,21 @@ class _OptimizedAppointmentManagementScreenState
       filteredAppointments = allFiltered;
       print('🔍 Filtered: ${filteredAppointments.length} of ${appointments.length} appointments');
     }
+    
+    // Notify table to update without rebuilding entire screen
+    _tableUpdateNotifier.value = !_tableUpdateNotifier.value;
   }
 
 
 
   /// Toggle booked at sort order
   void _onBookedAtSortChanged() {
-    setState(() {
-      bookedAtSortOrder = bookedAtSortOrder == SortOrder.ascending 
-          ? SortOrder.descending 
-          : SortOrder.ascending;
-    });
+    // Update state without rebuilding entire screen
+    bookedAtSortOrder = bookedAtSortOrder == SortOrder.ascending 
+        ? SortOrder.descending 
+        : SortOrder.ascending;
     _saveState();
-    _applyFilters();
+    _applyFilters(); // This will trigger table update via ValueNotifier
     print('📅 Booked At sort changed to: ${bookedAtSortOrder.displayName}');
   }
 
@@ -494,14 +500,13 @@ class _OptimizedAppointmentManagementScreenState
   void _onPageChanged(int page) {
     print('🔄 Page change requested: $currentPage -> $page');
     if (page != currentPage) {
-      setState(() {
-        currentPage = page;
-      });
+      // Update page without rebuilding entire screen
+      currentPage = page;
       _saveState(); // Save state when page changes
       
       // For search mode, just re-apply filters with new page
       if (searchQuery.isNotEmpty) {
-        _applyFilters(); // This will paginate the filtered results
+        _applyFilters(); // This will paginate the filtered results and trigger table update
       } else {
         _loadPage(page, isPagination: true); // Load new page data with pagination flag
       }
@@ -537,13 +542,12 @@ class _OptimizedAppointmentManagementScreenState
     // Cancel previous timer
     _searchDebounce?.cancel();
 
-    // Debounce both setState and data loading to prevent UI jumps
+    // Debounce both data loading to prevent excessive queries
     _searchDebounce = Timer(const Duration(milliseconds: 600), () {
       if (mounted && query != searchQuery) {
-        setState(() {
-          searchQuery = query;
-          currentPage = 1; // Reset to first page
-        });
+        // Update state without rebuilding entire screen
+        searchQuery = query;
+        currentPage = 1; // Reset to first page
         _saveState();
         _loadDataWithNewFilter();
       }
@@ -552,10 +556,9 @@ class _OptimizedAppointmentManagementScreenState
 
   /// Handle status filter change
   void _onStatusChanged(String status) {
-    setState(() {
-      selectedStatus = status;
-      currentPage = 1; // Reset to first page
-    });
+    // Update state without rebuilding entire screen
+    selectedStatus = status;
+    currentPage = 1; // Reset to first page
     _saveState();
     
     // Reload data with new filter instead of just applying client-side filter
@@ -564,14 +567,13 @@ class _OptimizedAppointmentManagementScreenState
 
   /// Handle start date change
   void _onStartDateChanged(DateTime? date) {
-    setState(() {
-      startDate = date;
-      // If endDate is null, set it to today
-      if (date != null && endDate == null) {
-        endDate = DateTime.now();
-      }
-      currentPage = 1; // Reset to first page
-    });
+    // Update state without rebuilding entire screen
+    startDate = date;
+    // If endDate is null, set it to today
+    if (date != null && endDate == null) {
+      endDate = DateTime.now();
+    }
+    currentPage = 1; // Reset to first page
     _saveState();
     // Reload data with new date filter
     _loadDataWithNewFilter();
@@ -579,10 +581,9 @@ class _OptimizedAppointmentManagementScreenState
 
   /// Handle end date change
   void _onEndDateChanged(DateTime? date) {
-    setState(() {
-      endDate = date;
-      currentPage = 1; // Reset to first page
-    });
+    // Update state without rebuilding entire screen
+    endDate = date;
+    currentPage = 1; // Reset to first page
     _saveState();
     
     // Reload data with new date filter
@@ -823,13 +824,17 @@ class _OptimizedAppointmentManagementScreenState
 
   /// Load fresh data when filter changes to ensure all matching appointments are shown
   Future<void> _loadDataWithNewFilter() async {
-    setState(() {
-      isInitialLoading = true;
-      appointments.clear();
-      filteredAppointments.clear();
-      currentPage = 1;
-      _pageCursors.clear(); // Clear page cursors when filters change
-    });
+    // Only update loading state, not the entire UI
+    if (mounted) {
+      setState(() {
+        isInitialLoading = true;
+      });
+    }
+    
+    appointments.clear();
+    filteredAppointments.clear();
+    currentPage = 1;
+    _pageCursors.clear(); // Clear page cursors when filters change
 
     // If there's a search query, load ALL appointments for comprehensive search
     if (searchQuery.isNotEmpty) {
@@ -998,147 +1003,13 @@ class _OptimizedAppointmentManagementScreenState
                 ),
                 const SizedBox(height: 16),
 
-                // Appointment list
-                if (filteredAppointments.isEmpty)
-                  Container(
-                    height: 300,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.calendar_today,
-                                size: 48, color: AppColors.textSecondary),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No appointments found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Try adjusting your filters',
-                              style: TextStyle(color: AppColors.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                else ...[
-                  // Appointment list with pagination loading overlay
-                  Stack(
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppColors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Column(
-                          children: [
-                            AppointmentTableHeader(
-                              bookedAtSortOrder: bookedAtSortOrder,
-                              onBookedAtSortChanged: _onBookedAtSortChanged,
-                            ),
-                            
-                            // Appointment rows
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: filteredAppointments.length,
-                              itemBuilder: (context, index) {
-                                final appointment = filteredAppointments[index];
-                                return AppointmentTableRow(
-                                  appointment: appointment,
-                                  onView: () => _onView(appointment),
-                                  onAccept: appointment.status == AppointmentModels.AppointmentStatus.pending
-                                      ? () => _onAccept(appointment)
-                                      : null,
-                                  onMarkDone: appointment.status == AppointmentModels.AppointmentStatus.confirmed
-                                      ? () => _onMarkDone(appointment)
-                                      : null,
-                                  onReject: appointment.status == AppointmentModels.AppointmentStatus.pending
-                                      ? () => _onReject(appointment)
-                                      : null,
-                                  onEdit: () => _onEdit(appointment),
-                                  onDelete: () => _onDelete(appointment),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      // Show loading overlay during pagination
-                      if (_isPaginationLoading)
-                        Positioned.fill(
-                          child: Container(
-                            margin: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: AppColors.white.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Container(
-                                padding: EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: AppColors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.black.withOpacity(0.1),
-                                      blurRadius: 10,
-                                      offset: Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 40,
-                                      height: 40,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 3,
-                                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                      ),
-                                    ),
-                                    SizedBox(height: 16),
-                                    Text(
-                                      'Loading page $currentPage...',
-                                      style: TextStyle(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-
-                  // Pagination Controls
-                  if (totalPages > 1) ...[
-                    const SizedBox(height: 24),
-                    PaginationWidget(
-                      currentPage: currentPage,
-                      totalPages: totalPages,
-                      totalItems: totalAppointments,
-                      onPageChanged: _onPageChanged,
-                      isLoading: _isPaginationLoading,
-                    ),
-                  ],
-                ],
+                // Appointment list - wrapped in ValueListenableBuilder to update only table
+                ValueListenableBuilder<bool>(
+                  valueListenable: _tableUpdateNotifier,
+                  builder: (context, _, __) {
+                    return _buildAppointmentTable();
+                  },
+                ),
               ],
 
               // Bottom spacing
@@ -1147,6 +1018,156 @@ class _OptimizedAppointmentManagementScreenState
           ),
         ),
       ),
+    );
+  }
+
+  /// Build appointment table (separated for efficient updates)
+  Widget _buildAppointmentTable() {
+    // Empty state
+    if (filteredAppointments.isEmpty) {
+      return Container(
+        height: 300,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.calendar_today,
+                    size: 48, color: AppColors.textSecondary),
+                const SizedBox(height: 16),
+                const Text(
+                  'No appointments found',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Try adjusting your filters',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Table with appointments
+    return Column(
+      children: [
+        // Appointment list with pagination loading overlay
+        Stack(
+          children: [
+            Container(
+              margin: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                children: [
+                  AppointmentTableHeader(
+                    bookedAtSortOrder: bookedAtSortOrder,
+                    onBookedAtSortChanged: _onBookedAtSortChanged,
+                  ),
+                  
+                  // Appointment rows
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filteredAppointments.length,
+                    itemBuilder: (context, index) {
+                      final appointment = filteredAppointments[index];
+                      return AppointmentTableRow(
+                        appointment: appointment,
+                        onView: () => _onView(appointment),
+                        onAccept: appointment.status == AppointmentModels.AppointmentStatus.pending
+                            ? () => _onAccept(appointment)
+                            : null,
+                        onMarkDone: appointment.status == AppointmentModels.AppointmentStatus.confirmed
+                            ? () => _onMarkDone(appointment)
+                            : null,
+                        onReject: appointment.status == AppointmentModels.AppointmentStatus.pending
+                            ? () => _onReject(appointment)
+                            : null,
+                        onEdit: () => _onEdit(appointment),
+                        onDelete: () => _onDelete(appointment),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            
+            // Show loading overlay during pagination
+            if (_isPaginationLoading)
+              Positioned.fill(
+                child: Container(
+                  margin: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'Loading page $currentPage...',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+
+        // Pagination Controls
+        if (totalPages > 1) ...[
+          const SizedBox(height: 24),
+          PaginationWidget(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            totalItems: totalAppointments,
+            onPageChanged: _onPageChanged,
+            isLoading: _isPaginationLoading,
+          ),
+        ],
+      ],
     );
   }
 
