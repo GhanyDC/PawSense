@@ -1,11 +1,11 @@
 // screens/optimized_appointment_management_screen.dart
 import 'dart:async';
 import 'dart:convert';
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:pawsense/core/utils/file_downloader.dart' as file_downloader;
 import '../../../core/utils/app_colors.dart';
 import '../../../core/utils/sort_order.dart';
 import '../../../core/models/clinic/appointment_models.dart' as AppointmentModels;
@@ -681,26 +681,15 @@ class _OptimizedAppointmentManagementScreenState
       // Generate CSV content (with AI diagnosis data)
       final csvContent = await _generateCSV(allAppointments);
 
-      // Create blob and download
+      // Create blob and download using platform-agnostic downloader
       final bytes = utf8.encode(csvContent);
-      final blob = html.Blob([bytes]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
       
       // Create filename with clinic name and timestamp
       final clinicNameSafe = _cachedClinicName?.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'clinic';
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final filename = 'appointments_${clinicNameSafe}_$timestamp.csv';
       
-      final anchor = html.document.createElement('a') as html.AnchorElement
-        ..href = url
-        ..style.display = 'none'
-        ..download = filename;
-
-      html.document.body?.children.add(anchor);
-      anchor.click();
-
-      html.document.body?.children.remove(anchor);
-      html.Url.revokeObjectUrl(url);
+      file_downloader.downloadFile(filename, bytes);
 
       if (mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pawsense/core/utils/file_downloader.dart' as file_downloader;
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
@@ -613,20 +613,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
       // Generate CSV content
       final csvContent = _generateCSV(allFilteredUsers);
 
-      // Create blob and download
+      // Create blob and download using platform-agnostic downloader
       final bytes = utf8.encode(csvContent);
-      final blob = html.Blob([bytes]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.document.createElement('a') as html.AnchorElement
-        ..href = url
-        ..style.display = 'none'
-        ..download = 'pawsense_users_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
-
-      html.document.body?.children.add(anchor);
-      anchor.click();
-
-      html.document.body?.children.remove(anchor);
-      html.Url.revokeObjectUrl(url);
+      final fileName = 'pawsense_users_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      
+      file_downloader.downloadFile(fileName, bytes);
 
       if (mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
