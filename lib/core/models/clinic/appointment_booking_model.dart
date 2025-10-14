@@ -38,6 +38,12 @@ class AppointmentBooking {
   final String? rescheduleReason;
   final DateTime? rescheduledAt;
   final String? assessmentResultId;
+  // Clinic evaluation fields (set when appointment is completed)
+  final String? diagnosis;
+  final String? treatment;
+  final String? prescription;
+  final String? clinicNotes;
+  final DateTime? completedAt;
 
   AppointmentBooking({
     this.id,
@@ -60,6 +66,11 @@ class AppointmentBooking {
     this.rescheduleReason,
     this.rescheduledAt,
     this.assessmentResultId,
+    this.diagnosis,
+    this.treatment,
+    this.prescription,
+    this.clinicNotes,
+    this.completedAt,
   });
 
   /// Convert to Map for Firestore storage
@@ -84,6 +95,11 @@ class AppointmentBooking {
       'rescheduleReason': rescheduleReason,
       'rescheduledAt': rescheduledAt != null ? Timestamp.fromDate(rescheduledAt!) : null,
       'assessmentResultId': assessmentResultId,
+      'diagnosis': diagnosis,
+      'treatment': treatment,
+      'prescription': prescription,
+      'clinicNotes': clinicNotes,
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
     };
   }
 
@@ -134,6 +150,11 @@ class AppointmentBooking {
       rescheduleReason: map['rescheduleReason'],
       rescheduledAt: _safeTimestampToDateNullable(map['rescheduledAt']),
       assessmentResultId: map['assessmentResultId'],
+      diagnosis: map['diagnosis'],
+      treatment: map['treatment'],
+      prescription: map['prescription'],
+      clinicNotes: map['clinicNotes'],
+      completedAt: _safeTimestampToDateNullable(map['completedAt']),
     );
   }
 
@@ -159,6 +180,11 @@ class AppointmentBooking {
     String? rescheduleReason,
     DateTime? rescheduledAt,
     String? assessmentResultId,
+    String? diagnosis,
+    String? treatment,
+    String? prescription,
+    String? clinicNotes,
+    DateTime? completedAt,
   }) {
     return AppointmentBooking(
       id: id ?? this.id,
@@ -181,6 +207,11 @@ class AppointmentBooking {
       rescheduleReason: rescheduleReason ?? this.rescheduleReason,
       rescheduledAt: rescheduledAt ?? this.rescheduledAt,
       assessmentResultId: assessmentResultId ?? this.assessmentResultId,
+      diagnosis: diagnosis ?? this.diagnosis,
+      treatment: treatment ?? this.treatment,
+      prescription: prescription ?? this.prescription,
+      clinicNotes: clinicNotes ?? this.clinicNotes,
+      completedAt: completedAt ?? this.completedAt,
     );
   }
 

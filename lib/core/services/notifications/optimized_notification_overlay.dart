@@ -404,6 +404,8 @@ class _NotificationPopupWidgetState extends State<_NotificationPopupWidget>
         return Colors.red;
       case AlertType.reappointment:
         return Colors.indigo;
+      case AlertType.followUp:
+        return const Color(0xFF3B82F6); // Blue color for follow-ups
       case AlertType.systemUpdate:
         return Colors.purple;
     }
@@ -424,6 +426,8 @@ class _NotificationPopupWidgetState extends State<_NotificationPopupWidget>
         return Icons.cancel;
       case AlertType.reappointment:
         return Icons.event_repeat;
+      case AlertType.followUp:
+        return Icons.sync; // Sync icon for follow-ups
       case AlertType.systemUpdate:
         return Icons.info;
     }

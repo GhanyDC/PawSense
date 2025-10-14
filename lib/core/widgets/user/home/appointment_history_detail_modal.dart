@@ -200,6 +200,12 @@ class _AppointmentHistoryDetailModalState extends State<AppointmentHistoryDetail
             const SizedBox(height: kMobileSizedBoxXLarge),
           ],
           
+          // Clinic Evaluation (only for completed appointments)
+          if (appointment.status == AppointmentStatus.completed) ...[
+            _buildClinicEvaluationSection(appointment),
+            const SizedBox(height: kMobileSizedBoxXLarge),
+          ],
+          
           // Cancel button (only for pending appointments)
           if (appointment.status == AppointmentStatus.pending) ...[
             _buildCancelButton(appointment),
@@ -472,6 +478,76 @@ class _AppointmentHistoryDetailModalState extends State<AppointmentHistoryDetail
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClinicEvaluationSection(AppointmentBooking appointment) {
+    // Check if there's any evaluation data to display
+    final hasEvaluation = (appointment.diagnosis?.isNotEmpty ?? false) ||
+                         (appointment.treatment?.isNotEmpty ?? false) ||
+                         (appointment.prescription?.isNotEmpty ?? false) ||
+                         (appointment.clinicNotes?.isNotEmpty ?? false);
+
+    if (!hasEvaluation) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.medical_information_outlined,
+                  color: AppColors.success,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: kMobileSizedBoxMedium),
+              Expanded(
+                child: Text(
+                  'Clinic Evaluation',
+                  style: kMobileTextStyleTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: kMobileSizedBoxMedium),
+          
+          // Diagnosis
+          if (appointment.diagnosis?.isNotEmpty ?? false)
+            _buildInfoRow('Diagnosis', appointment.diagnosis!),
+          
+          // Treatment
+          if (appointment.treatment?.isNotEmpty ?? false)
+            _buildInfoRow('Treatment', appointment.treatment!),
+          
+          // Prescription
+          if (appointment.prescription?.isNotEmpty ?? false)
+            _buildInfoRow('Prescription', appointment.prescription!),
+          
+          // Clinic Notes
+          if (appointment.clinicNotes?.isNotEmpty ?? false)
+            _buildInfoRow('Clinical Notes', appointment.clinicNotes!),
         ],
       ),
     );

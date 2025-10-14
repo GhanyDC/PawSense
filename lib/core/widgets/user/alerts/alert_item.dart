@@ -9,6 +9,7 @@ enum AlertType {
   reschedule,
   declined,
   reappointment,
+  followUp,
   systemUpdate,
 }
 
@@ -208,6 +209,8 @@ class AlertItem extends StatelessWidget {
         return AppColors.error;
       case AlertType.reappointment:
         return AppColors.warning;
+      case AlertType.followUp:
+        return const Color(0xFF3B82F6); // Blue color for follow-ups
       case AlertType.systemUpdate:
         return AppColors.primary;
     }
@@ -229,6 +232,8 @@ class AlertItem extends StatelessWidget {
         return Icons.cancel_outlined;
       case AlertType.reappointment:
         return Icons.repeat;
+      case AlertType.followUp:
+        return Icons.sync; // Sync icon for follow-ups
       case AlertType.systemUpdate:
         return Icons.system_update;
     }

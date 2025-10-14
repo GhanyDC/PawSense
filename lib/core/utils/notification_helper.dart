@@ -89,6 +89,7 @@ class NotificationHelper {
     switch (type) {
       case AlertType.appointment:
       case AlertType.appointmentPending:
+      case AlertType.followUp:
         return NotificationCategory.appointment;
       case AlertType.message:
         return NotificationCategory.message;
@@ -135,8 +136,16 @@ class NotificationHelper {
   static AlertType _mapCategoryToAlertType(NotificationCategory category, [Map<String, dynamic>? metadata]) {
     switch (category) {
       case NotificationCategory.appointment:
-        // Check appointment status to determine the correct alert type
+        // Check appointment status and type to determine the correct alert type
         if (metadata != null) {
+          // Check if this is a follow-up appointment
+          final isFollowUp = metadata['isFollowUp'] == true;
+          final notificationType = metadata['notificationType'] as String?;
+          
+          if (isFollowUp || notificationType == 'followUp') {
+            return AlertType.followUp;
+          }
+          
           final status = metadata['status'] as String?;
           switch (status) {
             case 'pending':

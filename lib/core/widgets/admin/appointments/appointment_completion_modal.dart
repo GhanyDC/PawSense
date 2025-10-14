@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../utils/app_colors.dart';
 import '../../../models/clinic/appointment_models.dart';
+import '../../../services/notifications/notification_service.dart';
+import '../../../models/notifications/notification_model.dart';
 
 class AppointmentCompletionModal extends StatefulWidget {
   final Appointment appointment;
@@ -477,8 +479,10 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       }
 
       // 4. Create follow-up appointment if needed
+      String? followUpAppointmentId;
       if (_needsFollowUp && _followUpDate != null && _followUpTime != null) {
         final followUpRef = FirebaseFirestore.instance.collection('appointments').doc();
+        followUpAppointmentId = followUpRef.id;
         
         final followUpTimeSlot = '$_followUpTime-${_addMinutes(_followUpTime!, 20)}';
         
@@ -500,6 +504,51 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       }
 
       await batch.commit();
+
+      // 5. Create notification for follow-up appointment
+      if (_needsFollowUp && followUpAppointmentId != null && _followUpDate != null && _followUpTime != null) {
+        try {
+          // Build a comprehensive message about the follow-up need
+          final diagnosisText = _diagnosisController.text.trim();
+          final messageText = diagnosisText.isNotEmpty 
+              ? 'Based on the diagnosis "${diagnosisText}", a follow-up appointment for ${widget.appointment.pet.name} has been scheduled for ${_followUpDate!.day}/${_followUpDate!.month}/${_followUpDate!.year} at $_followUpTime. Tap to view details and previous evaluation.'
+              : 'A follow-up appointment for ${widget.appointment.pet.name} has been scheduled for ${_followUpDate!.day}/${_followUpDate!.month}/${_followUpDate!.year} at $_followUpTime. Tap to view details and previous evaluation.';
+          
+          await NotificationService.createNotification(
+            userId: widget.appointment.owner.id,
+            title: 'Follow-up Required - ${widget.appointment.pet.name}',
+            message: messageText,
+            category: NotificationCategory.appointment,
+            priority: NotificationPriority.high,
+            actionUrl: '/appointments/details/${widget.appointment.id}',
+            actionLabel: 'View Evaluation',
+            metadata: {
+              'appointmentId': widget.appointment.id, // Link to previous/completed appointment
+              'petId': widget.appointment.pet.id,
+              'petName': widget.appointment.pet.name,
+              'clinicId': widget.appointment.clinicId,
+              'date': widget.appointment.date, // Use completed appointment date
+              'time': widget.appointment.time, // Use completed appointment time
+              'followUpAppointmentId': followUpAppointmentId,
+              'followUpDate': '${_followUpDate!.year}-${_followUpDate!.month.toString().padLeft(2, '0')}-${_followUpDate!.day.toString().padLeft(2, '0')}',
+              'followUpTime': _followUpTime,
+              'diseaseReason': 'Follow-up for: ${widget.appointment.diseaseReason}',
+              'isFollowUp': true,
+              'notificationType': 'followUp',
+              'needsFollowUp': true,
+              // Include clinic evaluation in metadata
+              'previousDiagnosis': diagnosisText,
+              'previousTreatment': _treatmentController.text.trim(),
+              'previousPrescription': _prescriptionController.text.trim(),
+              'previousClinicNotes': _clinicNotesController.text.trim(),
+            },
+          );
+          print('✅ Follow-up notification created for user ${widget.appointment.owner.id}');
+        } catch (e) {
+          print('⚠️ Error creating follow-up notification: $e');
+          // Don't fail the entire operation if notification fails
+        }
+      }
 
       if (!mounted) return;
       

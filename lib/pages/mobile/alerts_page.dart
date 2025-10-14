@@ -246,7 +246,8 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     return alert.type == AlertType.appointment ||
            alert.type == AlertType.appointmentPending ||
            alert.type == AlertType.reschedule ||
-           alert.type == AlertType.reappointment;
+           alert.type == AlertType.reappointment ||
+           alert.type == AlertType.followUp;
   }
 
   Future<void> _handleMarkAsRead(AlertData alert) async {
