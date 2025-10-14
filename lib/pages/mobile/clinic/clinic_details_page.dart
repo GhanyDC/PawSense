@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/clinic_details_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_schedule_model.dart';
 import 'package:pawsense/core/services/clinic/clinic_details_service.dart';
+import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_header.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_contact_info.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_services_list.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_credentials.dart';
+import 'package:pawsense/core/widgets/user/clinic_details/clinic_schedule.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_action_buttons.dart';
 import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
@@ -29,19 +32,28 @@ class ClinicDetailsPage extends StatefulWidget {
 
 class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
   ClinicDetails? _clinicDetails;
+  WeeklySchedule? _weeklySchedule;
+  List<DateTime> _holidays = [];
   bool _isLoading = true;
+  bool _isLoadingSchedule = true;
   String? _errorMessage;
   StreamSubscription<ClinicDetails?>? _clinicSubscription;
+  StreamSubscription<WeeklySchedule>? _scheduleSubscription;
+  StreamSubscription<List<DateTime>>? _holidaysSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadClinicDetails();
+    _loadClinicSchedule();
+    _loadHolidays();
   }
 
   @override
   void dispose() {
     _clinicSubscription?.cancel();
+    _scheduleSubscription?.cancel();
+    _holidaysSubscription?.cancel();
     super.dispose();
   }
 
@@ -87,6 +99,65 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
     }
   }
 
+  Future<void> _loadClinicSchedule() async {
+    try {
+      setState(() {
+        _isLoadingSchedule = true;
+      });
+
+      // Cancel existing subscription if any
+      _scheduleSubscription?.cancel();
+
+      // Use stream for real-time schedule updates
+      _scheduleSubscription = ClinicScheduleService.streamWeeklySchedule(widget.clinicId)
+          .listen((schedule) {
+        if (mounted) {
+          setState(() {
+            _weeklySchedule = schedule;
+            _isLoadingSchedule = false;
+          });
+          print('✅ Clinic schedule updated in real-time for ${widget.clinicId}');
+        }
+      }, onError: (error) {
+        if (mounted) {
+          setState(() {
+            _isLoadingSchedule = false;
+          });
+          print('❌ Error streaming clinic schedule: $error');
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingSchedule = false;
+        });
+        print('❌ Error loading clinic schedule: $e');
+      }
+    }
+  }
+
+  Future<void> _loadHolidays() async {
+    try {
+      // Cancel existing subscription if any
+      _holidaysSubscription?.cancel();
+
+      // Use stream for real-time holiday updates
+      _holidaysSubscription = ClinicScheduleService.streamHolidays(widget.clinicId)
+          .listen((holidays) {
+        if (mounted) {
+          setState(() {
+            _holidays = holidays;
+          });
+          print('✅ Holidays updated in real-time: ${holidays.length} holiday(s)');
+        }
+      }, onError: (error) {
+        print('❌ Error streaming holidays: $error');
+      });
+    } catch (e) {
+      print('❌ Error loading holidays: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,7 +193,22 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadClinicDetails,
+      onRefresh: () async {
+        // Reload holidays on refresh (they're not streamed)
+        try {
+          final holidays = await ClinicScheduleService.getHolidays(widget.clinicId);
+          if (mounted) {
+            setState(() {
+              _holidays = holidays;
+            });
+          }
+        } catch (e) {
+          print('Error refreshing holidays: $e');
+        }
+        
+        await _loadClinicDetails();
+        // Schedule stream will auto-update, no need to reload
+      },
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(kMobilePaddingMedium),
         physics: const AlwaysScrollableScrollPhysics(),
@@ -138,6 +224,15 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
             ClinicContactInfo(clinic: _clinicDetails!),
             
             const SizedBox(height: kMobileSizedBoxMedium),
+            
+            // Clinic Schedule
+            if (_weeklySchedule != null && !_isLoadingSchedule) ...[
+              ClinicSchedule(
+                weeklySchedule: _weeklySchedule!,
+                holidays: _holidays,
+              ),
+              const SizedBox(height: kMobileSizedBoxMedium),
+            ],
             
             // Services List
             ClinicServicesList(clinic: _clinicDetails!),

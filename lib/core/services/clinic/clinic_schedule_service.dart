@@ -636,6 +636,40 @@ class ClinicScheduleService {
     }
   }
 
+  /// Stream holidays for real-time updates
+  static Stream<List<DateTime>> streamHolidays(String clinicId) {
+    if (clinicId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    return _firestore.collection(_collection).doc(clinicId).snapshots().map((doc) {
+      if (!doc.exists) {
+        return [];
+      }
+
+      final data = doc.data();
+      if (data == null || !data.containsKey('holidays')) {
+        return [];
+      }
+
+      final holidayStrings = List<String>.from(data['holidays'] ?? []);
+      final holidays = holidayStrings
+          .map((dateStr) {
+            try {
+              return DateTime.parse(dateStr);
+            } catch (e) {
+              print('Error parsing holiday date: $dateStr');
+              return null;
+            }
+          })
+          .whereType<DateTime>()
+          .toList();
+
+      print('🔄 Holidays updated in real-time: ${holidays.length} holidays');
+      return holidays;
+    });
+  }
+
   /// Check if a specific date is a holiday
   static Future<bool> isHoliday(String clinicId, DateTime date) async {
     try {
