@@ -209,14 +209,48 @@ class AppointmentTableRow extends StatelessWidget {
           // Disease/Reason
           Expanded(
             flex: 2,
-            child: Text(
-              appointment.diseaseReason,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: kFontSizeSmall,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Follow-up badge (if applicable)
+                if (appointment.isFollowUp == true) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.info.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppColors.info, width: 1),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.sync, size: 10, color: AppColors.info),
+                        SizedBox(width: 4),
+                        Text(
+                          'Follow-up',
+                          style: TextStyle(
+                            color: AppColors.info,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                // Disease/Reason text
+                Text(
+                  appointment.diseaseReason,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: kFontSizeSmall,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ],
             ),
           ),
           

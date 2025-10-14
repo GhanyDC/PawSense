@@ -42,9 +42,10 @@ class _EditServiceModalState extends State<EditServiceModal> {
     final durationNumber = RegExp(r'\d+').firstMatch(durationStr)?.group(0) ?? '30';
     _durationController = TextEditingController(text: durationNumber);
     
-    // Extract price number from string like "PHP 750.00"
+    // Extract price number from string like "PHP 750.00" or "PHP 750" - only integer part
     final priceStr = widget.service['price'] ?? '0';
-    final priceNumber = RegExp(r'[\d.]+').firstMatch(priceStr)?.group(0) ?? '0';
+    final priceMatch = RegExp(r'\d+').firstMatch(priceStr);
+    final priceNumber = priceMatch?.group(0) ?? '0';
     _priceController = TextEditingController(text: priceNumber);
     
     // Set category from service data

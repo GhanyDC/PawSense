@@ -74,11 +74,16 @@ class PaginatedAppointmentService {
 
       // Convert bookings to appointments in parallel for faster loading
       final futures = docs.map((doc) async {
-        final booking = AppointmentBooking.fromMap(
-          doc.data() as Map<String, dynamic>, 
-          doc.id
-        );
-        return await _convertBookingToAppointment(booking);
+        final data = doc.data() as Map<String, dynamic>;
+        
+        // Check if this is a follow-up appointment with embedded data
+        if (data['pet'] != null && data['owner'] != null) {
+          return await _convertFollowUpAppointment(data, doc.id);
+        } else {
+          // Legacy booking format - fetch pet/owner separately
+          final booking = AppointmentBooking.fromMap(data, doc.id);
+          return await _convertBookingToAppointment(booking);
+        }
       });
 
       final results = await Future.wait(futures);
@@ -159,6 +164,95 @@ class PaginatedAppointmentService {
         completedCount: 0,
         cancelledCount: 0,
       );
+    }
+  }
+
+  /// Convert follow-up appointment with embedded data to Appointment for display
+  static Future<AppointmentModels.Appointment?> _convertFollowUpAppointment(
+      Map<String, dynamic> data, String documentId) async {
+    try {
+      // Helper function to safely convert Timestamp to DateTime
+      DateTime _safeTimestampToDate(dynamic value, DateTime defaultValue) {
+        if (value == null) return defaultValue;
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return defaultValue;
+      }
+
+      // Helper function for nullable DateTime
+      DateTime? _safeTimestampToDateNullable(dynamic value) {
+        if (value == null) return null;
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return null;
+      }
+
+      final now = DateTime.now();
+      
+      // Extract embedded pet data
+      final petData = data['pet'] as Map<String, dynamic>? ?? {};
+      final pet = AppointmentModels.Pet(
+        id: petData['id'] ?? '',
+        name: petData['name'] ?? 'Unknown Pet',
+        type: petData['type'] ?? 'Unknown',
+        emoji: petData['emoji'] ?? _getPetEmoji(petData['type'] ?? ''),
+        breed: petData['breed'] ?? 'Unknown',
+        age: petData['age'] ?? 0,
+        imageUrl: petData['imageUrl'],
+      );
+
+      // Extract embedded owner data
+      final ownerData = data['owner'] as Map<String, dynamic>? ?? {};
+      final owner = AppointmentModels.Owner(
+        id: ownerData['id'] ?? '',
+        name: ownerData['name'] ?? 'Unknown Owner',
+        phone: ownerData['phone'] ?? 'N/A',
+        email: ownerData['email'] ?? 'N/A',
+      );
+
+      // Parse time slot or create from time
+      final timeSlot = data['timeSlot'] ?? _createTimeSlot(data['time'] ?? '');
+
+      // Parse status (convert string to AppointmentModels.AppointmentStatus)
+      AppointmentModels.AppointmentStatus status;
+      if (data['status'] != null) {
+        try {
+          final statusStr = data['status'].toString();
+          status = AppointmentModels.AppointmentStatus.values.firstWhere(
+            (e) => e.name == statusStr,
+            orElse: () => AppointmentModels.AppointmentStatus.pending,
+          );
+        } catch (e) {
+          status = AppointmentModels.AppointmentStatus.pending;
+        }
+      } else {
+        status = AppointmentModels.AppointmentStatus.pending;
+      }
+
+      final appointment = AppointmentModels.Appointment(
+        id: documentId,
+        clinicId: data['clinicId'] ?? '',
+        date: data['date'] ?? '',
+        time: data['time'] ?? '',
+        timeSlot: timeSlot,
+        pet: pet,
+        diseaseReason: data['diseaseReason'] ?? 'N/A',
+        owner: owner,
+        status: status,
+        createdAt: _safeTimestampToDate(data['createdAt'], now),
+        updatedAt: _safeTimestampToDate(data['updatedAt'], now),
+        cancelReason: data['cancelReason'],
+        cancelledAt: _safeTimestampToDateNullable(data['cancelledAt']),
+        assessmentResultId: data['assessmentResultId'],
+        isFollowUp: data['isFollowUp'] == true,
+        previousAppointmentId: data['previousAppointmentId'],
+        notes: data['notes'],
+      );
+
+      return appointment;
+    } catch (e) {
+      print('❌ Error converting follow-up appointment to display model: $e');
+      return null;
     }
   }
 
