@@ -1,168 +1,246 @@
 import 'package:pawsense/core/models/clinic/appointment_models.dart';
 
-/// Cache entry for appointments with metadata
-class _AppointmentCacheEntry {
-  final List<Appointment> appointments;
-  final DateTime timestamp;
+/// Cache key for storing page data
+class _CacheKey {
+  final String statusFilter;
   final String searchQuery;
-  final String selectedStatus;
+  final String? startDate;
+  final String? endDate;
+  final int page;
 
-  _AppointmentCacheEntry({
-    required this.appointments,
-    required this.timestamp,
+  _CacheKey({
+    required this.statusFilter,
     required this.searchQuery,
-    required this.selectedStatus,
+    this.startDate,
+    this.endDate,
+    required this.page,
   });
 
-  bool isExpired(Duration ttl) {
-    return DateTime.now().difference(timestamp) > ttl;
-  }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _CacheKey &&
+          runtimeType == other.runtimeType &&
+          statusFilter == other.statusFilter &&
+          searchQuery == other.searchQuery &&
+          startDate == other.startDate &&
+          endDate == other.endDate &&
+          page == other.page;
 
-  bool matchesFilters({
-    required String searchQuery,
-    required String selectedStatus,
-  }) {
-    return this.searchQuery == searchQuery && 
-           this.selectedStatus == selectedStatus;
+  @override
+  int get hashCode =>
+      statusFilter.hashCode ^
+      searchQuery.hashCode ^
+      (startDate?.hashCode ?? 0) ^
+      (endDate?.hashCode ?? 0) ^
+      page.hashCode;
+
+  @override
+  String toString() => 'CacheKey(status: $statusFilter, search: $searchQuery, start: $startDate, end: $endDate, page: $page)';
+}
+
+/// Cached page data
+class _CachedPageData {
+  final List<Appointment> appointments;
+  final int totalAppointments;
+  final int totalPages;
+  final DateTime fetchTime;
+
+  _CachedPageData({
+    required this.appointments,
+    required this.totalAppointments,
+    required this.totalPages,
+    required this.fetchTime,
+  });
+
+  bool isValid(Duration cacheDuration) {
+    final now = DateTime.now();
+    final difference = now.difference(fetchTime);
+    return difference < cacheDuration;
   }
 }
 
-/// Service to cache appointment data and reduce Firestore calls
-/// Implements LRU cache with TTL (Time To Live)
+/// Service to cache appointment data and manage refresh logic
+/// Optimized for multi-page caching - remembers all visited pages
 class AppointmentCacheService {
   static final AppointmentCacheService _instance = AppointmentCacheService._internal();
   factory AppointmentCacheService() => _instance;
   AppointmentCacheService._internal();
 
-  _AppointmentCacheEntry? _cachedData;
-  final Duration _ttl = Duration(minutes: 5); // 5-minute cache
-
-  // Store last known filter state for change detection
-  String _lastSearchQuery = '';
-  String _lastSelectedStatus = 'All Status';
-
-  /// Get cached appointments if available and not expired
-  List<Appointment>? getCachedAppointments({
+  // Multi-page cache storage - stores all visited pages
+  final Map<_CacheKey, _CachedPageData> _pageCache = {};
+  
+  // Cache configuration
+  final Duration _cacheDuration = Duration(minutes: 5);
+  final int _maxCachedPages = 20; // Limit cache size to prevent memory issues
+  
+  // Current filters context
+  String? _lastStatusFilter;
+  String? _lastSearchQuery;
+  String? _lastStartDate;
+  String? _lastEndDate;
+  
+  /// Get cached page data if available and valid
+  _CachedPageData? getCachedPage({
+    required String statusFilter,
     required String searchQuery,
-    required String selectedStatus,
+    String? startDate,
+    String? endDate,
+    required int page,
   }) {
-    if (_cachedData == null) {
-      print('💾 Cache MISS: No cached data');
-      return null;
-    }
-
-    if (_cachedData!.isExpired(_ttl)) {
-      print('⏰ Cache EXPIRED: Data is older than ${_ttl.inMinutes} minutes');
-      _cachedData = null;
-      return null;
-    }
-
-    if (!_cachedData!.matchesFilters(
+    final key = _CacheKey(
+      statusFilter: statusFilter,
       searchQuery: searchQuery,
-      selectedStatus: selectedStatus,
-    )) {
-      print('🔍 Cache MISS: Filters changed (search: "$searchQuery", status: "$selectedStatus")');
+      startDate: startDate,
+      endDate: endDate,
+      page: page,
+    );
+    
+    final cachedData = _pageCache[key];
+    if (cachedData == null) {
+      print('[CACHE] No cache for $key');
       return null;
     }
-
-    final age = DateTime.now().difference(_cachedData!.timestamp);
-    print('📦 Cache HIT: Returning ${_cachedData!.appointments.length} appointments (age: ${age.inSeconds}s)');
-    return _cachedData!.appointments;
+    
+    if (!cachedData.isValid(_cacheDuration)) {
+      print('[CACHE] Cache expired for $key');
+      _pageCache.remove(key);
+      return null;
+    }
+    
+    print('[CACHE] Cache HIT for $key');
+    return cachedData;
   }
-
-  /// Update cache with new appointment data
+  
+  /// Check if filters have changed (not including page)
+  bool hasFiltersChanged(String? statusFilter, String? searchQuery, String? startDate, String? endDate) {
+    return _lastStatusFilter != statusFilter || 
+           _lastSearchQuery != searchQuery ||
+           _lastStartDate != startDate ||
+           _lastEndDate != endDate;
+  }
+  
+  /// Update cache with page data
   void updateCache({
     required List<Appointment> appointments,
+    required int totalAppointments,
+    required int totalPages,
+    required String statusFilter,
     required String searchQuery,
-    required String selectedStatus,
+    String? startDate,
+    String? endDate,
+    required int page,
   }) {
-    _cachedData = _AppointmentCacheEntry(
-      appointments: appointments,
-      timestamp: DateTime.now(),
+    // Create cache key
+    final key = _CacheKey(
+      statusFilter: statusFilter,
       searchQuery: searchQuery,
-      selectedStatus: selectedStatus,
+      startDate: startDate,
+      endDate: endDate,
+      page: page,
     );
-
+    
+    // Store page data
+    _pageCache[key] = _CachedPageData(
+      appointments: appointments,
+      totalAppointments: totalAppointments,
+      totalPages: totalPages,
+      fetchTime: DateTime.now(),
+    );
+    
+    // Update filter context
+    _lastStatusFilter = statusFilter;
     _lastSearchQuery = searchQuery;
-    _lastSelectedStatus = selectedStatus;
-
-    print('💾 Cache UPDATED: Stored ${appointments.length} appointments (search: "$searchQuery", status: "$selectedStatus")');
-  }
-
-  /// Check if filters have changed since last cache
-  bool hasFiltersChanged(String searchQuery, String selectedStatus) {
-    final changed = _lastSearchQuery != searchQuery || 
-                    _lastSelectedStatus != selectedStatus;
+    _lastStartDate = startDate;
+    _lastEndDate = endDate;
     
-    if (changed) {
-      print('🔄 Filters CHANGED: was (search: "$_lastSearchQuery", status: "$_lastSelectedStatus"), now (search: "$searchQuery", status: "$selectedStatus")');
+    // Enforce cache size limit (LRU-style: remove oldest entries)
+    if (_pageCache.length > _maxCachedPages) {
+      _evictOldestCacheEntries();
     }
     
-    return changed;
+    print('[CACHE] Cached page data for $key (${_pageCache.length} pages in cache)');
   }
-
-  /// Invalidate cache (force refresh)
+  
+  /// Remove oldest cache entries when limit is reached
+  void _evictOldestCacheEntries() {
+    final entries = _pageCache.entries.toList()
+      ..sort((a, b) => a.value.fetchTime.compareTo(b.value.fetchTime));
+    
+    // Remove oldest 25% of entries
+    final removeCount = (_maxCachedPages * 0.25).ceil();
+    for (var i = 0; i < removeCount && entries.isNotEmpty; i++) {
+      _pageCache.remove(entries[i].key);
+      print('[CACHE] Evicted old cache entry: ${entries[i].key}');
+    }
+  }
+  
+  /// Invalidate all caches when filters change
+  void invalidateCacheForFilterChange() {
+    print('[CACHE] Filters changed - clearing all page caches');
+    _pageCache.clear();
+  }
+  
+  /// Invalidate cache (force refresh on next load)
   void invalidateCache() {
-    _cachedData = null;
-    print('🗑️  Cache INVALIDATED: Forced refresh');
+    _pageCache.clear();
+    _lastStatusFilter = null;
+    _lastSearchQuery = null;
+    _lastStartDate = null;
+    _lastEndDate = null;
+    print('[CACHE] All caches cleared');
   }
-
-  /// Update a single appointment in cache (e.g., after status update)
+  
+  /// Update a single appointment in ALL cached pages that contain it
   void updateAppointmentInCache(Appointment updatedAppointment) {
-    if (_cachedData == null) return;
-
-    final index = _cachedData!.appointments.indexWhere((a) => a.id == updatedAppointment.id);
-    if (index != -1) {
-      final updatedList = List<Appointment>.from(_cachedData!.appointments);
-      updatedList[index] = updatedAppointment;
-
-      _cachedData = _AppointmentCacheEntry(
-        appointments: updatedList,
-        timestamp: _cachedData!.timestamp, // Keep original timestamp
-        searchQuery: _cachedData!.searchQuery,
-        selectedStatus: _cachedData!.selectedStatus,
-      );
-
-      print('✏️  Cache UPDATED: Modified appointment ${updatedAppointment.id}');
+    int updatedCount = 0;
+    
+    // Update appointment in all cached pages
+    for (var entry in _pageCache.entries) {
+      final appointments = entry.value.appointments;
+      final index = appointments.indexWhere((a) => a.id == updatedAppointment.id);
+      if (index != -1) {
+        appointments[index] = updatedAppointment;
+        updatedCount++;
+      }
+    }
+    
+    if (updatedCount > 0) {
+      print('[CACHE] Updated appointment in $updatedCount cached pages');
     }
   }
-
-  /// Remove an appointment from cache (e.g., after cancellation)
+  
+  /// Remove an appointment from ALL cached pages
   void removeAppointmentFromCache(String appointmentId) {
-    if (_cachedData == null) return;
-
-    final updatedList = _cachedData!.appointments
-        .where((a) => a.id != appointmentId)
-        .toList();
-
-    _cachedData = _AppointmentCacheEntry(
-      appointments: updatedList,
-      timestamp: _cachedData!.timestamp, // Keep original timestamp
-      searchQuery: _cachedData!.searchQuery,
-      selectedStatus: _cachedData!.selectedStatus,
-    );
-
-    print('🗑️  Cache UPDATED: Removed appointment $appointmentId');
+    int removedCount = 0;
+    
+    // Remove appointment from all cached pages
+    for (var entry in _pageCache.entries) {
+      final appointments = entry.value.appointments;
+      final index = appointments.indexWhere((a) => a.id == appointmentId);
+      if (index != -1) {
+        appointments.removeAt(index);
+        removedCount++;
+      }
+    }
+    
+    if (removedCount > 0) {
+      print('[CACHE] Removed appointment from $removedCount cached pages');
+    }
   }
-
+  
   /// Get cache statistics for debugging
   Map<String, dynamic> getCacheStats() {
-    if (_cachedData == null) {
-      return {
-        'cached': false,
-        'appointments': 0,
-        'age': 0,
-      };
-    }
-
-    final age = DateTime.now().difference(_cachedData!.timestamp);
     return {
-      'cached': true,
-      'appointments': _cachedData!.appointments.length,
-      'age': age.inSeconds,
-      'searchQuery': _cachedData!.searchQuery,
-      'selectedStatus': _cachedData!.selectedStatus,
-      'expired': _cachedData!.isExpired(_ttl),
+      'totalCachedPages': _pageCache.length,
+      'maxCachedPages': _maxCachedPages,
+      'cacheDuration': _cacheDuration.inMinutes,
+      'cachedPageKeys': _pageCache.keys.map((k) => k.toString()).toList(),
     };
+  }
+  
+  /// Clear cache on logout or when needed
+  void clearCache() {
+    invalidateCache();
   }
 }

@@ -13,6 +13,7 @@ import '../../../core/models/clinic/appointment_booking_model.dart';
 import '../../../core/services/clinic/appointment_service.dart';
 import '../../../core/services/clinic/paginated_appointment_service.dart';
 import '../../../core/services/clinic/realtime_appointment_listener.dart';
+import '../../../core/services/clinic/appointment_cache_service.dart';
 import '../../../core/services/super_admin/screen_state_service.dart';
 import '../../../core/widgets/admin/appointments/appointment_header.dart';
 import '../../../core/widgets/admin/appointments/appointment_filters.dart';
@@ -73,6 +74,7 @@ class _OptimizedAppointmentManagementScreenState
   // Services
   final _stateService = ScreenStateService();
   final _realtimeListener = RealTimeAppointmentListener();
+  final _cacheService = AppointmentCacheService();
   
   // Real-time updates state
   bool _isRefreshing = false; // Prevent concurrent refreshes
@@ -238,8 +240,48 @@ class _OptimizedAppointmentManagementScreenState
   }
 
   /// Load specific page of appointments
-  Future<void> _loadPage(int page, {bool isPagination = false}) async {
+  Future<void> _loadPage(int page, {bool isPagination = false, bool forceRefresh = false}) async {
     if (_cachedClinicId == null) return;
+
+    // Check if filters changed (clear cache if so)
+    final filtersChanged = _cacheService.hasFiltersChanged(
+      selectedStatus,
+      searchQuery,
+      startDate?.toIso8601String(),
+      endDate?.toIso8601String(),
+    );
+    if (filtersChanged && !isInitialLoading) {
+      _cacheService.invalidateCacheForFilterChange();
+      _pageCursors.clear(); // Clear page cursors when filters change
+    }
+
+    // Try to load from multi-page cache first
+    if (!forceRefresh && !isInitialLoading) {
+      final cachedPage = _cacheService.getCachedPage(
+        statusFilter: selectedStatus,
+        searchQuery: searchQuery,
+        startDate: startDate?.toIso8601String(),
+        endDate: endDate?.toIso8601String(),
+        page: page,
+      );
+
+      if (cachedPage != null) {
+        print('[CACHE] Using cached page data - no network call needed');
+        setState(() {
+          appointments.clear();
+          appointments.addAll(cachedPage.appointments);
+          totalAppointments = cachedPage.totalAppointments;
+          totalPages = cachedPage.totalPages;
+          currentPage = page;
+          _isPaginationLoading = false;
+          _isLoading = false;
+          
+          // Apply filters and sorting to the loaded appointments
+          _applyFilters();
+        });
+        return;
+      }
+    }
 
     setState(() {
       if (isInitialLoading) {
@@ -269,6 +311,18 @@ class _OptimizedAppointmentManagementScreenState
         status: _getStatusFilterForService(), // Apply server-side status filtering
         startDate: startDate, // Apply date range filter
         endDate: endDate, // Apply date range filter
+      );
+
+      // Update cache with current page data
+      _cacheService.updateCache(
+        appointments: result.appointments,
+        totalAppointments: result.totalCount ?? result.appointments.length,
+        totalPages: result.totalPages ?? 1,
+        statusFilter: selectedStatus,
+        searchQuery: searchQuery,
+        startDate: startDate?.toIso8601String(),
+        endDate: endDate?.toIso8601String(),
+        page: page,
       );
 
       setState(() {
@@ -960,47 +1014,53 @@ class _OptimizedAppointmentManagementScreenState
               const SizedBox(height: 16),
 
             // Appointment list with loading overlay (matches clinic management pattern)
-              Stack(
-                children: [
-                  // Table content - wrapped in ValueListenableBuilder
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _tableUpdateNotifier,
-                    builder: (context, _, __) {
-                      return _buildAppointmentTable();
-                    },
-                  ),
-                  
-                  // Show loading overlay during initial load, filter changes or pagination
-                  if (isInitialLoading || _isLoading || _isPaginationLoading)
-                    Positioned.fill(
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 40,
-                              height: 40,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                              ),
+              SizedBox(
+                height: isInitialLoading || _isLoading ? 400 : null,
+                child: Stack(
+                  children: [
+                    // Table content - wrapped in ValueListenableBuilder
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _tableUpdateNotifier,
+                      builder: (context, _, __) {
+                        return _buildAppointmentTable();
+                      },
+                    ),
+                    
+                    // Show loading overlay during initial load, filter changes or pagination
+                    if (isInitialLoading || _isLoading || _isPaginationLoading)
+                      Positioned.fill(
+                        child: Container(
+                          color: AppColors.background,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                  ),
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  _isPaginationLoading 
+                                      ? 'Loading page $currentPage...'
+                                      : 'Loading appointments...',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(height: 16),
-                            Text(
-                              _isPaginationLoading 
-                                  ? 'Loading page $currentPage...'
-                                  : 'Loading appointments...',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
 
               // Error state (shown below table area if needed)

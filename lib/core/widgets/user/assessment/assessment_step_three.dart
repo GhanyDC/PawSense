@@ -1230,13 +1230,16 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Differential Analysis Results',
-                  style: kMobileTextStyleTitle.copyWith(
-                    color: AppColors.textPrimary,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8.0, 8.0, 0, 0),
+                  child: Text(
+                    'Differential Analysis Results',
+                    style: kMobileTextStyleTitle.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
-                const SizedBox(height: kSpacingMedium),
+                const SizedBox(height: kSpacingSmall),
                 
                 // Pie Chart
                 SizedBox(

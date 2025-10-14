@@ -11,6 +11,7 @@ import '../../../core/services/admin/dashboard_service.dart';
 import '../../../core/services/admin/admin_appointment_notification_integrator.dart';
 import '../../../core/services/admin/admin_message_notification_integrator.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/guards/auth_guard.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key ?? const PageStorageKey('admin_dashboard'));
@@ -22,6 +23,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAliveClientMixin {
   String selectedPeriod = 'Daily';
   String? _clinicId;
+  String? _userName; // User's display name
   bool _isLoadingStats = false; // Loading state for stats only
   DashboardStats? _currentStats;
   List<RecentActivity> _recentActivities = [];
@@ -150,6 +152,28 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     }
   }
 
+  /// Get current user's display name
+  Future<String?> _getCurrentUserName() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user == null) return null;
+
+      // Build display name from firstName and lastName
+      if (user.firstName != null && user.lastName != null) {
+        return '${user.firstName} ${user.lastName}';
+      } else if (user.firstName != null) {
+        return user.firstName;
+      } else if (user.lastName != null) {
+        return user.lastName;
+      } else {
+        return user.username;
+      }
+    } catch (e) {
+      AppLogger.error('Error getting current user name', error: e, tag: 'DashboardScreen');
+      return null;
+    }
+  }
+
   /// Load dashboard data from Firebase (header already visible)
   Future<void> _loadDashboardData() async {
     if (!mounted) return;
@@ -160,8 +184,9 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     });
 
     try {
-      // Get the current user's clinic ID
+      // Get the current user's clinic ID and name
       final clinicId = await DashboardService.getCurrentUserClinicId();
+      final userName = await _getCurrentUserName();
       
       if (clinicId == null) {
         AppLogger.error('No clinic ID found for current user', tag: 'DashboardScreen');
@@ -172,7 +197,8 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
       }
 
       _clinicId = clinicId;
-      AppLogger.info('Clinic ID obtained: $_clinicId');
+      _userName = userName;
+      AppLogger.info('Clinic ID obtained: $_clinicId, User: $_userName');
 
       // Initialize notification integrators for real-time notifications
       _initializeNotificationIntegrators();
@@ -496,6 +522,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
           // ✅ Header appears immediately (no data dependency)
           DashboardHeader(
             selectedPeriod: selectedPeriod,
+            userName: _userName,
             onPeriodChanged: (period) {
               _safeSetState(() {
                 selectedPeriod = period;
