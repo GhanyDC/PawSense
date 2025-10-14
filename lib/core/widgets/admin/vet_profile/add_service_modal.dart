@@ -340,9 +340,9 @@ class _AddServiceModalState extends State<AddServiceModal> {
                             SizedBox(height: kSpacingSmall),
                             TextFormField(
                               controller: _priceController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              keyboardType: TextInputType.number,
                               inputFormatters: [
-                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                                FilteringTextInputFormatter.digitsOnly, // Only allow digits (integers)
                               ],
                               decoration: InputDecoration(
                                 hintText: '0',
@@ -372,9 +372,9 @@ class _AddServiceModalState extends State<AddServiceModal> {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Required';
                                 }
-                                final number = double.tryParse(value.trim());
+                                final number = int.tryParse(value.trim());
                                 if (number == null || number < 0) {
-                                  return 'Must be a valid number';
+                                  return 'Must be a valid integer';
                                 }
                                 return null;
                               },

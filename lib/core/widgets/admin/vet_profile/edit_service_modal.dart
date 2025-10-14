@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import '../../../models/clinic/clinic_service_model.dart';
@@ -284,6 +285,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                             TextFormField(
                               controller: _durationController,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly, // Only allow digits (integers)
+                              ],
                               decoration: InputDecoration(
                                 hintText: '30',
                                 border: OutlineInputBorder(
@@ -309,7 +313,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
                                 }
                                 final number = int.tryParse(value.trim());
                                 if (number == null || number <= 0) {
-                                  return 'Must be a positive number';
+                                  return 'Must be a positive integer';
                                 }
                                 return null;
                               },
@@ -336,6 +340,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                             TextFormField(
                               controller: _priceController,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly, // Only allow digits (integers)
+                              ],
                               decoration: InputDecoration(
                                 hintText: '0',
                                 border: OutlineInputBorder(
@@ -359,9 +366,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Required';
                                 }
-                                final number = double.tryParse(value.trim());
+                                final number = int.tryParse(value.trim());
                                 if (number == null || number < 0) {
-                                  return 'Must be a valid number';
+                                  return 'Must be a valid integer';
                                 }
                                 return null;
                               },
