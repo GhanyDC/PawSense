@@ -94,6 +94,24 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
       }
       setState(() {});
     });
+    
+    // Load holidays separately
+    _loadHolidays();
+  }
+
+  void _loadHolidays() async {
+    if (widget.clinicId == null) return;
+    
+    try {
+      final holidays = await ClinicScheduleService.getHolidays(widget.clinicId!);
+      setState(() {
+        _specialHolidays.clear();
+        _specialHolidays.addAll(holidays);
+      });
+      print('Loaded ${holidays.length} special holidays');
+    } catch (e) {
+      print('Error loading holidays: $e');
+    }
   }
 
   TimeOfDay? _parseTimeString(String timeString) {
@@ -280,9 +298,12 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
       
       final success = await ClinicScheduleService.saveWeeklySchedule(widget.clinicId!, schedules);
       
-      if (success) {
+      // Save holidays separately
+      final holidaySuccess = await ClinicScheduleService.saveHolidays(widget.clinicId!, _specialHolidays);
+      
+      if (success && holidaySuccess) {
         setState(() {
-          _successMessage = 'Schedule saved successfully!';
+          _successMessage = 'Schedule and holidays saved successfully!';
         });
         
         // Call the onSave callback if provided
@@ -293,6 +314,23 @@ class _ScheduleSettingsModalState extends State<ScheduleSettingsModal> {
         
         // Close modal after short delay
         Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+      } else if (success && !holidaySuccess) {
+        setState(() {
+          _successMessage = 'Schedule saved successfully! (Warning: Holidays may not have been saved)';
+        });
+        
+        // Still call the callback
+        widget.onSave?.call({
+          'schedules': schedules.map((s) => s.toFirestore()).toList(),
+          'holidays': _specialHolidays.map((d) => d.toIso8601String()).toList(),
+        });
+        
+        // Close modal after short delay
+        Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
             Navigator.of(context).pop();
           }

@@ -58,8 +58,8 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
 
     try {
       print('WeekDaysGrid: Loading data for week starting ${widget.selectedDate.toString().split(' ')[0]}');
-      // Get weekly availability data for the selected week
-      final weeklyData = await ClinicScheduleService.getWeeklyScheduleWithAvailability(
+      // Get weekly availability data for the selected week INCLUDING HOLIDAYS
+      final weeklyData = await ClinicScheduleService.getWeeklyScheduleWithAvailabilityIncludingHolidays(
         widget.clinicId!,
         widget.selectedDate, // Use the selected date instead of DateTime.now()
       );
@@ -121,7 +121,24 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
     for (final day in WeeklySchedule.daysOfWeek) {
       final dayData = _weeklyAvailability![day];
       
-      if (dayData != null && dayData['schedule'] != null) {
+      // Check if this day is a holiday
+      final isHoliday = dayData != null && (dayData['isHoliday'] ?? false);
+      
+      if (isHoliday) {
+        // Show holiday as a special closed day
+        openDays.add(DayData(
+          day,
+          'Holiday',
+          true,
+          isDisabled: false,
+          isHoliday: true,
+          slotsInfo: null,
+          openTime: null,
+          closeTime: null,
+          bookedSlots: 0,
+          utilization: 0,
+        ));
+      } else if (dayData != null && dayData['schedule'] != null) {
         final schedule = dayData['schedule'] as ClinicScheduleModel;
         if (schedule.isOpen) {
           final bookedSlots = dayData['bookedSlots'] as int;
@@ -137,6 +154,7 @@ class _WeekDaysGridState extends State<WeekDaysGrid> {
             closeTime: schedule.closeTime,
             bookedSlots: bookedSlots,
             utilization: utilization,
+            isHoliday: false,
           ));
         }
       }
@@ -194,6 +212,7 @@ class DayData {
   final String? closeTime;
   final int? bookedSlots;
   final int? utilization;
+  final bool isHoliday; // Add holiday flag
 
   DayData(
     this.name,
@@ -205,5 +224,6 @@ class DayData {
     this.closeTime,
     this.bookedSlots,
     this.utilization,
+    this.isHoliday = false, // Default to false
   });
 }
