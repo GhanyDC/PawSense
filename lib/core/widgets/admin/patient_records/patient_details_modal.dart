@@ -205,6 +205,9 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
         updatedAt: booking.updatedAt,
         notes: booking.notes,
         assessmentResultId: booking.assessmentResultId,
+        cancelReason: booking.cancelReason,
+        isFollowUp: booking.isFollowUp,
+        previousAppointmentId: booking.previousAppointmentId,
       );
     } catch (e) {
       print('Error converting appointment: $e');
@@ -605,6 +608,9 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
   }
 
   Widget _buildAppointmentCard(AppointmentBooking appointment) {
+    // Debug: Check if isFollowUp is being loaded
+    print('📋 Appointment ${appointment.id}: isFollowUp = ${appointment.isFollowUp}, status = ${appointment.status}');
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -640,6 +646,33 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
                     color: AppColors.textPrimary,
                   ),
                 ),
+                // Follow-up indicator
+                if (appointment.isFollowUp != null && appointment.isFollowUp == true) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF3B82F6), width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.sync, size: 12, color: Color(0xFF3B82F6)),
+                        SizedBox(width: 4),
+                        Text(
+                          'Follow-up',
+                          style: TextStyle(
+                            color: Color(0xFF3B82F6),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 _buildAppointmentStatusBadge(appointment.status),
               ],
@@ -821,6 +854,9 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
     final formattedTime = _formatTime(appointment.time);
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -857,8 +893,15 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
           ),
           const SizedBox(height: 20),
 
-          // Pet Information
-          Row(
+          // Scrollable Content
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Pet Information
+                  Row(
             children: [
               _buildAppointmentPetAvatar(appointment.pet),
               const SizedBox(width: 16),
@@ -898,6 +941,75 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
             ],
           ),
           const SizedBox(height: 24),
+
+          // Cancellation Reason (if cancelled)
+          if (appointment.status == AppointmentModels.AppointmentStatus.cancelled && 
+              appointment.cancelReason != null &&
+              appointment.cancelReason!.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.cancel, size: 18, color: Colors.red),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Cancellation Reason:',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    appointment.cancelReason!,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // Follow-up Indicator (if follow-up appointment)
+          if (appointment.isFollowUp == true) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.sync, size: 18, color: Color(0xFF3B82F6)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'This is a Follow-up Appointment',
+                    style: TextStyle(
+                      color: Color(0xFF3B82F6),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
 
           // Appointment Information
           _buildDetailInfoSection('Date & Time', '$formattedDate at $formattedTime'),
@@ -982,6 +1094,10 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
             ],
 
           const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

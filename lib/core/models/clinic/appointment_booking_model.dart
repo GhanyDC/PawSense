@@ -44,6 +44,8 @@ class AppointmentBooking {
   final String? prescription;
   final String? clinicNotes;
   final DateTime? completedAt;
+  final bool? isFollowUp;
+  final String? previousAppointmentId;
 
   AppointmentBooking({
     this.id,
@@ -71,6 +73,8 @@ class AppointmentBooking {
     this.prescription,
     this.clinicNotes,
     this.completedAt,
+    this.isFollowUp,
+    this.previousAppointmentId,
   });
 
   /// Convert to Map for Firestore storage
@@ -100,6 +104,8 @@ class AppointmentBooking {
       'prescription': prescription,
       'clinicNotes': clinicNotes,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'isFollowUp': isFollowUp,
+      'previousAppointmentId': previousAppointmentId,
     };
   }
 
@@ -155,6 +161,8 @@ class AppointmentBooking {
       prescription: map['prescription'],
       clinicNotes: map['clinicNotes'],
       completedAt: _safeTimestampToDateNullable(map['completedAt']),
+      isFollowUp: map['isFollowUp'],
+      previousAppointmentId: map['previousAppointmentId'],
     );
   }
 
@@ -185,6 +193,8 @@ class AppointmentBooking {
     String? prescription,
     String? clinicNotes,
     DateTime? completedAt,
+    bool? isFollowUp,
+    String? previousAppointmentId,
   }) {
     return AppointmentBooking(
       id: id ?? this.id,
@@ -212,6 +222,8 @@ class AppointmentBooking {
       prescription: prescription ?? this.prescription,
       clinicNotes: clinicNotes ?? this.clinicNotes,
       completedAt: completedAt ?? this.completedAt,
+      isFollowUp: isFollowUp ?? this.isFollowUp,
+      previousAppointmentId: previousAppointmentId ?? this.previousAppointmentId,
     );
   }
 

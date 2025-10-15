@@ -540,13 +540,73 @@ class PatientRecordService {
           .where('petId', isEqualTo: petId)
           .get();
 
+      print('📋 PatientHistory: Found ${query.docs.length} appointments for petId: $petId, clinicId: $clinicId');
+      
       // Convert to list and sort in memory
-      final appointments = query.docs
-          .map((doc) => AppointmentBooking.fromMap(doc.data(), doc.id))
-          .toList();
+      final appointments = query.docs.map((doc) {
+        final data = doc.data();
+        print('  └─ Appointment ${doc.id}: isFollowUp = ${data['isFollowUp']}, status = ${data['status']}, diseaseReason = ${data['diseaseReason']}');
+        
+        // Check if this is the new Appointment format (has 'pet' as map) or old AppointmentBooking format (has 'petId' as string)
+        if (data['pet'] != null && data['pet'] is Map) {
+          // New Appointment model format - convert to AppointmentBooking format
+          print('    📄 Converting from Appointment model format');
+          final petMap = data['pet'] as Map<String, dynamic>;
+          final ownerMap = data['owner'] as Map<String, dynamic>?;
+          
+          // Parse date string "2025-10-14" to DateTime
+          DateTime appointmentDate = DateTime.now();
+          if (data['date'] != null) {
+            try {
+              final dateParts = (data['date'] as String).split('-');
+              appointmentDate = DateTime(
+                int.parse(dateParts[0]),
+                int.parse(dateParts[1]),
+                int.parse(dateParts[2]),
+              );
+            } catch (e) {
+              print('    ⚠️ Error parsing date: ${data['date']}');
+            }
+          }
+          
+          return AppointmentBooking(
+            id: doc.id,
+            userId: ownerMap?['id'] ?? '',
+            petId: petMap['id'] ?? petId,
+            clinicId: data['clinicId'] ?? '',
+            serviceName: data['diseaseReason'] ?? 'Unknown Service',
+            serviceId: '', // Not available in new format
+            appointmentDate: appointmentDate,
+            appointmentTime: data['time'] ?? '00:00',
+            notes: data['notes'] ?? '',
+            status: AppointmentStatus.values.firstWhere(
+              (e) => e.name == data['status'],
+              orElse: () => AppointmentStatus.pending,
+            ),
+            type: AppointmentType.general,
+            createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            cancelReason: data['cancelReason'],
+            assessmentResultId: data['assessmentResultId'],
+            diagnosis: data['diagnosis'],
+            treatment: data['treatment'],
+            prescription: data['prescription'],
+            clinicNotes: data['clinicNotes'],
+            completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
+            isFollowUp: data['isFollowUp'],
+            previousAppointmentId: data['previousAppointmentId'],
+          );
+        } else {
+          // Old AppointmentBooking format - use existing fromMap
+          print('    📄 Using AppointmentBooking.fromMap');
+          return AppointmentBooking.fromMap(data, doc.id);
+        }
+      }).toList();
 
       // Sort by appointment date descending
       appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+
+      print('📊 Converted ${appointments.length} appointments, follow-ups: ${appointments.where((a) => a.isFollowUp == true).length}');
 
       return appointments;
     } catch (e) {
