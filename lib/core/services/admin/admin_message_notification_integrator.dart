@@ -181,7 +181,7 @@ class AdminMessageNotificationIntegrator {
             
             await _notificationService.createMessageNotification(
               messageId: doc.id,
-              title: '💬 New Message from $userName',
+              title: 'New Message from $userName',
               message: messagePreview,
               conversationId: conversationId,
               senderId: senderId,

@@ -35,6 +35,7 @@ import 'package:pawsense/pages/web/admin/appointment_screen.dart';
 import 'package:pawsense/pages/web/admin/patient_record_screen.dart';
 import 'package:pawsense/pages/web/admin/clinic_schedule_screen.dart';
 import 'package:pawsense/pages/web/admin/vet_profile_screen.dart';
+import 'package:pawsense/pages/web/admin/clinic_ratings_page.dart';
 import 'package:pawsense/pages/web/admin/messaging_screen.dart';
 
 import 'package:pawsense/pages/web/admin/support_screen.dart';
@@ -286,6 +287,13 @@ class AppRouter {
             builder: (context, state) => VetProfileScreen(),
             pageBuilder: (context, state) => NoTransitionPage(
               child: VetProfileScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/admin/ratings',
+            builder: (context, state) => const ClinicRatingsPage(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: const ClinicRatingsPage(),
             ),
           ),
           GoRoute(
