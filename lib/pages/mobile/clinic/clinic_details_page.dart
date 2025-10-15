@@ -5,14 +5,17 @@ import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/clinic_details_model.dart';
 import 'package:pawsense/core/models/clinic/clinic_schedule_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_rating_model.dart';
 import 'package:pawsense/core/services/clinic/clinic_details_service.dart';
 import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
+import 'package:pawsense/core/services/clinic/clinic_rating_service.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_header.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_contact_info.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_services_list.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_credentials.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_schedule.dart';
 import 'package:pawsense/core/widgets/user/clinic_details/clinic_action_buttons.dart';
+import 'package:pawsense/core/widgets/shared/rating/rating_display_widgets.dart';
 import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
 import 'package:pawsense/core/models/messaging/conversation_model.dart';
 import 'package:pawsense/core/services/messaging/messaging_service.dart';
@@ -34,12 +37,14 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
   ClinicDetails? _clinicDetails;
   WeeklySchedule? _weeklySchedule;
   List<DateTime> _holidays = [];
+  ClinicRatingStats? _ratingStats;
   bool _isLoading = true;
   bool _isLoadingSchedule = true;
   String? _errorMessage;
   StreamSubscription<ClinicDetails?>? _clinicSubscription;
   StreamSubscription<WeeklySchedule>? _scheduleSubscription;
   StreamSubscription<List<DateTime>>? _holidaysSubscription;
+  StreamSubscription<ClinicRatingStats>? _ratingsSubscription;
 
   @override
   void initState() {
@@ -47,6 +52,7 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
     _loadClinicDetails();
     _loadClinicSchedule();
     _loadHolidays();
+    _loadRatings();
   }
 
   @override
@@ -54,6 +60,7 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
     _clinicSubscription?.cancel();
     _scheduleSubscription?.cancel();
     _holidaysSubscription?.cancel();
+    _ratingsSubscription?.cancel();
     super.dispose();
   }
 
@@ -158,6 +165,28 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
     }
   }
 
+  Future<void> _loadRatings() async {
+    try {
+      // Cancel existing subscription if any
+      _ratingsSubscription?.cancel();
+
+      // Use stream for real-time rating updates
+      _ratingsSubscription = ClinicRatingService.streamClinicRatingStats(widget.clinicId)
+          .listen((stats) {
+        if (mounted) {
+          setState(() {
+            _ratingStats = stats;
+          });
+          print('✅ Rating stats updated: ${stats.averageRating} (${stats.totalRatings} reviews)');
+        }
+      }, onError: (error) {
+        print('❌ Error streaming rating stats: $error');
+      });
+    } catch (e) {
+      print('❌ Error loading rating stats: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -220,6 +249,12 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
             
             const SizedBox(height: kMobileSizedBoxMedium),
             
+            // Clinic Ratings
+            if (_ratingStats != null)
+              _buildRatingsSection(_ratingStats!),
+            
+            const SizedBox(height: kMobileSizedBoxMedium),
+            
             // Contact Information
             ClinicContactInfo(clinic: _clinicDetails!),
             
@@ -254,6 +289,131 @@ class _ClinicDetailsPageState extends State<ClinicDetailsPage> {
             const SizedBox(height: kMobileSizedBoxLarge),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRatingsSection(ClinicRatingStats stats) {
+    return Container(
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.star_rounded,
+                color: AppColors.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Clinic Ratings',
+                style: kMobileTextStyleTitle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: kMobileSizedBoxMedium),
+          
+          if (stats.hasRatings) ...[
+            Row(
+              children: [
+                // Large rating display
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          stats.formattedAverage,
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                            height: 1,
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8, left: 4),
+                          child: Text(
+                            '/5',
+                            style: TextStyle(
+                              fontSize: 20,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    StarRatingDisplay(
+                      rating: stats.averageRating,
+                      size: 20,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${stats.totalRatings} ${stats.totalRatings == 1 ? 'review' : 'reviews'}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 24),
+                
+                // Rating distribution
+                Expanded(
+                  child: RatingDistributionWidget(
+                    stats: stats,
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.star_outline_rounded,
+                      size: 48,
+                      color: AppColors.textSecondary.withOpacity(0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No reviews yet',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Be the first to review this clinic',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

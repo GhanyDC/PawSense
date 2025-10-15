@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
@@ -8,6 +9,8 @@ import 'package:pawsense/core/models/user/pet_model.dart';
 import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/services/clinic/clinic_service.dart';
 import 'package:pawsense/core/services/user/pet_service.dart';
+import 'package:pawsense/core/widgets/shared/rating/rate_clinic_modal.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
 
 class AppointmentHistoryDetailModal extends StatefulWidget {
   final String appointmentId;
@@ -203,6 +206,13 @@ class _AppointmentHistoryDetailModalState extends State<AppointmentHistoryDetail
           // Clinic Evaluation (only for completed appointments)
           if (appointment.status == AppointmentStatus.completed) ...[
             _buildClinicEvaluationSection(appointment),
+            const SizedBox(height: kMobileSizedBoxXLarge),
+          ],
+          
+          // Rate Clinic button (only for completed appointments that haven't been rated)
+          if (appointment.status == AppointmentStatus.completed && 
+              appointment.hasRated != true) ...[
+            _buildRateClinicButton(appointment),
             const SizedBox(height: kMobileSizedBoxXLarge),
           ],
           
@@ -585,6 +595,86 @@ class _AppointmentHistoryDetailModalState extends State<AppointmentHistoryDetail
         ),
       ),
     );
+  }
+
+  Widget _buildRateClinicButton(AppointmentBooking appointment) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _showRateClinicModal(appointment),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(kMobileBorderRadiusButton),
+          ),
+        ),
+        icon: const Icon(Icons.star_outline),
+        label: const Text(
+          'Rate This Clinic',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showRateClinicModal(AppointmentBooking appointment) async {
+    // Get current user
+    final currentUser = await AuthGuard.getCurrentUser();
+    if (currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User not found. Please log in again.')),
+        );
+      }
+      return;
+    }
+
+    // Get clinic name - fetch from Firestore if not available in state
+    String clinicName = 'Unknown Clinic';
+    if (_clinic != null && _clinic!.clinicName.isNotEmpty) {
+      clinicName = _clinic!.clinicName;
+    } else {
+      try {
+        // Fetch clinic name from Firestore
+        final clinicDoc = await FirebaseFirestore.instance
+            .collection('clinics')
+            .doc(appointment.clinicId)
+            .get();
+        if (clinicDoc.exists && clinicDoc.data()?['clinicName'] != null) {
+          clinicName = clinicDoc.data()!['clinicName'] as String;
+        }
+      } catch (e) {
+        print('Error fetching clinic name: $e');
+      }
+    }
+
+    // Show rating modal
+    final rated = await RateClinicModal.show(
+      context: context,
+      clinicId: appointment.clinicId,
+      clinicName: clinicName,
+      userId: currentUser.uid,
+      appointmentId: appointment.id!,
+    );
+
+    // Refresh appointment if rating was submitted
+    if (rated == true && mounted) {
+      setState(() {
+        _appointment = appointment.copyWith(hasRated: true);
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thank you for rating this clinic!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
   }
 
   Widget _buildInfoRow(String label, String value) {

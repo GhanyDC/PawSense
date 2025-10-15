@@ -46,6 +46,7 @@ class AppointmentBooking {
   final DateTime? completedAt;
   final bool? isFollowUp;
   final String? previousAppointmentId;
+  final bool? hasRated; // Whether the user has rated this appointment
 
   AppointmentBooking({
     this.id,
@@ -75,6 +76,7 @@ class AppointmentBooking {
     this.completedAt,
     this.isFollowUp,
     this.previousAppointmentId,
+    this.hasRated,
   });
 
   /// Convert to Map for Firestore storage
@@ -106,6 +108,7 @@ class AppointmentBooking {
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'isFollowUp': isFollowUp,
       'previousAppointmentId': previousAppointmentId,
+      'hasRated': hasRated,
     };
   }
 
@@ -163,6 +166,7 @@ class AppointmentBooking {
       completedAt: _safeTimestampToDateNullable(map['completedAt']),
       isFollowUp: map['isFollowUp'],
       previousAppointmentId: map['previousAppointmentId'],
+      hasRated: map['hasRated'],
     );
   }
 
@@ -195,6 +199,7 @@ class AppointmentBooking {
     DateTime? completedAt,
     bool? isFollowUp,
     String? previousAppointmentId,
+    bool? hasRated,
   }) {
     return AppointmentBooking(
       id: id ?? this.id,
@@ -224,6 +229,7 @@ class AppointmentBooking {
       completedAt: completedAt ?? this.completedAt,
       isFollowUp: isFollowUp ?? this.isFollowUp,
       previousAppointmentId: previousAppointmentId ?? this.previousAppointmentId,
+      hasRated: hasRated ?? this.hasRated,
     );
   }
 
