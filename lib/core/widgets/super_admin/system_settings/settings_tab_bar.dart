@@ -27,6 +27,12 @@ class SettingsTabBar extends StatelessWidget {
         isSelected: currentIndex == 1,
         onTap: () => onTabChanged(1),
       ),
+      _TabItem(
+        icon: Icons.description_outlined,
+        label: 'Legal Documents',
+        isSelected: currentIndex == 2,
+        onTap: () => onTabChanged(2),
+      ),
     ];
 
     return Container(

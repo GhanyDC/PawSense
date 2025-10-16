@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/widgets/super_admin/system_settings/security_tab.dart';
 import 'package:pawsense/core/widgets/super_admin/system_settings/settings_tab_bar.dart';
 import 'package:pawsense/core/widgets/super_admin/system_settings/profile_tab.dart';
+import 'package:pawsense/core/widgets/super_admin/system_settings/legal_documents_tab.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/models/system/system_settings_model.dart';
@@ -145,6 +146,8 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           settings: _settings,
           onSettingsChanged: _updateSettings,
         );
+      case 2:
+        return const LegalDocumentsTab();
       default:
         return ProfileTab(
           settings: _settings,
