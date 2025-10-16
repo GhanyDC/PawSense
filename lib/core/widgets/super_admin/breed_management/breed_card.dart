@@ -7,7 +7,6 @@ class BreedCard extends StatelessWidget {
   final PetBreed breed;
   final VoidCallback onTap;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
   final Function(bool) onStatusToggle;
 
   const BreedCard({
@@ -15,7 +14,6 @@ class BreedCard extends StatelessWidget {
     required this.breed,
     required this.onTap,
     required this.onEdit,
-    required this.onDelete,
     required this.onStatusToggle,
   });
 
@@ -89,30 +87,17 @@ class BreedCard extends StatelessWidget {
             
             // Actions
             SizedBox(
-              width: 80,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.edit_outlined, size: 20),
-                    color: AppColors.info,
-                    onPressed: onEdit,
-                    tooltip: 'Edit Breed',
-                    splashRadius: 20,
-                    padding: EdgeInsets.all(8),
-                    constraints: BoxConstraints(),
-                  ),
-                  SizedBox(width: kSpacingSmall),
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, size: 20),
-                    color: AppColors.error,
-                    onPressed: onDelete,
-                    tooltip: 'Delete Breed',
-                    splashRadius: 20,
-                    padding: EdgeInsets.all(8),
-                    constraints: BoxConstraints(),
-                  ),
-                ],
+              width: 60,
+              child: Center(
+                child: IconButton(
+                  icon: Icon(Icons.edit_outlined, size: 20),
+                  color: AppColors.info,
+                  onPressed: onEdit,
+                  tooltip: 'Edit Breed',
+                  splashRadius: 20,
+                  padding: EdgeInsets.all(8),
+                  constraints: BoxConstraints(),
+                ),
               ),
             ),
           ],

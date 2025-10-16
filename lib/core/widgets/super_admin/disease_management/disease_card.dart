@@ -7,14 +7,12 @@ class DiseaseCard extends StatefulWidget {
   final SkinDiseaseModel disease;
   final VoidCallback onTap;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
 
   const DiseaseCard({
     super.key,
     required this.disease,
     required this.onTap,
     required this.onEdit,
-    required this.onDelete,
   });
 
   @override
@@ -90,9 +88,9 @@ class _DiseaseCardState extends State<DiseaseCard> {
             ),
             const SizedBox(width: 16),
 
-            // Actions - Fixed 80px
+            // Actions - Fixed 60px
             SizedBox(
-              width: 80,
+              width: 60,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -102,17 +100,6 @@ class _DiseaseCardState extends State<DiseaseCard> {
                       icon: Icon(Icons.edit_outlined, size: kIconSizeSmall),
                       color: AppColors.textSecondary,
                       onPressed: widget.onEdit,
-                      padding: EdgeInsets.all(kSpacingXSmall),
-                      constraints: const BoxConstraints(),
-                    ),
-                  ),
-                  SizedBox(width: kSpacingXSmall),
-                  Tooltip(
-                    message: 'Delete',
-                    child: IconButton(
-                      icon: Icon(Icons.delete_outline, size: kIconSizeSmall),
-                      color: AppColors.error,
-                      onPressed: widget.onDelete,
                       padding: EdgeInsets.all(kSpacingXSmall),
                       constraints: const BoxConstraints(),
                     ),

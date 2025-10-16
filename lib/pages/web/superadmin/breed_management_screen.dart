@@ -365,52 +365,6 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> with Auto
     );
   }
   
-  void _showDeleteDialog(PetBreed breed) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${breed.name}?'),
-        content: Text('This will permanently remove this breed. This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                await PetBreedsService.deleteBreed(breed.id);
-                _showSuccessSnackBar('Breed deleted successfully!');
-                
-                // Remove breed from local list and cache
-                setState(() {
-                  _filteredBreeds.removeWhere((b) => b.id == breed.id);
-                  _totalBreeds = _totalBreeds > 0 ? _totalBreeds - 1 : 0;
-                });
-                
-                _cacheService.removeBreedFromCache(breed.id);
-                
-                // If current page is now empty and not the first page, go back one page
-                if (_filteredBreeds.isEmpty && _currentPage > 1) {
-                  _currentPage--;
-                  _saveState();
-                  _loadBreeds();
-                }
-              } catch (e) {
-                _showErrorSnackBar('Failed to delete breed: $e');
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
-            child: Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-  
   void _toggleBreedStatus(PetBreed breed, bool isActive) async {
     try {
       await PetBreedsService.toggleBreedStatus(breed.id, isActive);
@@ -751,7 +705,6 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> with Auto
             breed: breed,
             onTap: () => _showEditBreedModal(breed),
             onEdit: () => _showEditBreedModal(breed),
-            onDelete: () => _showDeleteDialog(breed),
             onStatusToggle: (isActive) => _toggleBreedStatus(breed, isActive),
           )),
         ],
@@ -776,49 +729,98 @@ class _BreedManagementScreenState extends State<BreedManagementScreen> with Auto
             flex: 3,
             child: Padding(
               padding: EdgeInsets.only(right: kSpacingSmall),
-              child: Text('BREED NAME', style: _headerStyle()),
+              child: Text(
+                'BREED NAME',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                  letterSpacing: 0.8,
+                ),
+              ),
             ),
           ),
           
           // Species column
           SizedBox(
             width: 100,
-            child: Text('SPECIES', style: _headerStyle()),
+            child: Text(
+              'SPECIES',
+              maxLines: 1,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6B7280),
+                letterSpacing: 0.8,
+              ),
+            ),
           ),
           SizedBox(width: kSpacingLarge),
           
           // Status column
           SizedBox(
             width: 100,
-            child: Center(child: Text('STATUS', style: _headerStyle())),
+            child: Center(
+              child: Text(
+                'STATUS',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
           ),
           SizedBox(width: kSpacingLarge),
           
           // Date column
           SizedBox(
             width: 100,
-            child: Text('DATE ADDED', style: _headerStyle(), textAlign: TextAlign.center),
+            child: Center(
+              child: Text(
+                'DATE ADDED',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                  letterSpacing: 0.8,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
           SizedBox(width: kSpacingLarge),
           
           // Actions column
           SizedBox(
-            width: 80,
-            child: Text('ACTIONS', style: _headerStyle(), textAlign: TextAlign.right),
+            width: 60,
+            child: Center(
+              child: Text(
+                'ACTIONS',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                  letterSpacing: 0.8,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-  
-  TextStyle _headerStyle() {
-    return kTextStyleSmall.copyWith(
-      color: AppColors.textSecondary,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.8,
-    );
-  }
-  
 
   Widget _buildEmptyState() {
     return Container(

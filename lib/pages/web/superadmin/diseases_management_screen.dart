@@ -270,69 +270,6 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
     _loadDiseases(); // Reload with cleared filters (will clear cache)
   }
 
-  Future<void> _handleDelete(SkinDiseaseModel disease) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Disease'),
-        content: Text(
-          'Are you sure you want to delete "${disease.name}"? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await SkinDiseasesService.deleteDisease(disease.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Disease deleted successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-        
-        // Remove disease from local list and cache
-        setState(() {
-          _filteredDiseases.removeWhere((d) => d.id == disease.id);
-          _totalDiseases = _totalDiseases > 0 ? _totalDiseases - 1 : 0;
-        });
-        
-        _cacheService.removeDiseaseFromCache(disease.id);
-        
-        // If current page is now empty and not the first page, go back one page
-        if (_filteredDiseases.isEmpty && _currentPage > 1) {
-          _currentPage--;
-          _saveState();
-          _loadDiseases();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error deleting disease: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
-
   Future<void> _handleExportCSV() async {
     // Show loading indicator
     if (mounted) {
@@ -747,6 +684,8 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
             width: 100,
             child: Text(
               'DETECTION',
+              maxLines: 1,
+              overflow: TextOverflow.visible,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -762,6 +701,8 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
             width: 120,
             child: Text(
               'SPECIES',
+              maxLines: 1,
+              overflow: TextOverflow.visible,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -778,6 +719,8 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
             child: Center(
               child: Text(
                 'SEVERITY',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -794,6 +737,8 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
             width: 120,
             child: Text(
               'CATEGORIES',
+              maxLines: 1,
+              overflow: TextOverflow.visible,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -810,6 +755,8 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
             child: Center(
               child: Text(
                 'CONTAGIOUS',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -821,10 +768,23 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
           ),
           const SizedBox(width: 16),
 
-          // Actions - Fixed 80px
+          // Actions - Fixed 60px
           SizedBox(
-            width: 80,
-            child: _buildHeaderText('ACTIONS', textAlign: TextAlign.right),
+            width: 60,
+            child: Center(
+              child: Text(
+                'ACTIONS',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                  letterSpacing: 0.8,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
         ],
       ),
@@ -855,7 +815,6 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
           disease: disease,
           onTap: () => _handleViewDetails(disease),
           onEdit: () => _handleEdit(disease),
-          onDelete: () => _handleDelete(disease),
         );
       },
     );
