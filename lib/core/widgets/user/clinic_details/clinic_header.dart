@@ -27,19 +27,7 @@ class ClinicHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Clinic Logo/Avatar
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: kMobileBorderRadiusIconPreset,
-                ),
-                child: Icon(
-                  Icons.local_hospital,
-                  size: 26,
-                  color: AppColors.primary,
-                ),
-              ),
+              _buildClinicLogo(),
               const SizedBox(width: kMobileSizedBoxMedium),
               Expanded(
                 child: Column(
@@ -167,6 +155,67 @@ class ClinicHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildClinicLogo() {
+    // Check if clinic has a logo URL
+    if (clinic.logoUrl != null && clinic.logoUrl!.isNotEmpty) {
+      return Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.white,
+          border: Border.all(
+            color: AppColors.border,
+            width: 2,
+          ),
+        ),
+        child: ClipOval(
+          child: Image.network(
+            clinic.logoUrl!,
+            width: 60,
+            height: 60,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return _buildDefaultLogo();
+            },
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    // Default logo if no URL
+    return _buildDefaultLogo();
+  }
+
+  Widget _buildDefaultLogo() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.border,
+          width: 2,
+        ),
+      ),
+      child: Icon(
+        Icons.local_hospital,
+        size: 30,
+        color: AppColors.primary,
+      ),
     );
   }
 }

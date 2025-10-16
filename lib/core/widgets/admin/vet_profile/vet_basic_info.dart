@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import '../../shared/content_container.dart';
+import 'upload_logo_modal.dart';
 
 class VetProfileBasicInfo extends StatelessWidget {
   final String clinicName;
@@ -10,6 +11,8 @@ class VetProfileBasicInfo extends StatelessWidget {
   final String phone;
   final String address;
   final String website;
+  final String? logoUrl;
+  final VoidCallback? onLogoUpdated;
 
   const VetProfileBasicInfo({
     super.key,
@@ -19,6 +22,8 @@ class VetProfileBasicInfo extends StatelessWidget {
     required this.phone,
     required this.address,
     required this.website,
+    this.logoUrl,
+    this.onLogoUpdated,
   });
 
   @override
@@ -27,15 +32,61 @@ class VetProfileBasicInfo extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Profile Avatar
-          CircleAvatar(
-            radius: 40,
-            backgroundColor: AppColors.primary.withOpacity(0.1),
-            child: Icon(
-              Icons.person_outline,
-              size: 40,
-              color: AppColors.primary,
-            ),
+          // Profile Avatar / Logo
+          Stack(
+            children: [
+              // Logo or default avatar - Circular
+              logoUrl != null && logoUrl!.isNotEmpty
+                  ? Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.white,
+                        border: Border.all(
+                          color: AppColors.border,
+                          width: 2,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: Image.network(
+                          logoUrl!,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildDefaultAvatar();
+                          },
+                        ),
+                      ),
+                    )
+                  : _buildDefaultAvatar(),
+              
+              // Edit/Upload button
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: InkWell(
+                  onTap: () => _showUploadLogoModal(context),
+                  child: Container(
+                    padding: EdgeInsets.all(kSpacingXSmall),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.white,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.camera_alt,
+                      size: 16,
+                      color: AppColors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           SizedBox(height: kSpacingMedium),
 
@@ -77,6 +128,40 @@ class VetProfileBasicInfo extends StatelessWidget {
               text: website,
             ),
         ],
+      ),
+    );
+  }
+  
+  Widget _buildDefaultAvatar() {
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.border,
+          width: 2,
+        ),
+      ),
+      child: Icon(
+        Icons.business,
+        size: 50,
+        color: AppColors.primary,
+      ),
+    );
+  }
+  
+  void _showUploadLogoModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => UploadLogoModal(
+        currentLogoUrl: logoUrl,
+        onLogoUploaded: () {
+          if (onLogoUpdated != null) {
+            onLogoUpdated!();
+          }
+        },
       ),
     );
   }

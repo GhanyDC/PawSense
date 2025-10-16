@@ -119,4 +119,36 @@ class ClinicService {
       return false;
     }
   }
+  
+  /// Update clinic logo URL
+  static Future<bool> updateClinicLogo(String logoUrl) async {
+    try {
+      final currentUser = await AuthGuard.getCurrentUser();
+      if (currentUser == null) return false;
+      
+      // Update clinic document
+      await _firestore.collection('clinics').doc(currentUser.uid).update({
+        'logoUrl': logoUrl,
+      });
+      
+      // Update clinic details if exists
+      final query = await _firestore
+          .collection('clinicDetails')
+          .where('clinicId', isEqualTo: currentUser.uid)
+          .limit(1)
+          .get();
+          
+      if (query.docs.isNotEmpty) {
+        await query.docs.first.reference.update({
+          'logoUrl': logoUrl,
+          'updatedAt': DateTime.now().toIso8601String(),
+        });
+      }
+      
+      return true;
+    } catch (e) {
+      print('Error updating clinic logo: $e');
+      return false;
+    }
+  }
 }

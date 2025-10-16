@@ -666,18 +666,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
     return DateTime.now().add(const Duration(days: 1));
   }
   
-  /// Clear the schedule cache and optionally cleanup listeners for a specific clinic or all clinics
-  static void clearScheduleCache([String? clinicId]) {
-    if (clinicId != null) {
-      _scheduleCache.remove(clinicId);
-      _cleanupListenerForClinic(clinicId);
-      print('🗑️ Cleared schedule cache and listener for clinic: $clinicId');
-    } else {
-      _scheduleCache.clear();
-      cleanupAllListeners();
-      print('🗑️ Cleared all schedule cache and listeners');
-    }
-  }
+
 
   @override
   void dispose() {
@@ -692,22 +681,10 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
     _scheduleListeners.remove(clinicId);
     print('🧹 Cleaned up listener for clinic: $clinicId');
   }
-  
-  /// Clean up all real-time listeners (call when app closes or on memory pressure)
-  static void cleanupAllListeners() {
-    for (final listener in _scheduleListeners.values) {
-      listener.cancel();
-    }
-    _scheduleListeners.clear();
-    print('🧹 Cleaned up all schedule listeners');
-  }
+
   
   /// Force refresh schedule for a specific clinic (useful for admin operations)
-  static Future<void> forceRefreshSchedule(String clinicId) async {
-    // Clear cache to force fresh fetch
-    _scheduleCache.remove(clinicId);
-    print('🔄 Forced refresh for clinic schedule: $clinicId');
-  }
+
 
   @override
   Widget build(BuildContext context) {

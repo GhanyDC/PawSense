@@ -24,6 +24,8 @@ class ScreenStateService {
   DateTime? _appointmentStartDate;
   DateTime? _appointmentEndDate;
   bool? _appointmentFollowUpFilter; // null = all, true = needs follow-up, false = no follow-up
+  String? _appointmentSelectedPetType;
+  String? _appointmentSelectedBreed;
 
   // Clinic Schedule State
   DateTime _scheduleSelectedDate = DateTime.now();
@@ -104,6 +106,8 @@ class ScreenStateService {
   DateTime? get appointmentStartDate => _appointmentStartDate;
   DateTime? get appointmentEndDate => _appointmentEndDate;
   bool? get appointmentFollowUpFilter => _appointmentFollowUpFilter;
+  String? get appointmentSelectedPetType => _appointmentSelectedPetType;
+  String? get appointmentSelectedBreed => _appointmentSelectedBreed;
 
   void saveAppointmentState({
     int? currentPage,
@@ -113,6 +117,8 @@ class ScreenStateService {
     DateTime? startDate,
     DateTime? endDate,
     bool? followUpFilter,
+    String? selectedPetType,
+    String? selectedBreed,
   }) {
     if (currentPage != null) {
       _appointmentCurrentPage = currentPage;
@@ -125,7 +131,9 @@ class ScreenStateService {
     _appointmentStartDate = startDate;
     _appointmentEndDate = endDate;
     _appointmentFollowUpFilter = followUpFilter;
-    print('💾 Saved appointment management state: page=$_appointmentCurrentPage, status="$selectedStatus", search="$searchQuery", sort="$_appointmentDateSortOrder", dates="${startDate?.toString().split(' ')[0]} to ${endDate?.toString().split(' ')[0]}", followUp=$followUpFilter');
+    _appointmentSelectedPetType = selectedPetType;
+    _appointmentSelectedBreed = selectedBreed;
+    print('💾 Saved appointment management state: page=$_appointmentCurrentPage, status="$selectedStatus", search="$searchQuery", sort="$_appointmentDateSortOrder", dates="${startDate?.toString().split(' ')[0]} to ${endDate?.toString().split(' ')[0]}", followUp=$followUpFilter, petType=$selectedPetType, breed=$selectedBreed');
   }
 
   /// Reset appointment state to defaults
@@ -137,6 +145,8 @@ class ScreenStateService {
     _appointmentStartDate = null;
     _appointmentEndDate = null;
     _appointmentFollowUpFilter = null;
+    _appointmentSelectedPetType = null;
+    _appointmentSelectedBreed = null;
   }
 
   // Clinic Schedule Getters & Setters

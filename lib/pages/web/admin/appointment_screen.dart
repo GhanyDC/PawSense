@@ -43,6 +43,8 @@ class _OptimizedAppointmentManagementScreenState
   String selectedStatus = 'All Status';
   DateTime? startDate;
   DateTime? endDate;
+  String? selectedPetType;
+  String? selectedBreed;
   SortOrder bookedAtSortOrder = SortOrder.descending; // Default to newest first
   
   // Appointment data
@@ -443,7 +445,16 @@ class _OptimizedAppointmentManagementScreenState
           appointment.owner.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
           appointment.diseaseReason.toLowerCase().contains(searchQuery.toLowerCase());
 
-      return statusMatch && searchMatch;
+      // Pet type filter
+      bool petTypeMatch = selectedPetType == null ||
+          appointment.pet.type.toLowerCase() == selectedPetType!.toLowerCase();
+
+      // Breed filter
+      bool breedMatch = selectedBreed == null ||
+          (appointment.pet.breed != null &&
+              appointment.pet.breed!.toLowerCase() == selectedBreed!.toLowerCase());
+
+      return statusMatch && searchMatch && petTypeMatch && breedMatch;
     }).toList();
     
     // Apply sorting by date to all filtered results
@@ -463,8 +474,8 @@ class _OptimizedAppointmentManagementScreenState
       }
     });
     
-    // For search mode or Follow-up filter, show only the current page of filtered results
-    if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up') {
+    // For search mode, Follow-up filter, or pet type/breed filters, show only the current page of filtered results
+    if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up' || selectedPetType != null || selectedBreed != null) {
       final itemsPerPage = 10;
       final startIndex = (currentPage - 1) * itemsPerPage;
       final endIndex = (startIndex + itemsPerPage).clamp(0, allFiltered.length);
@@ -597,8 +608,8 @@ class _OptimizedAppointmentManagementScreenState
       currentPage = page;
       _saveState(); // Save state when page changes
       
-      // For search mode or Follow-up filter, just re-apply filters with new page
-      if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up') {
+      // For search mode, Follow-up filter, or pet type/breed filters, just re-apply filters with new page
+      if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up' || selectedPetType != null || selectedBreed != null) {
         _applyFilters(); // This will paginate the filtered results and trigger table update
       } else {
         _loadPage(page, isPagination: true); // Load new page data with pagination flag
@@ -615,6 +626,8 @@ class _OptimizedAppointmentManagementScreenState
     selectedStatus = _stateService.appointmentSelectedStatus;
     startDate = _stateService.appointmentStartDate;
     endDate = _stateService.appointmentEndDate;
+    selectedPetType = _stateService.appointmentSelectedPetType;
+    selectedBreed = _stateService.appointmentSelectedBreed;
     bookedAtSortOrder = SortOrder.fromString(_stateService.appointmentDateSortOrder);
   }
 
@@ -628,6 +641,8 @@ class _OptimizedAppointmentManagementScreenState
       startDate: startDate,
       endDate: endDate,
       followUpFilter: null, // No longer using separate follow-up filter
+      selectedPetType: selectedPetType,
+      selectedBreed: selectedBreed,
     );
   }
 
@@ -681,6 +696,30 @@ class _OptimizedAppointmentManagementScreenState
     _saveState();
     
     // Reload data with new date filter
+    _loadDataWithNewFilter();
+  }
+
+  /// Handle pet type change
+  void _onPetTypeChanged(String? petType) {
+    // Update state without rebuilding entire screen
+    selectedPetType = petType;
+    // Reset breed when pet type changes
+    selectedBreed = null;
+    currentPage = 1; // Reset to first page
+    _saveState();
+    
+    // Reload data with new filter
+    _loadDataWithNewFilter();
+  }
+
+  /// Handle breed change
+  void _onBreedChanged(String? breed) {
+    // Update state without rebuilding entire screen
+    selectedBreed = breed;
+    currentPage = 1; // Reset to first page
+    _saveState();
+    
+    // Reload data with new filter
     _loadDataWithNewFilter();
   }
 
@@ -741,6 +780,21 @@ class _OptimizedAppointmentManagementScreenState
           return appointment.pet.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
               appointment.owner.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
               appointment.diseaseReason.toLowerCase().contains(searchQuery.toLowerCase());
+        }).toList();
+      }
+
+      // Apply pet type filter if present (client-side)
+      if (selectedPetType != null) {
+        allAppointments = allAppointments.where((appointment) {
+          return appointment.pet.type.toLowerCase() == selectedPetType!.toLowerCase();
+        }).toList();
+      }
+
+      // Apply breed filter if present (client-side)
+      if (selectedBreed != null) {
+        allAppointments = allAppointments.where((appointment) {
+          return appointment.pet.breed != null &&
+              appointment.pet.breed!.toLowerCase() == selectedBreed!.toLowerCase();
         }).toList();
       }
 
@@ -929,8 +983,8 @@ class _OptimizedAppointmentManagementScreenState
     currentPage = 1;
     _pageCursors.clear(); // Clear page cursors when filters change
 
-    // If there's a search query or Follow-up filter, load ALL appointments for comprehensive filtering
-    if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up') {
+    // If there's a search query, Follow-up filter, or pet type/breed filters, load ALL appointments for comprehensive filtering
+    if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up' || selectedPetType != null || selectedBreed != null) {
       await _loadAllAppointmentsForSearch();
     } else {
       // For no search or client-side filtering, use normal pagination
@@ -938,12 +992,16 @@ class _OptimizedAppointmentManagementScreenState
     }
   }
 
-  /// Load all appointments when searching or using client-side filters (like Follow-up)
+  /// Load all appointments when searching or using client-side filters (like Follow-up, pet type, breed)
   Future<void> _loadAllAppointmentsForSearch() async {
     if (_cachedClinicId == null) return;
 
     try {
-      final filterType = searchQuery.isNotEmpty ? 'search' : 'Follow-up filter';
+      String filterType = 'filter';
+      if (searchQuery.isNotEmpty) filterType = 'search';
+      else if (selectedStatus == 'Follow-up') filterType = 'Follow-up filter';
+      else if (selectedPetType != null || selectedBreed != null) filterType = 'pet type/breed filter';
+      
       print('🔍 Loading ALL appointments for $filterType...');
       
       // Load all appointments with status filter but no pagination
@@ -1047,10 +1105,14 @@ class _OptimizedAppointmentManagementScreenState
                 selectedStatus: selectedStatus,
                 startDate: startDate,
                 endDate: endDate,
+                selectedPetType: selectedPetType,
+                selectedBreed: selectedBreed,
                 onSearchChanged: _onSearchChanged,
                 onStatusChanged: _onStatusChanged,
                 onStartDateChanged: _onStartDateChanged,
                 onEndDateChanged: _onEndDateChanged,
+                onPetTypeChanged: _onPetTypeChanged,
+                onBreedChanged: _onBreedChanged,
                 onExportData: _onExportData,
               ),
               const SizedBox(height: 16),

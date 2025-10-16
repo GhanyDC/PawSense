@@ -81,6 +81,7 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
                 'phone': clinic?['phone'] ?? 'No phone',
                 'address': clinic?['address'] ?? 'No address',
                 'website': clinic?['website'] ?? clinicDetails?['website'],
+                'logoUrl': clinic?['logoUrl'] ?? clinicDetails?['logoUrl'],
               };
 
               // Extract services and map to UI format
@@ -669,6 +670,11 @@ class _VetProfileScreenState extends State<VetProfileScreen> {
                                   phone: _vetProfile['phone'] ?? 'No phone',
                                   address: _vetProfile['address'] ?? 'No address',
                                   website: _vetProfile['website'] ?? '',
+                                  logoUrl: _vetProfile['logoUrl'],
+                                  onLogoUpdated: () {
+                                    // Stream will automatically update the UI
+                                    print('🔄 Logo updated, stream will update UI automatically');
+                                  },
                                 ),
                                 SizedBox(height: kSpacingMedium),
 
