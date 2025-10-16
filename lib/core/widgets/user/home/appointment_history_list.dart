@@ -17,6 +17,7 @@ class AppointmentHistoryData {
   final AppointmentStatus status;
   final DateTime timestamp;
   final String? clinicName;
+  final DateTime createdAt; // Added for sorting by booking creation date
 
   AppointmentHistoryData({
     required this.id,
@@ -25,6 +26,7 @@ class AppointmentHistoryData {
     required this.status,
     required this.timestamp,
     this.clinicName,
+    required this.createdAt, // Required for sorting
   });
 }
 
@@ -44,9 +46,9 @@ class AppointmentHistoryList extends StatelessWidget {
       return _buildEmptyState();
     }
 
-    // Sort appointments by date (most recent first)
-    final sortedAppointments = List<AppointmentHistoryData>.from(appointmentHistory);
-    sortedAppointments.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  // Sort appointments by booking creation date (most recently booked first)
+  final sortedAppointments = List<AppointmentHistoryData>.from(appointmentHistory);
+  sortedAppointments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return Column(
       children: [

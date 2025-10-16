@@ -554,8 +554,8 @@ class _UserHomePageState extends State<UserHomePage> {
     
     print('DEBUG: After deduplication: ${uniqueAppointments.length} unique appointments');
     
-    // Convert the unique appointments to history data
-    return uniqueAppointments.values.map((appointment) {
+    // Convert the unique appointments to history data and maintain creation date order
+    final historyList = uniqueAppointments.values.map((appointment) {
       // Convert booking AppointmentStatus to history AppointmentStatus
       AppointmentStatus historyStatus;
       switch (appointment.status) {
@@ -586,8 +586,14 @@ class _UserHomePageState extends State<UserHomePage> {
         status: historyStatus,
         timestamp: appointment.appointmentDate,
         clinicName: appointment.serviceName, // Store service name for reference
+        createdAt: appointment.createdAt, // Add createdAt for sorting
       );
     }).toList();
+    
+    // Sort by creation date (most recently booked first)
+    historyList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    return historyList;
   }
   
   String _getStatusTitle(booking.AppointmentBooking appointment) {

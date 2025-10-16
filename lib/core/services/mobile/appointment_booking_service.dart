@@ -6,9 +6,122 @@ import 'package:pawsense/core/services/notifications/appointment_booking_integra
 class AppointmentBookingService {
   static const String _collection = 'appointments';
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Rate limiting: Track recent booking attempts per user
+  static final Map<String, List<DateTime>> _userBookingAttempts = {};
+  static const int _maxBookingsPerWindow = 3; // Max 3 bookings
+  static const Duration _rateLimitWindow = Duration(minutes: 5); // Within 5 minutes
 
-  /// Book a new appointment
-  static Future<String?> bookAppointment({
+  /// Check for duplicate booking (same user, pet, clinic, date, time)
+  static Future<bool> checkForDuplicateBooking({
+    required String userId,
+    required String petId,
+    required String clinicId,
+    required DateTime appointmentDate,
+    required String appointmentTime,
+  }) async {
+    try {
+      // Normalize date to start of day for comparison
+      final startOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day);
+      final endOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day, 23, 59, 59);
+      
+      final duplicateCheck = await _firestore
+          .collection(_collection)
+          .where('userId', isEqualTo: userId)
+          .where('petId', isEqualTo: petId)
+          .where('clinicId', isEqualTo: clinicId)
+          .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+          .get();
+      
+      // Check if any existing appointment matches the exact time and is not cancelled
+      for (final doc in duplicateCheck.docs) {
+        final data = doc.data();
+        final existingTime = data['appointmentTime'] as String;
+        final status = data['status'] as String;
+        
+        // Only consider pending or confirmed appointments as duplicates
+        if (existingTime == appointmentTime && 
+            (status == 'pending' || status == 'confirmed')) {
+          print('🚫 Duplicate booking detected for user $userId at $appointmentTime');
+          return true; // Duplicate found
+        }
+      }
+      
+      return false; // No duplicate
+    } catch (e) {
+      print('Error checking for duplicate booking: $e');
+      return false; // On error, allow booking (fail open)
+    }
+  }
+
+  /// Check if user has exceeded rate limit
+  static bool checkRateLimit(String userId) {
+    final now = DateTime.now();
+    
+    // Get user's recent booking attempts
+    final attempts = _userBookingAttempts[userId] ?? [];
+    
+    // Remove attempts outside the rate limit window
+    attempts.removeWhere((attemptTime) => 
+      now.difference(attemptTime) > _rateLimitWindow
+    );
+    
+    // Update the list
+    _userBookingAttempts[userId] = attempts;
+    
+    // Check if limit exceeded
+    if (attempts.length >= _maxBookingsPerWindow) {
+      print('🚫 Rate limit exceeded for user $userId (${attempts.length} bookings in last ${_rateLimitWindow.inMinutes} minutes)');
+      return false; // Rate limit exceeded
+    }
+    
+    return true; // Within rate limit
+  }
+
+  /// Record a booking attempt for rate limiting
+  static void recordBookingAttempt(String userId) {
+    final attempts = _userBookingAttempts[userId] ?? [];
+    attempts.add(DateTime.now());
+    _userBookingAttempts[userId] = attempts;
+  }
+
+  /// Check if a specific time slot is at full capacity
+  static Future<bool> isTimeSlotFull({
+    required String clinicId,
+    required DateTime appointmentDate,
+    required String appointmentTime,
+  }) async {
+    try {
+      final startOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day);
+      final endOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day, 23, 59, 59);
+      
+      final existingAppointments = await _firestore
+          .collection(_collection)
+          .where('clinicId', isEqualTo: clinicId)
+          .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+          .where('appointmentTime', isEqualTo: appointmentTime)
+          .get();
+      
+      // Count confirmed or pending appointments (not cancelled)
+      final activeAppointments = existingAppointments.docs.where((doc) {
+        final status = doc.data()['status'] as String;
+        return status == 'pending' || status == 'confirmed';
+      }).length;
+      
+      // Assuming 1 appointment per time slot (can be configured)
+      const maxAppointmentsPerSlot = 1;
+      
+      return activeAppointments >= maxAppointmentsPerSlot;
+    } catch (e) {
+      print('Error checking time slot capacity: $e');
+      return false; // On error, assume slot is available
+    }
+  }
+
+  /// Book a new appointment with duplicate prevention and rate limiting
+  static Future<Map<String, dynamic>> bookAppointment({
     required String petId,
     required String clinicId,
     required String serviceName,
@@ -23,43 +136,122 @@ class AppointmentBookingService {
     try {
       final currentUser = await AuthGuard.getCurrentUser();
       if (currentUser == null) {
-        throw Exception('User not authenticated');
+        return {
+          'success': false,
+          'message': 'User not authenticated',
+          'appointmentId': null,
+        };
       }
 
-      final now = DateTime.now();
-      final appointment = AppointmentBooking(
+      // 1. Check rate limit
+      if (!checkRateLimit(currentUser.uid)) {
+        return {
+          'success': false,
+          'message': 'Too many booking attempts. Please wait a few minutes and try again.',
+          'appointmentId': null,
+          'rateLimitExceeded': true,
+        };
+      }
+
+      // 2. Check for duplicate booking
+      final isDuplicate = await checkForDuplicateBooking(
         userId: currentUser.uid,
         petId: petId,
         clinicId: clinicId,
-        serviceName: serviceName,
-        serviceId: serviceId,
         appointmentDate: appointmentDate,
         appointmentTime: appointmentTime,
-        notes: notes,
-        status: AppointmentStatus.pending,
-        type: AppointmentType.general,
-        estimatedPrice: estimatedPrice,
-        duration: duration,
-        createdAt: now,
-        updatedAt: now,
-        assessmentResultId: assessmentResultId,
       );
 
-      final docRef = await _firestore
-          .collection(_collection)
-          .add(appointment.toMap());
+      if (isDuplicate) {
+        return {
+          'success': false,
+          'message': 'You already have an appointment for this pet at this clinic on this date and time.',
+          'appointmentId': null,
+          'isDuplicate': true,
+        };
+      }
 
-      print('📋 MOBILE DEBUG: Appointment booked successfully with ID: ${docRef.id}');
-      print('🏥 MOBILE DEBUG: Saved with clinicId: $clinicId');
-      print('👤 MOBILE DEBUG: Saved with userId: ${currentUser.uid}');
-      print('🐾 MOBILE DEBUG: Saved with petId: $petId');
-      print('📅 MOBILE DEBUG: Saved for date: $appointmentDate at $appointmentTime');
-      print('🔧 MOBILE DEBUG: Service: $serviceName (ID: $serviceId)');
+      // 3. Use Firestore transaction to ensure atomic slot check and booking
+      final result = await _firestore.runTransaction<Map<String, dynamic>>((transaction) async {
+        // Check if slot is still available within transaction
+        final startOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day);
+        final endOfDay = DateTime(appointmentDate.year, appointmentDate.month, appointmentDate.day, 23, 59, 59);
+        
+        final existingAppointmentsQuery = await _firestore
+            .collection(_collection)
+            .where('clinicId', isEqualTo: clinicId)
+            .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+            .where('appointmentDate', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+            .where('appointmentTime', isEqualTo: appointmentTime)
+            .get();
+        
+        // Count active appointments in this slot
+        final activeCount = existingAppointmentsQuery.docs.where((doc) {
+          final status = doc.data()['status'] as String;
+          return status == 'pending' || status == 'confirmed';
+        }).length;
+        
+        const maxAppointmentsPerSlot = 1;
+        
+        if (activeCount >= maxAppointmentsPerSlot) {
+          return {
+            'success': false,
+            'message': 'This time slot was just booked by another user. Please select a different time.',
+            'appointmentId': null,
+            'slotFull': true,
+          };
+        }
+
+        // Slot is available, create the appointment
+        final now = DateTime.now();
+        final appointment = AppointmentBooking(
+          userId: currentUser.uid,
+          petId: petId,
+          clinicId: clinicId,
+          serviceName: serviceName,
+          serviceId: serviceId,
+          appointmentDate: appointmentDate,
+          appointmentTime: appointmentTime,
+          notes: notes,
+          status: AppointmentStatus.pending,
+          type: AppointmentType.general,
+          estimatedPrice: estimatedPrice,
+          duration: duration,
+          createdAt: now,
+          updatedAt: now,
+          assessmentResultId: assessmentResultId,
+        );
+
+        final docRef = _firestore.collection(_collection).doc();
+        transaction.set(docRef, appointment.toMap());
+
+        return {
+          'success': true,
+          'message': 'Appointment booked successfully',
+          'appointmentId': docRef.id,
+        };
+      });
+
+      // Record the booking attempt for rate limiting (only if successful)
+      if (result['success'] == true) {
+        recordBookingAttempt(currentUser.uid);
+        
+        print('📋 MOBILE DEBUG: Appointment booked successfully with ID: ${result['appointmentId']}');
+        print('🏥 MOBILE DEBUG: Saved with clinicId: $clinicId');
+        print('👤 MOBILE DEBUG: Saved with userId: ${currentUser.uid}');
+        print('🐾 MOBILE DEBUG: Saved with petId: $petId');
+        print('📅 MOBILE DEBUG: Saved for date: $appointmentDate at $appointmentTime');
+        print('🔧 MOBILE DEBUG: Service: $serviceName (ID: $serviceId)');
+      }
       
-      return docRef.id;
+      return result;
     } catch (e) {
       print('Error booking appointment: $e');
-      return null;
+      return {
+        'success': false,
+        'message': 'Failed to book appointment: ${e.toString()}',
+        'appointmentId': null,
+      };
     }
   }
 
@@ -75,8 +267,8 @@ class AppointmentBookingService {
           .map((doc) => AppointmentBooking.fromMap(doc.data(), doc.id))
           .toList();
       
-      // Sort by appointment date in descending order (latest first)
-      appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+      // Sort by creation date in descending order (most recently booked first)
+      appointments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       
       return appointments;
     } catch (e) {
@@ -96,10 +288,22 @@ class AppointmentBookingService {
           .map((doc) => AppointmentBooking.fromMap(doc.data(), doc.id))
           .toList();
       
-      // Sort by appointment date in descending order (latest first)
-      appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+      // Sort by creation date in descending order (most recently booked first)
+      appointments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       
       return appointments;
+    });
+  }
+
+  /// Stream a single appointment by ID in real-time
+  static Stream<AppointmentBooking?> getAppointmentStream(String appointmentId) {
+    return _firestore
+        .collection(_collection)
+        .doc(appointmentId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return null;
+      return AppointmentBooking.fromMap(snapshot.data()!, snapshot.id);
     });
   }
 

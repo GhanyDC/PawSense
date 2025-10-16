@@ -4,6 +4,7 @@ import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
 import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
+import 'dart:async';
 
 class AppointmentHistoryDetailPage extends StatefulWidget {
   final String appointmentId;
@@ -21,32 +22,63 @@ class _AppointmentHistoryDetailPageState extends State<AppointmentHistoryDetailP
   AppointmentBooking? _appointment;
   bool _loading = true;
   String? _error;
+  StreamSubscription<AppointmentBooking?>? _appointmentSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadAppointmentData();
+    _setupAppointmentStream();
   }
 
-  Future<void> _loadAppointmentData() async {
+  @override
+  void dispose() {
+    _appointmentSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupAppointmentStream() {
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final appointment = await AppointmentBookingService.getAppointmentById(widget.appointmentId);
+      print('📡 Setting up real-time stream for appointment: ${widget.appointmentId}');
       
-      setState(() {
-        _appointment = appointment;
-        _loading = false;
-      });
+      _appointmentSubscription = AppointmentBookingService
+          .getAppointmentStream(widget.appointmentId)
+          .listen(
+        (appointment) {
+          print('📡 Received appointment update: ${appointment?.id}');
+          
+          if (mounted) {
+            setState(() {
+              _appointment = appointment;
+              _loading = false;
+              _error = appointment == null ? 'Appointment not found' : null;
+            });
+          }
+        },
+        onError: (error) {
+          print('❌ Error in appointment stream: $error');
+          if (mounted) {
+            setState(() {
+              _error = 'Failed to load appointment: ${error.toString()}';
+              _loading = false;
+            });
+          }
+        },
+      );
+      
+      print('✅ Successfully subscribed to appointment stream');
     } catch (e) {
-      print('Error loading appointment data: $e');
-      setState(() {
-        _error = 'Failed to load appointment details: ${e.toString()}';
-        _loading = false;
-      });
+      print('❌ Error setting up appointment stream: $e');
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to setup real-time updates: ${e.toString()}';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -119,7 +151,18 @@ class _AppointmentHistoryDetailPageState extends State<AppointmentHistoryDetailP
           ),
           const SizedBox(height: kMobilePaddingLarge),
           ElevatedButton(
-            onPressed: _loadAppointmentData,
+            onPressed: _setupAppointmentStream,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: kMobilePaddingLarge,
+                vertical: kMobilePaddingMedium,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusButton),
+              ),
+            ),
             child: const Text('Retry'),
           ),
         ],

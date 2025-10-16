@@ -63,6 +63,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
   final TextEditingController _notesController = TextEditingController();
   
   bool _loading = true;
+  bool _isBooking = false; // Prevent duplicate submission
   List<Pet> _userPets = [];
   List<Map<String, dynamic>> _availableClinics = [];
   List<Map<String, dynamic>> _availableServices = [];
@@ -546,7 +547,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
         }
         
         if (!isDuringBreak) {
-          // Check if at least one slot in this hour is available
+          // Check if at least one slot in this hour is available AND not full
           bool hasAvailableSlot = false;
           final slotsPerHour = daySchedule.slotsPerHour;
           final minutesPerSlot = 60 ~/ slotsPerHour;
@@ -555,15 +556,25 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
             final minute = slot * minutesPerSlot;
             final timeString = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
             
+            // Check if slot is within operating hours and not during break
             final canBook = await AppointmentService.canBookAtTime(
               _selectedClinicId!,
               _selectedDate,
               timeString,
             );
             
-            if (canBook) {
+            if (!canBook) continue; // Skip if not within schedule
+            
+            // Check if slot is at full capacity
+            final isFull = await AppointmentBookingService.isTimeSlotFull(
+              clinicId: _selectedClinicId!,
+              appointmentDate: _selectedDate,
+              appointmentTime: timeString,
+            );
+            
+            if (!isFull) {
               hasAvailableSlot = true;
-              break; // Found at least one available slot in this hour
+              break; // Found at least one available slot in this hour that's not full
             }
           }
           
@@ -1676,7 +1687,8 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
     final bool canBook = _selectedClinicId != null && 
                         _selectedPetId != null &&
                         _userPets.isNotEmpty && 
-                        _availableClinics.isNotEmpty;
+                        _availableClinics.isNotEmpty &&
+                        !_isBooking; // Disable during booking
     
     return SizedBox(
       width: double.infinity,
@@ -1691,12 +1703,21 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           ),
           elevation: 0,
         ),
-        child: Text(
-          canBook ? 'Book Appointment' : 'Select Pet & Clinic',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+        child: _isBooking 
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
+              ),
+            )
+          : Text(
+              canBook ? 'Book Appointment' : 'Select Pet & Clinic',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ),
     );
@@ -1746,6 +1767,12 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
   }
 
   void _bookAppointment() async {
+    // Prevent duplicate submission
+    if (_isBooking) {
+      print('🚫 Booking already in progress, ignoring duplicate request');
+      return;
+    }
+    
     // Validation
     if (_selectedPetId == null || _userPets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1787,6 +1814,9 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
       );
       return;
     }
+    
+    // Set booking flag to prevent duplicate submissions
+    setState(() => _isBooking = true);
 
     // Extract start time from hour block format "HH:mm - HH:mm"
     String formattedTime;
@@ -1886,8 +1916,8 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
         estimatedPrice = 0.00;
       }
 
-      // Save appointment to Firebase
-      final appointmentId = await AppointmentBookingService.bookAppointment(
+      // Save appointment to Firebase with duplicate prevention
+      final bookingResult = await AppointmentBookingService.bookAppointment(
         petId: _selectedPetId!,
         clinicId: _selectedClinicId!,
         serviceName: _selectedService,
@@ -1902,8 +1932,15 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
 
       // Hide loading
       if (mounted) Navigator.of(context).pop();
+      
+      // Reset booking flag
+      if (mounted) setState(() => _isBooking = false);
 
-      if (appointmentId != null) {
+      final success = bookingResult['success'] as bool;
+      final message = bookingResult['message'] as String;
+      final appointmentId = bookingResult['appointmentId'] as String?;
+
+      if (success && appointmentId != null) {
         // Create pending appointment notification immediately
         try {
           final currentUser = await AuthGuard.getCurrentUser();
@@ -1947,17 +1984,32 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           });
         }
       } else {
-        // Error
+        // Handle different error cases
+        String errorMessage = message;
+        
+        if (bookingResult['rateLimitExceeded'] == true) {
+          errorMessage = 'Too many booking attempts. Please wait a few minutes before trying again.';
+        } else if (bookingResult['isDuplicate'] == true) {
+          errorMessage = 'You already have an appointment for this pet at this time. Please choose a different time.';
+        } else if (bookingResult['slotFull'] == true) {
+          errorMessage = 'This time slot was just booked. Please select a different time.';
+          // Refresh time slots to show updated availability
+          await _loadAvailableTimeSlots();
+        }
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to book appointment. Please try again.'),
+            SnackBar(
+              content: Text(errorMessage),
               backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 4),
             ),
           );
         }
       }
     } catch (e) {
+      // Reset booking flag on error
+      if (mounted) setState(() => _isBooking = false);
       // Hide loading
       if (mounted) Navigator.of(context).pop();
       
