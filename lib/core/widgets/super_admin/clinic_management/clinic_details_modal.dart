@@ -421,7 +421,44 @@ class _ClinicDetailsModalState extends State<ClinicDetailsModal> with TickerProv
                   children: [
                     _buildStatusChip(),
                     const SizedBox(width: kSpacingMedium),
-                    
+                    // Rating Display
+                    if (widget.clinic.totalRatings != null && widget.clinic.totalRatings! > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.warning.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.star,
+                              size: 14,
+                              color: AppColors.warning,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${widget.clinic.averageRating?.toStringAsFixed(1) ?? '0.0'}',
+                              style: kTextStyleSmall.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${widget.clinic.totalRatings})',
+                              style: kTextStyleSmall.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ],
