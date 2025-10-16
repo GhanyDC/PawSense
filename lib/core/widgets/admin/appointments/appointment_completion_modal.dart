@@ -51,6 +51,7 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   
   bool _isLoading = false;
   bool _isSaving = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -321,47 +322,30 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   Future<void> _saveCompletion() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Clear previous error
+    setState(() => _errorMessage = null);
+
     // Validate follow-up details if needed
     if (_needsFollowUp) {
       if (_followUpDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a follow-up date'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() => _errorMessage = 'Please select a follow-up date');
         return;
       }
       if (_followUpTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a follow-up time'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() => _errorMessage = 'Please select a follow-up time');
         return;
       }
     }
 
     // Validate AI assessment if available
     if (_hasAIAssessment && _aiAssessmentCorrect == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please indicate if the AI assessment was correct'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      setState(() => _errorMessage = 'Please indicate if the AI assessment was correct');
       return;
     }
 
     // Validate correct disease selection if AI assessment is marked as incorrect
     if (_hasAIAssessment && _aiAssessmentCorrect == false && (_selectedCorrectDisease == null || _selectedCorrectDisease!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select the correct disease when marking AI assessment as incorrect'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      setState(() => _errorMessage = 'Please select the correct disease when marking AI assessment as incorrect');
       return;
     }
 
@@ -579,16 +563,10 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to complete appointment: ${e.toString()}'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      setState(() {
+        _errorMessage = 'Failed to complete appointment: ${e.toString()}';
+        _isSaving = false;
+      });
     }
   }
 
@@ -790,6 +768,40 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Error Banner
+                            if (_errorMessage != null)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.error),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: const TextStyle(
+                                          color: AppColors.error,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18, color: AppColors.error),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => setState(() => _errorMessage = null),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
                             // Clinic Evaluation Section (First)
                             const Text(
                               'Clinic Evaluation',

@@ -27,6 +27,7 @@ class _AddCertificationModalState extends State<AddCertificationModal> {
   DateTime? _expiryDate;
   bool _isLoading = false;
   String? _dateValidationError;
+  String? _errorMessage;
   
   // File upload
   Uint8List? _selectedFileBytes;
@@ -54,15 +55,13 @@ class _AddCertificationModalState extends State<AddCertificationModal> {
           _selectedFileBytes = file.bytes;
           _selectedFileName = file.name;
           _hasSelectedFile = true;
+          _errorMessage = null; // Clear any previous errors
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error selecting file: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      setState(() {
+        _errorMessage = 'Error selecting file: $e';
+      });
     }
   }
 
@@ -126,6 +125,7 @@ class _AddCertificationModalState extends State<AddCertificationModal> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null; // Clear previous errors
     });
 
     try {
@@ -152,6 +152,7 @@ class _AddCertificationModalState extends State<AddCertificationModal> {
       
       if (mounted) {
         Navigator.of(context).pop();
+        // Show success message on parent screen after modal closes
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Certification added successfully!'),
@@ -161,15 +162,13 @@ class _AddCertificationModalState extends State<AddCertificationModal> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error adding certification: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() {
+          _errorMessage = 'Error adding certification: $e';
+          _isLoading = false;
+        });
       }
     } finally {
-      if (mounted) {
+      if (mounted && _errorMessage == null) {
         setState(() {
           _isLoading = false;
         });
@@ -243,6 +242,40 @@ class _AddCertificationModalState extends State<AddCertificationModal> {
               ],
             ),
             SizedBox(height: kSpacingLarge),
+
+            // Error Banner
+            if (_errorMessage != null)
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(kSpacingMedium),
+                margin: EdgeInsets.only(bottom: kSpacingMedium),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(kBorderRadiusSmall),
+                  border: Border.all(color: AppColors.error),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                    SizedBox(width: kSpacingSmall),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontSize: kFontSizeSmall,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 18, color: AppColors.error),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      onPressed: () => setState(() => _errorMessage = null),
+                    ),
+                  ],
+                ),
+              ),
 
             // Scrollable Form Content
             Flexible(

@@ -28,6 +28,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
   
   late ServiceCategory _selectedCategory;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -95,6 +96,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null; // Clear previous errors
     });
 
     try {
@@ -111,6 +113,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
         widget.onServiceUpdated();
         if (mounted) {
           Navigator.of(context).pop();
+          // Show success message on parent screen after modal closes
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Service updated successfully!'),
@@ -120,25 +123,21 @@ class _EditServiceModalState extends State<EditServiceModal> {
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to update service'),
-              backgroundColor: AppColors.error,
-            ),
-          );
+          setState(() {
+            _errorMessage = 'Failed to update service. Please try again.';
+            _isLoading = false;
+          });
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() {
+          _errorMessage = 'Error: $e';
+          _isLoading = false;
+        });
       }
     } finally {
-      if (mounted) {
+      if (mounted && _errorMessage == null) {
         setState(() {
           _isLoading = false;
         });
@@ -181,6 +180,40 @@ class _EditServiceModalState extends State<EditServiceModal> {
               ],
             ),
             SizedBox(height: kSpacingLarge),
+
+            // Error Banner
+            if (_errorMessage != null)
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(kSpacingMedium),
+                margin: EdgeInsets.only(bottom: kSpacingMedium),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(kBorderRadiusSmall),
+                  border: Border.all(color: AppColors.error),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                    SizedBox(width: kSpacingSmall),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontSize: kFontSizeSmall,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 18, color: AppColors.error),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      onPressed: () => setState(() => _errorMessage = null),
+                    ),
+                  ],
+                ),
+              ),
 
             // Form
             Form(

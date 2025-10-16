@@ -21,6 +21,7 @@ class AppointmentEditModal extends StatefulWidget {
 class _AppointmentEditModalState extends State<AppointmentEditModal> {
   final TextEditingController _reasonController = TextEditingController();
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -321,22 +322,26 @@ class _AppointmentEditModalState extends State<AppointmentEditModal> {
     );
 
     if (reason != null && reason.isNotEmpty) {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null; // Clear previous errors
+      });
       
       final success = await AppointmentService.rejectAppointment(widget.appointment.id, reason);
       
-      setState(() => _isLoading = false);
-      
-      if (success) {
-        widget.onUpdate();
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Rejected ${widget.appointment.pet.name}\'s appointment')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to reject appointment')),
-        );
+      if (mounted) {
+        if (success) {
+          widget.onUpdate();
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Rejected ${widget.appointment.pet.name}\'s appointment')),
+          );
+        } else {
+          setState(() {
+            _errorMessage = 'Failed to reject appointment. Please try again.';
+            _isLoading = false;
+          });
+        }
       }
     }
   }

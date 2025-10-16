@@ -289,8 +289,21 @@ class _ClinicRatingsPageState extends State<ClinicRatingsPage> with AutomaticKee
   Widget _buildBody() {
     if (_isLoading) {
       return Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading ratings and reviews...',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: kFontSizeRegular,
+              ),
+            ),
+          ],
         ),
       );
     }
