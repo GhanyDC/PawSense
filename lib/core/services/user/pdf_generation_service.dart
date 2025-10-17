@@ -16,6 +16,7 @@ class PDFGenerationService {
   static Future<Uint8List> generateAssessmentPDF({
     required UserModel user,
     required AssessmentResult assessmentResult,
+    Map<String, dynamic>? clinicEvaluation, // Optional clinic evaluation data
   }) async {
     // Debug validation
     _debugValidateAssessmentData(assessmentResult);
@@ -41,15 +42,6 @@ class PDFGenerationService {
     } catch (e) {
       print('⚠️ Failed to load Unicode fonts, using default fonts: $e');
       // Keep the default theme if font loading fails
-    }
-
-    // Load logo image (you can add this to assets)
-    pw.ImageProvider? logoImage;
-    try {
-      final ByteData logoData = await rootBundle.load('assets/img/logo.png');
-      logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
-    } catch (e) {
-      print('Logo not found, continuing without logo: $e');
     }
 
     // Load assessment images (handle both local files and Cloudinary URLs)
@@ -97,40 +89,67 @@ class PDFGenerationService {
         print('❌ Error loading image $imagePath: $e');
       }
     }
+    // Try loading the PawSense logo from assets (optional)
+    Uint8List? logoBytes;
+    try {
+      final data = await rootBundle.load('assets/img/pawsense_logo.png');
+      logoBytes = data.buffer.asUint8List();
+      print('✅ Loaded PawSense logo for PDF header');
+    } catch (e) {
+      // Fallback: try legacy logo.png
+      try {
+        final data = await rootBundle.load('assets/img/logo.png');
+        logoBytes = data.buffer.asUint8List();
+        print('✅ Loaded fallback logo for PDF header');
+      } catch (e) {
+        print('⚠️ No logo asset found for PDF header: $e');
+        logoBytes = null;
+      }
+    }
+
+    // Capture generation timestamp for footer
+    final DateTime _generatedAt = DateTime.now();
 
     pdf.addPage(
       pw.MultiPage(
         theme: theme,
         build: (pw.Context context) {
           return [
-            // Header with logo and PawSense title
-            _buildHeader(logoImage),
-            pw.SizedBox(height: 30),
+            // Header with PawSense title and optional logo
+            _buildHeader(logoBytes),
+            pw.SizedBox(height: 20),
 
             // User profile section
             _buildUserProfileSection(user),
-            pw.SizedBox(height: 25),
+            pw.SizedBox(height: 15),
 
             // Pet assessment details
             _buildPetAssessmentDetails(assessmentResult),
-            pw.SizedBox(height: 25),
+            pw.SizedBox(height: 15),
 
             // Assessment results
             _buildAssessmentResults(assessmentResult),
-            pw.SizedBox(height: 25),
+            pw.SizedBox(height: 15),
 
             // Assessment images section
-            if (assessmentImages.isNotEmpty)
+            if (assessmentImages.isNotEmpty) ...[
               _buildAssessmentImagesSection(assessmentResult, assessmentImages),
+              pw.SizedBox(height: 15),
+            ],
 
-            pw.SizedBox(height: 30),
+            // Clinic Evaluation section (if provided) - MOVED TO LAST
+            if (clinicEvaluation != null && _hasClinicEvaluationData(clinicEvaluation))
+              ...[
+                _buildClinicEvaluationSection(clinicEvaluation),
+                pw.SizedBox(height: 20),
+              ],
 
             // Disclaimer
             _buildDisclaimer(),
           ];
         },
         footer: (pw.Context context) {
-          return _buildFooter(context);
+          return _buildFooter(context, _generatedAt);
         },
       ),
     );
@@ -240,18 +259,27 @@ class PDFGenerationService {
     }
   }
 
-  static pw.Widget _buildHeader(pw.ImageProvider? logoImage) {
+  static pw.Widget _buildHeader(Uint8List? logoBytes) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(20),
+      padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
         color: PdfColors.blue50,
-        borderRadius: pw.BorderRadius.circular(10),
+        borderRadius: pw.BorderRadius.circular(8),
       ),
       child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          if (logoImage != null) ...[
-            pw.Image(logoImage, width: 60, height: 60),
-            pw.SizedBox(width: 20),
+          if (logoBytes != null) ...[
+            pw.Container(
+              width: 72,
+              height: 72,
+              margin: const pw.EdgeInsets.only(right: 12),
+              child: pw.ClipRRect(
+                horizontalRadius: 8,
+                verticalRadius: 8,
+                child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
+              ),
+            ),
           ],
           pw.Expanded(
             child: pw.Column(
@@ -260,16 +288,16 @@ class PDFGenerationService {
                 pw.Text(
                   'PawSense',
                   style: pw.TextStyle(
-                    fontSize: 28,
+                    fontSize: 26,
                     fontWeight: pw.FontWeight.bold,
                     color: PdfColors.blue800,
                   ),
                 ),
-                pw.SizedBox(height: 5),
+                pw.SizedBox(height: 4),
                 pw.Text(
                   'Pet Health Assessment Report',
                   style: pw.TextStyle(
-                    fontSize: 16,
+                    fontSize: 13,
                     color: PdfColors.blue600,
                   ),
                 ),
@@ -734,6 +762,124 @@ class PDFGenerationService {
     );
   }
 
+  // Check if clinic evaluation has any data
+  static bool _hasClinicEvaluationData(Map<String, dynamic> clinicEvaluation) {
+    final diagnosis = clinicEvaluation['diagnosis'] as String?;
+    final treatment = clinicEvaluation['treatment'] as String?;
+    final prescription = clinicEvaluation['prescription'] as String?;
+    final clinicNotes = clinicEvaluation['clinicNotes'] as String?;
+    
+    return (diagnosis != null && diagnosis.trim().isNotEmpty) ||
+           (treatment != null && treatment.trim().isNotEmpty) ||
+           (prescription != null && prescription.trim().isNotEmpty) ||
+           (clinicNotes != null && clinicNotes.trim().isNotEmpty);
+  }
+
+  // Build clinic evaluation section for PDF
+  static pw.Widget _buildClinicEvaluationSection(Map<String, dynamic> clinicEvaluation) {
+    final diagnosis = clinicEvaluation['diagnosis'] as String?;
+    final treatment = clinicEvaluation['treatment'] as String?;
+    final prescription = clinicEvaluation['prescription'] as String?;
+    final clinicNotes = clinicEvaluation['clinicNotes'] as String?;
+    final completedAt = clinicEvaluation['completedAt'] as DateTime?;
+    final isFollowUp = clinicEvaluation['isFollowUp'] as bool? ?? false;
+    
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(16),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.green50,
+        border: pw.Border.all(color: PdfColors.green300, width: 1.8),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // Header
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                isFollowUp ? 'Previous Visit - Clinic Evaluation' : 'Clinic Evaluation',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.green900,
+                ),
+              ),
+              if (completedAt != null)
+                pw.SizedBox(height: 4),
+              if (completedAt != null)
+                pw.Text(
+                  'Completed: ${_formatDateTime(completedAt)}',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.green700,
+                  ),
+                ),
+            ],
+          ),
+          
+          pw.SizedBox(height: 12),
+          pw.Divider(color: PdfColors.green300, thickness: 0.6),
+          pw.SizedBox(height: 10),
+          
+          // Evaluation details
+          if (diagnosis != null && diagnosis.trim().isNotEmpty) ...[
+            _buildEvaluationRow('Diagnosis', diagnosis),
+            pw.SizedBox(height: 10),
+          ],
+          
+          if (treatment != null && treatment.trim().isNotEmpty) ...[
+            _buildEvaluationRow('Treatment', treatment),
+            pw.SizedBox(height: 10),
+          ],
+          
+          if (prescription != null && prescription.trim().isNotEmpty) ...[
+            _buildEvaluationRow('Prescription', prescription),
+            pw.SizedBox(height: 10),
+          ],
+          
+          if (clinicNotes != null && clinicNotes.trim().isNotEmpty) ...[
+            _buildEvaluationRow('Clinic Notes', clinicNotes),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Build evaluation row for clinic evaluation section
+  static pw.Widget _buildEvaluationRow(String label, String value) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          label,
+          style: pw.TextStyle(
+            fontSize: 10,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.green900,
+          ),
+        ),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 10,
+            color: PdfColors.grey800,
+            lineSpacing: 1.2,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Format DateTime for display
+  static String _formatDateTime(DateTime dateTime) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dateTime.month - 1]} ${dateTime.day}, ${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
   static pw.Widget _buildDisclaimer() {
     return pw.Container(
       padding: const pw.EdgeInsets.all(15),
@@ -767,13 +913,31 @@ class PDFGenerationService {
     );
   }
 
-  static pw.Widget _buildFooter(pw.Context context) {
+  static pw.Widget _buildFooter(pw.Context context, DateTime generatedAt) {
+    final generatedStr = '${generatedAt.day.toString().padLeft(2, '0')}/${generatedAt.month.toString().padLeft(2, '0')}/${generatedAt.year} '
+        '${generatedAt.hour.toString().padLeft(2, '0')}:${generatedAt.minute.toString().padLeft(2, '0')}';
+
     return pw.Container(
       alignment: pw.Alignment.center,
       margin: const pw.EdgeInsets.only(top: 20),
-      child: pw.Text(
-        'Generated by PawSense - Page ${context.pageNumber} of ${context.pagesCount}',
-        style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        children: [
+          pw.Text(
+            'Generated: $generatedStr',
+            style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Text(
+            ' | ',
+            style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Text(
+            'Generated by PawSense - Page ${context.pageNumber} of ${context.pagesCount}',
+            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+          ),
+        ],
       ),
     );
   }

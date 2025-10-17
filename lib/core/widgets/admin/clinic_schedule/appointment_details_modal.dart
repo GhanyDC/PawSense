@@ -198,9 +198,34 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
         role: 'user',
       );
 
+      // Prepare clinic evaluation data if appointment is completed or follow-up
+      Map<String, dynamic>? clinicEvaluation;
+      if (widget.appointment.status == AppointmentStatus.completed || 
+          (widget.appointment.isFollowUp == true && _previousAppointment != null)) {
+        
+        // For follow-ups, use previous appointment's evaluation
+        final evalSource = widget.appointment.isFollowUp == true && _previousAppointment != null 
+            ? _previousAppointment! 
+            : widget.appointment;
+        
+        // Check if there's any evaluation data
+        if (evalSource.diagnosis != null || evalSource.treatment != null || 
+            evalSource.prescription != null || evalSource.clinicNotes != null) {
+          clinicEvaluation = {
+            'diagnosis': evalSource.diagnosis,
+            'treatment': evalSource.treatment,
+            'prescription': evalSource.prescription,
+            'clinicNotes': evalSource.clinicNotes,
+            'completedAt': evalSource.completedAt,
+            'isFollowUp': widget.appointment.isFollowUp == true,
+          };
+        }
+      }
+
       final pdfBytes = await PDFGenerationService.generateAssessmentPDF(
         user: userModel,
         assessmentResult: assessmentResult,
+        clinicEvaluation: clinicEvaluation,
       );
 
       final fileName = 'PawSense_Assessment_${widget.appointment.pet.name}_${DateTime.now().millisecondsSinceEpoch}';
@@ -216,6 +241,88 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
                 Icon(Icons.check_circle, color: Colors.white),
                 SizedBox(width: 12),
                 Text('PDF downloaded successfully'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isGeneratingPDF = false);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _generateFollowUpPDF() async {
+    if (_isGeneratingPDF || _previousAppointment == null) return;
+    
+    setState(() => _isGeneratingPDF = true);
+    
+    try {
+      if (_previousAppointment!.assessmentResultId == null || 
+          _previousAppointment!.assessmentResultId!.isEmpty) {
+        throw Exception('No assessment data available for previous appointment');
+      }
+
+      final assessmentService = AssessmentResultService();
+      final assessmentResult = await assessmentService.getAssessmentResultById(
+        _previousAppointment!.assessmentResultId!
+      );
+      
+      if (assessmentResult == null) {
+        throw Exception('Assessment data not found for previous appointment');
+      }
+
+      final userModel = UserModel(
+        uid: widget.appointment.owner.id,
+        username: widget.appointment.owner.name,
+        email: widget.appointment.owner.email ?? '',
+        contactNumber: widget.appointment.owner.phone,
+        createdAt: DateTime.now(),
+        role: 'user',
+      );
+
+      // Prepare clinic evaluation data from previous appointment
+      Map<String, dynamic>? clinicEvaluation;
+      if (_previousAppointment!.diagnosis != null || _previousAppointment!.treatment != null || 
+          _previousAppointment!.prescription != null || _previousAppointment!.clinicNotes != null) {
+        clinicEvaluation = {
+          'diagnosis': _previousAppointment!.diagnosis,
+          'treatment': _previousAppointment!.treatment,
+          'prescription': _previousAppointment!.prescription,
+          'clinicNotes': _previousAppointment!.clinicNotes,
+          'completedAt': _previousAppointment!.completedAt,
+          'isFollowUp': false, // This is the original appointment, not a follow-up
+        };
+      }
+
+      final pdfBytes = await PDFGenerationService.generateAssessmentPDF(
+        user: userModel,
+        assessmentResult: assessmentResult,
+        clinicEvaluation: clinicEvaluation,
+      );
+
+      final fileName = 'PawSense_PreviousVisit_${widget.appointment.pet.name}_${DateTime.now().millisecondsSinceEpoch}';
+      await PDFGenerationService.saveWithSystemDialog(pdfBytes, fileName);
+
+      if (mounted) {
+        setState(() => _isGeneratingPDF = false);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Previous visit PDF downloaded successfully'),
               ],
             ),
             backgroundColor: Colors.green,
@@ -706,6 +813,36 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
                               ),
                             ),
                           ],
+                        ),
+                      ],
+                      
+                      // Download PDF button for follow-up appointments with previous clinic evaluation
+                      if (_previousAppointment!.diagnosis != null && _previousAppointment!.diagnosis!.isNotEmpty ||
+                          _previousAppointment!.treatment != null && _previousAppointment!.treatment!.isNotEmpty ||
+                          _previousAppointment!.prescription != null && _previousAppointment!.prescription!.isNotEmpty ||
+                          _previousAppointment!.clinicNotes != null && _previousAppointment!.clinicNotes!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _isGeneratingPDF ? null : () => _generateFollowUpPDF(),
+                            icon: _isGeneratingPDF
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.download, size: 18),
+                            label: Text(_isGeneratingPDF ? 'Generating PDF...' : 'Download Previous Visit PDF'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
                         ),
                       ],
                     ] else ...[

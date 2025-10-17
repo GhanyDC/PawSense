@@ -1558,9 +1558,34 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
         role: 'user',
       );
 
+      // Prepare clinic evaluation data if appointment is completed or follow-up
+      Map<String, dynamic>? clinicEvaluation;
+      if (_selectedAppointment!.status == AppointmentModels.AppointmentStatus.completed || 
+          (_selectedAppointment!.isFollowUp == true && _previousAppointment != null)) {
+        
+        // For follow-ups, use previous appointment's evaluation
+        final evalSource = _selectedAppointment!.isFollowUp == true && _previousAppointment != null 
+            ? _previousAppointment! 
+            : _selectedAppointment!;
+        
+        // Check if there's any evaluation data
+        if (evalSource.diagnosis != null || evalSource.treatment != null || 
+            evalSource.prescription != null || evalSource.clinicNotes != null) {
+          clinicEvaluation = {
+            'diagnosis': evalSource.diagnosis,
+            'treatment': evalSource.treatment,
+            'prescription': evalSource.prescription,
+            'clinicNotes': evalSource.clinicNotes,
+            'completedAt': evalSource.completedAt,
+            'isFollowUp': _selectedAppointment!.isFollowUp == true,
+          };
+        }
+      }
+
       final pdfBytes = await PDFGenerationService.generateAssessmentPDF(
         user: userModel,
         assessmentResult: assessmentResult,
+        clinicEvaluation: clinicEvaluation,
       );
 
       final fileName = 'PawSense_Assessment_${_selectedAppointment!.pet.name}_${DateTime.now().millisecondsSinceEpoch}';
