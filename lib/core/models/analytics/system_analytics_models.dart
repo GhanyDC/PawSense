@@ -390,6 +390,8 @@ class ClinicPerformance {
   final int appointmentCount;
   final double completionRate; // 0-100
   final double score; // appointmentCount * (completionRate / 100)
+  final double averageRating; // 0-5.0 from clinic ratings
+  final int totalRatings; // Number of ratings
   final int rank; // 1, 2, 3, ...
 
   const ClinicPerformance({
@@ -398,6 +400,8 @@ class ClinicPerformance {
     required this.appointmentCount,
     required this.completionRate,
     required this.score,
+    this.averageRating = 0.0,
+    this.totalRatings = 0,
     required this.rank,
   });
 
@@ -407,6 +411,8 @@ class ClinicPerformance {
         appointmentCount: 0,
         completionRate: 0.0,
         score: 0.0,
+        averageRating: 0.0,
+        totalRatings: 0,
         rank: 0,
       );
 
@@ -416,6 +422,8 @@ class ClinicPerformance {
         'appointmentCount': appointmentCount,
         'completionRate': completionRate,
         'score': score,
+        'averageRating': averageRating,
+        'totalRatings': totalRatings,
         'rank': rank,
       };
 
@@ -426,6 +434,8 @@ class ClinicPerformance {
         appointmentCount: json['appointmentCount'] ?? 0,
         completionRate: json['completionRate']?.toDouble() ?? 0.0,
         score: json['score']?.toDouble() ?? 0.0,
+        averageRating: json['averageRating']?.toDouble() ?? 0.0,
+        totalRatings: json['totalRatings'] ?? 0,
         rank: json['rank'] ?? 0,
       );
 }

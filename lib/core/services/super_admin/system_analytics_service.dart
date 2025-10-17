@@ -13,7 +13,7 @@ class SystemAnalyticsService {
   // Cache storage
   static final Map<String, _CachedData> _cache = {};
   static const Duration _cacheDuration = Duration(minutes: 15);
-
+ 
   // ==================== KPI METRICS ====================
 
   /// Get user statistics for selected period
@@ -577,6 +577,8 @@ class SystemAnalyticsService {
             await _firestore.collection('appointments').get();
         final clinicsSnapshot = await _firestore.collection('clinics').get();
 
+        print('📊 Fetched ${clinicsSnapshot.docs.length} clinics and ${appointmentsSnapshot.docs.length} appointments');
+
         // Count appointments per clinic
         final appointmentCounts = <String, int>{};
         final completionCounts = <String, int>{};
@@ -600,9 +602,21 @@ class SystemAnalyticsService {
         final performances = <ClinicPerformance>[];
         for (final clinicDoc in clinicsSnapshot.docs) {
           final clinicId = clinicDoc.id;
-          final clinicName = clinicDoc.data()['clinicName'] ?? 'Unknown';
+          final clinicData = clinicDoc.data();
+          final clinicName = clinicData['clinicName'] ?? 'Unknown';
           final appointmentCount = appointmentCounts[clinicId] ?? 0;
           final completedCount = completionCounts[clinicId] ?? 0;
+
+          // Get rating data from clinic document (same as clinic management screen)
+          // These are pre-computed and stored in the clinics collection
+          final averageRating = clinicData['averageRating'] != null
+              ? (clinicData['averageRating'] as num).toDouble()
+              : 0.0;
+          final totalRatings = clinicData['totalRatings'] != null
+              ? (clinicData['totalRatings'] as num).toInt()
+              : 0;
+
+          print('📍 Clinic: $clinicName - Rating: $averageRating ($totalRatings reviews), Appointments: $appointmentCount');
 
           if (appointmentCount > 0) {
             final completionRate =
@@ -615,13 +629,21 @@ class SystemAnalyticsService {
               appointmentCount: appointmentCount,
               completionRate: completionRate,
               score: score,
+              averageRating: averageRating,
+              totalRatings: totalRatings,
               rank: 0, // Will be assigned after sorting
             ));
           }
         }
 
-        // Sort by score (descending)
-        performances.sort((a, b) => b.score.compareTo(a.score));
+        // Sort by average rating (descending), then by appointment count as tiebreaker
+        performances.sort((a, b) {
+          final ratingComparison = b.averageRating.compareTo(a.averageRating);
+          if (ratingComparison != 0) return ratingComparison;
+          return b.appointmentCount.compareTo(a.appointmentCount);
+        });
+
+        print('🏆 Top clinic after sorting: ${performances.isNotEmpty ? performances.first.clinicName : "None"} with rating ${performances.isNotEmpty ? performances.first.averageRating : 0}');
 
         // Assign ranks and limit
         final rankedPerformances = <ClinicPerformance>[];
@@ -632,13 +654,15 @@ class SystemAnalyticsService {
             appointmentCount: performances[i].appointmentCount,
             completionRate: performances[i].completionRate,
             score: performances[i].score,
+            averageRating: performances[i].averageRating,
+            totalRatings: performances[i].totalRatings,
             rank: i + 1,
           ));
         }
 
         return rankedPerformances;
       } catch (e) {
-        print('Error getting top clinics: $e');
+        print('❌ Error getting top clinics: $e');
         return [];
       }
     });

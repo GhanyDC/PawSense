@@ -453,7 +453,7 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                   ),
                   Padding(
                     padding: EdgeInsets.only(bottom: 12),
-                    child: Text('Score',
+                    child: Text('Rating',
                         style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ],
@@ -484,8 +484,28 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
-                        child:
-                            Text(clinic.score.toStringAsFixed(1)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              size: 16,
+                              color: AppColors.warning,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              clinic.totalRatings > 0
+                                  ? '${clinic.averageRating.toStringAsFixed(1)} (${clinic.totalRatings})'
+                                  : 'No ratings',
+                              style: TextStyle(
+                                color: clinic.totalRatings > 0
+                                    ? AppColors.textPrimary
+                                    : AppColors.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   )),
