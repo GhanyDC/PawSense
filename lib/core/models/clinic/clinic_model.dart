@@ -7,6 +7,7 @@ class Clinic {
   final String phone;
   final String email;
   final String? website;
+  final String? logoUrl; // Cloudinary URL for clinic logo
   final String status; // pending, approved, suspended, rejected
   final String scheduleStatus; // pending, in_progress, completed
   final bool isVisible; // Only true when schedule is completed
@@ -21,6 +22,7 @@ class Clinic {
     required this.phone,
     required this.email,
     this.website,
+    this.logoUrl,
     this.status = 'pending',
     this.scheduleStatus = 'pending',
     this.isVisible = false,
@@ -36,6 +38,7 @@ class Clinic {
     'phone': phone,
     'email': email,
     'website': website,
+    'logoUrl': logoUrl,
     'status': status,
     'scheduleStatus': scheduleStatus,
     'isVisible': isVisible,
@@ -52,6 +55,7 @@ class Clinic {
       phone: map['phone'] ?? '',
       email: map['email'] ?? '',
       website: map['website'],
+      logoUrl: map['logoUrl'],
       status: map['status'] ?? 'pending',
       scheduleStatus: map['scheduleStatus'] ?? 'pending',
       isVisible: map['isVisible'] ?? false,
@@ -70,6 +74,7 @@ class Clinic {
     String? phone,
     String? email,
     String? website,
+    String? logoUrl,
     String? status,
     String? scheduleStatus,
     bool? isVisible,
@@ -84,6 +89,7 @@ class Clinic {
       phone: phone ?? this.phone,
       email: email ?? this.email,
       website: website ?? this.website,
+      logoUrl: logoUrl ?? this.logoUrl,
       status: status ?? this.status,
       scheduleStatus: scheduleStatus ?? this.scheduleStatus,
       isVisible: isVisible ?? this.isVisible,
@@ -108,6 +114,7 @@ class Clinic {
         other.phone == phone &&
         other.email == email &&
         other.website == website &&
+        other.logoUrl == logoUrl &&
         other.status == status &&
         other.scheduleStatus == scheduleStatus &&
         other.isVisible == isVisible &&
@@ -124,6 +131,7 @@ class Clinic {
         phone.hashCode ^
         email.hashCode ^
         website.hashCode ^
+        logoUrl.hashCode ^
         status.hashCode ^
         scheduleStatus.hashCode ^
         isVisible.hashCode ^

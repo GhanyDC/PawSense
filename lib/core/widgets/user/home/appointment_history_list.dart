@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
+import 'package:pawsense/core/widgets/user/home/appointment_history_detail_modal.dart';
 
 enum AppointmentStatus {
   confirmed,
@@ -17,6 +17,7 @@ class AppointmentHistoryData {
   final AppointmentStatus status;
   final DateTime timestamp;
   final String? clinicName;
+  final DateTime createdAt; // Added for sorting by booking creation date
 
   AppointmentHistoryData({
     required this.id,
@@ -25,15 +26,18 @@ class AppointmentHistoryData {
     required this.status,
     required this.timestamp,
     this.clinicName,
+    required this.createdAt, // Required for sorting
   });
 }
 
 class AppointmentHistoryList extends StatelessWidget {
   final List<AppointmentHistoryData> appointmentHistory;
+  final VoidCallback? onAppointmentUpdated;
 
   const AppointmentHistoryList({
     super.key,
     required this.appointmentHistory,
+    this.onAppointmentUpdated,
   });
 
   @override
@@ -42,18 +46,34 @@ class AppointmentHistoryList extends StatelessWidget {
       return _buildEmptyState();
     }
 
+  // Sort appointments by booking creation date (most recently booked first)
+  final sortedAppointments = List<AppointmentHistoryData>.from(appointmentHistory);
+  sortedAppointments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     return Column(
       children: [
-        ...appointmentHistory.map((item) => AppointmentHistoryItem(
+        ...sortedAppointments.map((item) => AppointmentHistoryItem(
           data: item,
           onTap: () {
-            context.go('/appointment-history/${item.id}');
+            _showAppointmentDetails(context, item.id);
           },
           onDetailsPressed: () {
-            context.go('/appointment-history/${item.id}');
+            _showAppointmentDetails(context, item.id);
           },
+          onAppointmentUpdated: onAppointmentUpdated,
         )),
       ],
+    );
+  }
+
+  void _showAppointmentDetails(BuildContext context, String appointmentId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AppointmentHistoryDetailModal(
+          appointmentId: appointmentId,
+          onAppointmentUpdated: onAppointmentUpdated,
+        ),
+      ),
     );
   }
 
@@ -89,12 +109,14 @@ class AppointmentHistoryItem extends StatelessWidget {
   final AppointmentHistoryData data;
   final VoidCallback? onTap;
   final VoidCallback? onDetailsPressed;
+  final VoidCallback? onAppointmentUpdated;
 
   const AppointmentHistoryItem({
     super.key,
     required this.data,
     this.onTap,
     this.onDetailsPressed,
+    this.onAppointmentUpdated,
   });
 
   @override

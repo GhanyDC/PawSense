@@ -139,9 +139,9 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> with AutomaticK
       final weekday = selectedDate.weekday;
       final monday = selectedDate.subtract(Duration(days: weekday - 1));
       
-      // Load weekly data with appointment availability
+      // Load weekly data with appointment availability INCLUDING HOLIDAYS
       print('🔄 Fetching schedule from Firestore...');
-      _weekData = await ClinicScheduleService.getWeeklyScheduleWithAvailability(
+      _weekData = await ClinicScheduleService.getWeeklyScheduleWithAvailabilityIncludingHolidays(
         _actualClinicId!, 
         monday
       );

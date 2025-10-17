@@ -8,10 +8,11 @@ import 'package:pawsense/core/widgets/user/shared/navigation/user_app_bar.dart';
 import 'package:pawsense/core/widgets/user/shared/navigation/user_bottom_nav_bar.dart';
 import 'package:pawsense/core/widgets/user/shared/modals/pet_assessment_modal.dart';
 import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
-import 'package:pawsense/core/widgets/user/alerts/alert_list.dart';
+import 'package:pawsense/core/widgets/user/alerts/optimized_alert_list.dart';
 import 'package:pawsense/core/services/notifications/notification_service.dart';
+import 'package:pawsense/core/services/notifications/paginated_notification_service.dart';
 import 'package:pawsense/core/services/notifications/demo_notification_service.dart';
-import 'package:pawsense/core/utils/notification_helper.dart';
+
 
 // GlobalKey for accessing AlertsPage methods
 final GlobalKey<_AlertsPageState> alertsPageKey = GlobalKey<_AlertsPageState>();
@@ -26,8 +27,10 @@ class AlertsPage extends StatefulWidget {
 class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
   UserModel? _userModel;
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
   int _currentNavIndex = 2; // Set to 2 for alerts tab
-  Stream<List<AlertData>>? _notificationsStream;
+  List<AlertData> _notifications = [];
   
   // Local state for instant updates
   final Set<String> _locallyReadNotifications = <String>{};
@@ -40,45 +43,12 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
   }
 
   @override
-  void didUpdateWidget(AlertsPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Refresh notifications when returning to this page
-    if (_userModel != null) {
-      _refreshNotifications();
-    }
-  }
-
-  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed && mounted && _userModel != null) {
       // Refresh notifications when app is resumed
       print('🔄 App resumed, refreshing notifications...');
       _refreshNotifications();
-    }
-  }
-
-  // Called when the route is popped (user navigates back)
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Force refresh when returning to this page
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _userModel != null) {
-        print('🔄 Dependencies changed, refreshing notifications...');
-        _refreshNotifications();
-      }
-    });
-  }
-
-  void _refreshNotifications() {
-    if (mounted && _userModel != null) {
-      print('🔄 Refreshing notification stream...');
-      setState(() {
-        // Clear local state to rely on static cache from notification service
-        _locallyReadNotifications.clear();
-        _notificationsStream = _getNotificationsStream();
-      });
     }
   }
 
@@ -95,13 +65,12 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     try {
       final userModel = await AuthGuard.getCurrentUser();
       if (userModel != null && mounted) {
-        // Run migration for existing notifications (one-time fix)
-        NotificationService.migrateUserNotifications(userModel.uid);
-        
         setState(() {
           _userModel = userModel;
-          _notificationsStream = _getNotificationsStream();
         });
+        
+        // Load initial notifications
+        await _loadInitialNotifications();
       }
     } catch (e) {
       // Handle error silently
@@ -113,86 +82,129 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     }
   }
 
-  /// Stream of notifications from Firebase with local state management
-  Stream<List<AlertData>> _getNotificationsStream() async* {
-    if (_userModel == null) {
-      yield [];
-      return;
-    }
-
+  /// Load initial notifications with cache-first strategy
+  Future<void> _loadInitialNotifications() async {
+    if (_userModel == null) return;
+    
     try {
-      await for (final notifications in NotificationService.getAllUserNotifications(_userModel!.uid)) {
-        if (!mounted) return; // Stop if widget is disposed
-        
-        final alertData = notifications
-            .map((notification) => NotificationHelper.fromNotificationModel(notification))
-            .map((alert) {
-              // Apply local read state for instant UI updates
-              // However, if the notification is unread from the server (e.g., updated notification),
-              // respect that and remove from local cache
-              if (!alert.isRead && _locallyReadNotifications.contains(alert.id)) {
-                // Notification was updated and marked as unread - remove from local cache
-                _locallyReadNotifications.remove(alert.id);
-                return alert; // Use server state (unread)
-              } else if (_locallyReadNotifications.contains(alert.id)) {
-                // Local state indicates read, server hasn't updated yet
-                return AlertData(
-                  id: alert.id,
-                  title: alert.title,
-                  subtitle: alert.subtitle,
-                  type: alert.type,
-                  timestamp: alert.timestamp,
-                  isRead: true, // Override with local state
-                  actionUrl: alert.actionUrl,
-                  actionLabel: alert.actionLabel,
-                  metadata: alert.metadata,
-                );
-              }
-              // Otherwise, use the read state from notification service (which includes static cache)
-              return alert;
-            })
-            .toList();
-        
-        // Update loading state
-        if (mounted) {
-          setState(() {
-            _loading = false;
-          });
-        }
-        
-        yield alertData;
+      setState(() {
+        _loading = true;
+      });
+      
+      print('📥 Loading notifications for user: ${_userModel!.uid}');
+      final result = await PaginatedNotificationService.getNotificationsWithCache(_userModel!.uid);
+      print('📥 Loaded ${result.notifications.length} notifications');
+      
+      if (mounted) {
+        setState(() {
+          _notifications = result.notifications;
+          _hasMore = result.hasMore;
+          _loading = false;
+        });
       }
     } catch (e) {
-      print('Error getting all user notifications: $e');
+      print('Error loading initial notifications: $e');
       if (mounted) {
         setState(() {
           _loading = false;
         });
       }
-      yield [];
     }
   }
 
+  /// Refresh notifications (pull-to-refresh)
+  Future<void> _refreshNotifications() async {
+    if (_userModel == null) return;
+    
+    try {
+      final result = await PaginatedNotificationService.refreshNotifications(_userModel!.uid);
+      
+      if (mounted) {
+        setState(() {
+          _notifications = result.notifications;
+          _hasMore = result.hasMore;
+          _locallyReadNotifications.clear(); // Clear local cache
+        });
+      }
+    } catch (e) {
+      print('Error refreshing notifications: $e');
+      // Show error snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to refresh notifications'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Load more notifications for infinite scroll
+  Future<void> _loadMoreNotifications() async {
+    if (_userModel == null || _loadingMore || !_hasMore) return;
+    
+    try {
+      setState(() {
+        _loadingMore = true;
+      });
+      
+      final result = await PaginatedNotificationService.loadMoreNotifications(_userModel!.uid);
+      
+      if (mounted) {
+        setState(() {
+          _notifications.addAll(result.notifications);
+          _hasMore = result.hasMore;
+          _loadingMore = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading more notifications: $e');
+      if (mounted) {
+        setState(() {
+          _loadingMore = false;
+        });
+      }
+    }
+  }
+
+
+
   void _handleAlertTap(AlertData alert) async {
     try {
-      // Optimistically mark as read locally for instant UI update
-      if (!alert.isRead) {
-        setState(() {
-          _locallyReadNotifications.add(alert.id);
-        });
+      // Optimistically mark as read using the new service
+      if (!alert.isRead && _userModel != null) {
+        await PaginatedNotificationService.markAsReadOptimistic(alert.id, _userModel!.uid);
         
-        // Mark as read in backend (don't await to avoid delay)
-        NotificationService.markAsRead(alert.id, userId: _userModel?.uid).then((_) {
-          print('Alert ${alert.id} marked as read on tap');
-        }).catchError((e) {
-          print('Error marking alert as read: $e');
-          // Revert local state on error
-          if (mounted) {
-            setState(() {
-              _locallyReadNotifications.remove(alert.id);
-            });
+        // Update local UI immediately
+        setState(() {
+          final index = _notifications.indexWhere((n) => n.id == alert.id);
+          if (index != -1) {
+            _notifications[index] = AlertData(
+              id: alert.id,
+              title: alert.title,
+              subtitle: alert.subtitle,
+              type: alert.type,
+              timestamp: alert.timestamp,
+              isRead: true, // Mark as read optimistically
+              actionUrl: alert.actionUrl,
+              actionLabel: alert.actionLabel,
+              metadata: alert.metadata,
+            );
           }
         });
+      }
+      
+      // Check if this is an appointment-related notification
+      if (_isAppointmentNotification(alert)) {
+        // Try to get appointment ID from metadata
+        final appointmentId = alert.metadata?['appointmentId'] as String?;
+        
+        if (appointmentId != null && mounted) {
+          // Navigate directly to appointment details
+          context.push('/appointments/details/$appointmentId');
+          return;
+        }
       }
       
       // Navigate to alert details page with notification data
@@ -204,6 +216,15 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
       print('Error handling alert tap: $e');
       _showErrorMessage('Failed to open notification details');
     }
+  }
+
+  /// Check if notification is appointment-related
+  bool _isAppointmentNotification(AlertData alert) {
+    return alert.type == AlertType.appointment ||
+           alert.type == AlertType.appointmentPending ||
+           alert.type == AlertType.reschedule ||
+           alert.type == AlertType.reappointment ||
+           alert.type == AlertType.followUp;
   }
 
   Future<void> _handleMarkAsRead(AlertData alert) async {
@@ -240,21 +261,63 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _handleRefresh() async {
-    // Firebase streams handle real-time updates automatically
-    // Just show a brief loading indicator
+  Future<void> _handleDelete(AlertData alert) async {
+    if (!mounted) return;
+    
+    // Show confirmation dialog for message deletion
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Message'),
+        content: const Text('Are you sure you want to delete this message? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    // Optimistically remove from UI
     setState(() {
-      _loading = true;
+      _notifications.removeWhere((n) => n.id == alert.id);
     });
-    
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    if (mounted) {
-      setState(() {
-        _loading = false;
-      });
+
+    try {
+      await NotificationService.deleteNotification(alert.id);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message deleted'),
+            duration: Duration(seconds: 2),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error deleting notification: $e');
+      _showErrorMessage('Failed to delete message');
+      
+      // Revert by refreshing
+      if (mounted) {
+        await _refreshNotifications();
+      }
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -300,63 +363,67 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
 
   Widget _buildNotificationsContent() {
     return RefreshIndicator(
-      onRefresh: _handleRefresh,
+      onRefresh: _refreshNotifications,
       color: AppColors.primary,
-      child: StreamBuilder<List<AlertData>>(
-        stream: _notificationsStream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && _loading) {
-            return _buildLoadingState();
-          }
-          
-          if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
-          }
-          
-          final alerts = snapshot.data ?? [];
-          
-          if (alerts.isEmpty) {
-            return _buildEmptyState();
-          }
-          
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                // Demo button (for testing purposes - remove in production)
-                if (alerts.isEmpty)
-                  Container(
-                    margin: const EdgeInsets.all(16),
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        if (_userModel != null) {
-                          await DemoNotificationService.createAllSampleNotifications(_userModel!.uid);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Sample notifications created!'),
-                              backgroundColor: AppColors.success,
-                            ),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.white,
-                      ),
-                      child: const Text('Generate Sample Notifications (Demo)'),
-                    ),
-                  ),
-                
-                // Notifications list
-                AlertList(
-                  alerts: alerts,
+      child: _loading && _notifications.isEmpty
+          ? _buildLoadingState()
+          : _notifications.isEmpty
+              ? _buildEmptyStateWithDemo()
+              : OptimizedAlertList(
+                  alerts: _notifications,
                   onAlertTap: _handleAlertTap,
                   onMarkAsRead: _handleMarkAsRead,
+                  onDelete: _handleDelete,
+                  onLoadMore: _loadMoreNotifications,
+                  hasMore: _hasMore,
+                  isLoading: _loading,
+                  isLoadingMore: _loadingMore,
                 ),
-              ],
+    );
+  }
+
+  Widget _buildEmptyStateWithDemo() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: [
+          const SizedBox(height: 100),
+          
+          // Demo button (for testing purposes - remove in production)
+          Container(
+            margin: const EdgeInsets.all(16),
+            child: ElevatedButton(
+              onPressed: () async {
+                if (_userModel != null) {
+                  setState(() {
+                    _loading = true;
+                  });
+                  
+                  await DemoNotificationService.createAllSampleNotifications(_userModel!.uid);
+                  
+                  // Refresh after creating demo notifications
+                  await _refreshNotifications();
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Sample notifications created!'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+              ),
+              child: const Text('Generate Sample Notifications (Demo)'),
             ),
-          );
-        },
+          ),
+          
+          _buildEmptyState(),
+        ],
       ),
     );
   }
@@ -373,49 +440,7 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
     }
   }
 
-  Widget _buildErrorState(String error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: AppColors.error,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Error Loading Notifications',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Please try again later',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _loading = true;
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.white,
-            ),
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
+
   
   Widget _buildEmptyState() {
     return Center(
@@ -452,7 +477,7 @@ class _AlertsPageState extends State<AlertsPage> with WidgetsBindingObserver {
   void _showCameraDialog() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.background,
       isScrollControlled: true,
       builder: (context) => const PetAssessmentModal(),
     );

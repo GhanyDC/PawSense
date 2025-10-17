@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pawsense/core/models/user/user_model.dart';
 
 class UserUtils {
@@ -67,5 +68,21 @@ class UserUtils {
     }
     
     return displayName;
+  }
+  
+  /// Updates Firebase Auth user's display name for email purposes
+  /// This ensures that emails sent by Firebase show the user's proper name
+  static Future<void> updateFirebaseDisplayName(UserModel user) async {
+    try {
+      final FirebaseAuth auth = FirebaseAuth.instance;
+      final firebaseUser = auth.currentUser;
+      
+      if (firebaseUser != null && firebaseUser.uid == user.uid) {
+        final displayName = getDisplayName(user);
+        await firebaseUser.updateDisplayName(displayName);
+      }
+    } catch (e) {
+      print('Error updating Firebase display name: $e');
+    }
   }
 }

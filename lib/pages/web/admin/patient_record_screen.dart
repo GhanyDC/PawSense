@@ -65,6 +65,14 @@ class _ImprovedPatientRecordsScreenState extends State<ImprovedPatientRecordsScr
     _scrollController.addListener(_onScroll);
     _searchController.addListener(_onSearchChanged);
     
+    // Initialize statistics with zero values immediately
+    _statistics = PatientStatistics(
+      totalPatients: 0,
+      healthyCount: 0,
+      treatmentCount: 0,
+      scheduledCount: 0,
+    );
+    
     // Start loading immediately with high priority
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
@@ -286,6 +294,11 @@ class _ImprovedPatientRecordsScreenState extends State<ImprovedPatientRecordsScr
 
         return true;
       }).toList();
+      
+      // Sort by most recent appointment/booking date (newest bookings first)
+      _filteredPatients.sort((a, b) => b.lastVisit.compareTo(a.lastVisit));
+      
+      print('🔄 Applied filters and sorting: ${_filteredPatients.length} patients displayed (sorted by newest appointments first)');
     });
   }
 
@@ -311,50 +324,49 @@ class _ImprovedPatientRecordsScreenState extends State<ImprovedPatientRecordsScr
             // Header with Statistics
             const PatientRecordsHeader(),
 
-            // Statistics Cards
-            if (_statistics != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Total Patients',
-                        _statistics!.totalPatients.toString(),
-                        Icons.pets,
-                        AppColors.primary,
-                      ),
+            // Statistics Cards - Always visible
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      'Total Patients',
+                      _statistics?.totalPatients.toString() ?? '0',
+                      Icons.pets,
+                      AppColors.primary,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Healthy',
-                        _statistics!.healthyCount.toString(),
-                        Icons.favorite,
-                        Colors.green,
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      'Healthy',
+                      _statistics?.healthyCount.toString() ?? '0',
+                      Icons.favorite,
+                      Colors.green,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Treatment',
-                        _statistics!.treatmentCount.toString(),
-                        Icons.medical_services,
-                        Colors.orange,
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      'Treatment',
+                      _statistics?.treatmentCount.toString() ?? '0',
+                      Icons.medical_services,
+                      Colors.orange,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Scheduled',
-                        _statistics!.scheduledCount.toString(),
-                        Icons.schedule,
-                        Colors.blue,
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      'Scheduled',
+                      _statistics?.scheduledCount.toString() ?? '0',
+                      Icons.schedule,
+                      Colors.blue,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
 
             // Filter Bar
             PatientFilterBar(
@@ -437,8 +449,24 @@ class _ImprovedPatientRecordsScreenState extends State<ImprovedPatientRecordsScr
 
   Widget _buildPatientList() {
     if (_isInitialLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading patient records...',
+              style: TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       );
     }
 

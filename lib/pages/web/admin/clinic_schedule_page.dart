@@ -75,8 +75,8 @@ class _ClinicSchedulePageState extends State<ClinicSchedulePage> {
       final weekday = selectedDate.weekday;
       final monday = selectedDate.subtract(Duration(days: weekday - 1));
       
-      // Load weekly data with appointment availability
-      _weekData = await ClinicScheduleService.getWeeklyScheduleWithAvailability(
+      // Load weekly data with appointment availability INCLUDING HOLIDAYS
+      _weekData = await ClinicScheduleService.getWeeklyScheduleWithAvailabilityIncludingHolidays(
         _actualClinicId!, 
         monday
       );

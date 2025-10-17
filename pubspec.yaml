@@ -43,6 +43,7 @@ dependencies:
   http: ^1.2.2
   http_parser: ^4.0.2
   cloudinary_public: ^0.23.1
+  url_launcher: ^6.1.7
   
   # Storage and preferences
   shared_preferences: ^2.2.2
@@ -57,6 +58,7 @@ dependencies:
   
   # Environment variables
   flutter_dotenv: ^5.1.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

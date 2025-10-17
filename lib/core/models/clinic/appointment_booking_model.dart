@@ -38,6 +38,15 @@ class AppointmentBooking {
   final String? rescheduleReason;
   final DateTime? rescheduledAt;
   final String? assessmentResultId;
+  // Clinic evaluation fields (set when appointment is completed)
+  final String? diagnosis;
+  final String? treatment;
+  final String? prescription;
+  final String? clinicNotes;
+  final DateTime? completedAt;
+  final bool? isFollowUp;
+  final String? previousAppointmentId;
+  final bool? hasRated; // Whether the user has rated this appointment
 
   AppointmentBooking({
     this.id,
@@ -60,6 +69,14 @@ class AppointmentBooking {
     this.rescheduleReason,
     this.rescheduledAt,
     this.assessmentResultId,
+    this.diagnosis,
+    this.treatment,
+    this.prescription,
+    this.clinicNotes,
+    this.completedAt,
+    this.isFollowUp,
+    this.previousAppointmentId,
+    this.hasRated,
   });
 
   /// Convert to Map for Firestore storage
@@ -84,11 +101,37 @@ class AppointmentBooking {
       'rescheduleReason': rescheduleReason,
       'rescheduledAt': rescheduledAt != null ? Timestamp.fromDate(rescheduledAt!) : null,
       'assessmentResultId': assessmentResultId,
+      'diagnosis': diagnosis,
+      'treatment': treatment,
+      'prescription': prescription,
+      'clinicNotes': clinicNotes,
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'isFollowUp': isFollowUp,
+      'previousAppointmentId': previousAppointmentId,
+      'hasRated': hasRated,
     };
   }
 
   /// Create from Firestore document
   factory AppointmentBooking.fromMap(Map<String, dynamic> map, String documentId) {
+    // Helper function to safely convert Timestamp to DateTime
+    DateTime _safeTimestampToDate(dynamic value, DateTime defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      return defaultValue;
+    }
+
+    // Helper function for nullable DateTime
+    DateTime? _safeTimestampToDateNullable(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      return null;
+    }
+
+    final now = DateTime.now();
+    
     return AppointmentBooking(
       id: documentId,
       userId: map['userId'] ?? '',
@@ -96,7 +139,7 @@ class AppointmentBooking {
       clinicId: map['clinicId'] ?? '',
       serviceName: map['serviceName'] ?? '',
       serviceId: map['serviceId'] ?? '',
-      appointmentDate: (map['appointmentDate'] as Timestamp).toDate(),
+      appointmentDate: _safeTimestampToDate(map['appointmentDate'], now),
       appointmentTime: map['appointmentTime'] ?? '',
       notes: map['notes'] ?? '',
       status: AppointmentStatus.values.firstWhere(
@@ -109,17 +152,21 @@ class AppointmentBooking {
       ),
       estimatedPrice: map['estimatedPrice']?.toDouble(),
       duration: map['duration'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      updatedAt: (map['updatedAt'] as Timestamp).toDate(),
+      createdAt: _safeTimestampToDate(map['createdAt'], now),
+      updatedAt: _safeTimestampToDate(map['updatedAt'], now),
       cancelReason: map['cancelReason'],
-      cancelledAt: map['cancelledAt'] != null 
-          ? (map['cancelledAt'] as Timestamp).toDate() 
-          : null,
+      cancelledAt: _safeTimestampToDateNullable(map['cancelledAt']),
       rescheduleReason: map['rescheduleReason'],
-      rescheduledAt: map['rescheduledAt'] != null 
-          ? (map['rescheduledAt'] as Timestamp).toDate() 
-          : null,
+      rescheduledAt: _safeTimestampToDateNullable(map['rescheduledAt']),
       assessmentResultId: map['assessmentResultId'],
+      diagnosis: map['diagnosis'],
+      treatment: map['treatment'],
+      prescription: map['prescription'],
+      clinicNotes: map['clinicNotes'],
+      completedAt: _safeTimestampToDateNullable(map['completedAt']),
+      isFollowUp: map['isFollowUp'],
+      previousAppointmentId: map['previousAppointmentId'],
+      hasRated: map['hasRated'],
     );
   }
 
@@ -145,6 +192,14 @@ class AppointmentBooking {
     String? rescheduleReason,
     DateTime? rescheduledAt,
     String? assessmentResultId,
+    String? diagnosis,
+    String? treatment,
+    String? prescription,
+    String? clinicNotes,
+    DateTime? completedAt,
+    bool? isFollowUp,
+    String? previousAppointmentId,
+    bool? hasRated,
   }) {
     return AppointmentBooking(
       id: id ?? this.id,
@@ -167,6 +222,14 @@ class AppointmentBooking {
       rescheduleReason: rescheduleReason ?? this.rescheduleReason,
       rescheduledAt: rescheduledAt ?? this.rescheduledAt,
       assessmentResultId: assessmentResultId ?? this.assessmentResultId,
+      diagnosis: diagnosis ?? this.diagnosis,
+      treatment: treatment ?? this.treatment,
+      prescription: prescription ?? this.prescription,
+      clinicNotes: clinicNotes ?? this.clinicNotes,
+      completedAt: completedAt ?? this.completedAt,
+      isFollowUp: isFollowUp ?? this.isFollowUp,
+      previousAppointmentId: previousAppointmentId ?? this.previousAppointmentId,
+      hasRated: hasRated ?? this.hasRated,
     );
   }
 

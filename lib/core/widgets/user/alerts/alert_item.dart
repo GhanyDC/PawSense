@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 
 enum AlertType {
@@ -9,6 +10,7 @@ enum AlertType {
   reschedule,
   declined,
   reappointment,
+  followUp,
   systemUpdate,
 }
 
@@ -59,18 +61,19 @@ class AlertItem extends StatelessWidget {
   final AlertData alert;
   final VoidCallback? onTap;
   final VoidCallback? onMarkAsRead;
+  final VoidCallback? onDelete;
 
   const AlertItem({
     super.key,
     required this.alert,
     this.onTap,
     this.onMarkAsRead,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+    final alertContent = Container(
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
@@ -190,6 +193,43 @@ class AlertItem extends StatelessWidget {
         ),
       ),
     );
+
+    // Wrap with Slidable if this is a message alert and onDelete is provided
+    if (alert.type == AlertType.message && onDelete != null) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Slidable(
+          key: ValueKey(alert.id),
+          endActionPane: ActionPane(
+            motion: const ScrollMotion(),
+            dismissible: DismissiblePane(onDismissed: () {
+              onDelete?.call();
+            }),
+            children: [
+              SlidableAction(
+                onPressed: (context) {
+                  onDelete?.call();
+                },
+                backgroundColor: AppColors.error,
+                foregroundColor: AppColors.white,
+                icon: Icons.delete,
+                label: 'Delete',
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+            ],
+          ),
+          child: alertContent,
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: alertContent,
+    );
   }
 
   Color _getAlertColor() {
@@ -208,6 +248,8 @@ class AlertItem extends StatelessWidget {
         return AppColors.error;
       case AlertType.reappointment:
         return AppColors.warning;
+      case AlertType.followUp:
+        return const Color(0xFF3B82F6); // Blue color for follow-ups
       case AlertType.systemUpdate:
         return AppColors.primary;
     }
@@ -229,6 +271,8 @@ class AlertItem extends StatelessWidget {
         return Icons.cancel_outlined;
       case AlertType.reappointment:
         return Icons.repeat;
+      case AlertType.followUp:
+        return Icons.sync; // Sync icon for follow-ups
       case AlertType.systemUpdate:
         return Icons.system_update;
     }

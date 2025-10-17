@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
+import 'package:pawsense/core/widgets/user/shared/modals/pet_assessment_modal.dart';
 
 class HealthData {
   final String condition;
@@ -52,54 +53,139 @@ class HealthSnapshot extends StatelessWidget {
           ),
           const SizedBox(height: kMobileSizedBoxLarge),
           
-          Row(
-            children: [
-              // Donut Chart
-              SizedBox(
-                width: kMobileDonutChartSize,
-                height: kMobileDonutChartSize,
-                child: Stack(
-                  children: [
-                    _buildDonutChart(total),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '$total',
-                            style: kMobileTextStyleChartTotal.copyWith(
-                              color: AppColors.textPrimary,
+          // Show centered message if no data, otherwise show chart
+          if (total == 0)
+            _buildEmptyState(context)
+          else
+            Row(
+              children: [
+                // Donut Chart
+                SizedBox(
+                  width: kMobileDonutChartSize,
+                  height: kMobileDonutChartSize,
+                  child: Stack(
+                    children: [
+                      _buildDonutChart(total),
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '$total',
+                              style: kMobileTextStyleChartTotal.copyWith(
+                                color: AppColors.textPrimary,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Total',
-                            style: kMobileTextStyleChartLabel.copyWith(
-                              color: AppColors.textSecondary,
+                            Text(
+                              'Total',
+                              style: kMobileTextStyleChartLabel.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              
-              const SizedBox(width: kMobileSizedBoxXXLarge),
-              
-              // Legend
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: healthData
-                      .take(4)
-                      .map((data) => _buildLegendItem(data))
-                      .toList(),
+                
+                const SizedBox(width: kMobileSizedBoxXXLarge),
+                
+                // Legend
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: healthData
+                        .take(4)
+                        .map((data) => _buildLegendItem(data))
+                        .toList(),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Column(
+      children: [
+        // Icon
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: const Icon(
+            Icons.health_and_safety,
+            size: 40,
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(height: kMobileSizedBoxLarge),
+        
+        // Message
+        Text(
+          'No health data yet',
+          style: kMobileTextStyleTitle.copyWith(
+            fontSize: 16,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: kMobileSizedBoxSmall),
+        
+        Text(
+          'Start assessing your pet to track their health',
+          style: kMobileTextStyleSubtitle.copyWith(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: kMobileSizedBoxLarge),
+        
+        // Start Assessment button
+        SizedBox(
+          width: double.infinity,
+          height: 40,
+          child: ElevatedButton(
+            onPressed: () {
+              // Show the same assessment modal as the camera button
+              _showAssessmentModal(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Start Assessment',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.white,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAssessmentModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => const PetAssessmentModal(),
     );
   }
 

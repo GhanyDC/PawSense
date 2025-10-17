@@ -1,8 +1,11 @@
 // screens/optimized_appointment_management_screen.dart
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:pawsense/core/utils/file_downloader.dart' as file_downloader;
 import '../../../core/utils/app_colors.dart';
 import '../../../core/utils/sort_order.dart';
 import '../../../core/models/clinic/appointment_models.dart' as AppointmentModels;
@@ -10,6 +13,9 @@ import '../../../core/models/clinic/appointment_booking_model.dart';
 import '../../../core/services/clinic/appointment_service.dart';
 import '../../../core/services/clinic/paginated_appointment_service.dart';
 import '../../../core/services/clinic/realtime_appointment_listener.dart';
+import '../../../core/services/clinic/appointment_cache_service.dart';
+import '../../../core/services/clinic/appointment_pdf_service.dart';
+import '../../../core/services/clinic/clinic_details_service.dart';
 import '../../../core/services/super_admin/screen_state_service.dart';
 import '../../../core/widgets/admin/appointments/appointment_header.dart';
 import '../../../core/widgets/admin/appointments/appointment_filters.dart';
@@ -19,6 +25,8 @@ import '../../../core/widgets/admin/appointments/appointment_completion_modal.da
 import '../../../core/widgets/admin/clinic_schedule/appointment_details_modal.dart';
 import '../../../core/widgets/admin/appointments/appointment_table_row.dart';
 import '../../../core/widgets/admin/appointments/appointment_table_header.dart';
+import '../../../core/widgets/shared/pagination_widget.dart';
+import 'package:http/http.dart' as http;
 
 class OptimizedAppointmentManagementScreen extends StatefulWidget {
   const OptimizedAppointmentManagementScreen({Key? key}) 
@@ -36,6 +44,10 @@ class _OptimizedAppointmentManagementScreenState
   // Filter state
   String searchQuery = '';
   String selectedStatus = 'All Status';
+  DateTime? startDate;
+  DateTime? endDate;
+  String? selectedPetType;
+  String? selectedBreed;
   SortOrder bookedAtSortOrder = SortOrder.descending; // Default to newest first
   
   // Appointment data
@@ -48,12 +60,17 @@ class _OptimizedAppointmentManagementScreenState
   
   // Loading state
   bool isInitialLoading = true;
-  bool isLoadingMore = false;
+  bool _isLoading = false; // General loading state (replaces isInitialLoading after first load)
+  bool _isPaginationLoading = false; // Separate loading state for pagination
   String? error;
   
   // Pagination
-  DocumentSnapshot? _lastDocument;
-  bool _hasMore = true;
+  int currentPage = 1;
+  int totalPages = 1;
+  int totalAppointments = 0;
+  
+  // Page cursors for navigation
+  Map<int, DocumentSnapshot?> _pageCursors = {}; // Store last document for each page
   
   // Clinic data
   String? _cachedClinicId;
@@ -62,15 +79,16 @@ class _OptimizedAppointmentManagementScreenState
   // Services
   final _stateService = ScreenStateService();
   final _realtimeListener = RealTimeAppointmentListener();
+  final _cacheService = AppointmentCacheService();
   
   // Real-time updates state
   bool _isRefreshing = false; // Prevent concurrent refreshes
   
-  // Scroll controller for infinite scroll
-  final ScrollController _scrollController = ScrollController();
-  
   // Debounce timer for search
   Timer? _searchDebounce;
+
+  // ValueNotifier for table updates only (prevents full screen rebuild)
+  final ValueNotifier<bool> _tableUpdateNotifier = ValueNotifier<bool>(false);
 
   @override
   bool get wantKeepAlive => true;
@@ -80,7 +98,6 @@ class _OptimizedAppointmentManagementScreenState
     super.initState();
     _restoreState();
     _initializeData();
-    _scrollController.addListener(_onScroll);
   }
 
   @override
@@ -89,8 +106,8 @@ class _OptimizedAppointmentManagementScreenState
     // Unregister from real-time listener
     _realtimeListener.unregisterStatusCountCallback(_updateStatusCountsRealTime);
     _realtimeListener.unregisterAppointmentListCallback(_refreshDataSilently);
-    _scrollController.dispose();
     _searchDebounce?.cancel();
+    _tableUpdateNotifier.dispose();
     super.dispose();
   }
 
@@ -154,18 +171,18 @@ class _OptimizedAppointmentManagementScreenState
     }
   }
 
-  /// Load first page of appointments
+  /// Load appointments starting from current page (restored from state)
   Future<void> _loadFirstPage() async {
     setState(() {
-      isInitialLoading = true;
+      _isLoading = true;
       error = null;
       appointments.clear();
       filteredAppointments.clear();
-      _lastDocument = null;
-      _hasMore = true;
+      _pageCursors.clear(); // Clear cursors on fresh load
+      currentPage = 1; // Always start from page 1 on fresh load
     });
 
-    await _loadMoreAppointments();
+    await _loadPage(1);
   }
 
   /// Load status counts for summary badges (fetches total counts, not just paginated)
@@ -199,6 +216,7 @@ class _OptimizedAppointmentManagementScreenState
           confirmedCount: 0,
           completedCount: 0,
           cancelledCount: 0,
+          followUpCount: 0,
         );
       });
     }
@@ -227,81 +245,159 @@ class _OptimizedAppointmentManagementScreenState
     }
   }
 
-  /// Load more appointments (pagination)
-  Future<void> _loadMoreAppointments() async {
-    if (!_hasMore || _cachedClinicId == null) return;
-    
-    // Prevent multiple simultaneous loads
-    if (isLoadingMore) return;
+  /// Load specific page of appointments
+  Future<void> _loadPage(int page, {bool isPagination = false, bool forceRefresh = false, bool isSilentRefresh = false}) async {
+    if (_cachedClinicId == null) return;
 
-    setState(() {
-      if (appointments.isEmpty) {
-        isInitialLoading = true;
-      } else {
-        isLoadingMore = true;
+    // Check if filters changed (clear cache if so)
+    final filtersChanged = _cacheService.hasFiltersChanged(
+      selectedStatus,
+      searchQuery,
+      startDate?.toIso8601String(),
+      endDate?.toIso8601String(),
+      null, // No separate follow-up filter, it's now part of selectedStatus
+    );
+    if (filtersChanged && !isInitialLoading) {
+      _cacheService.invalidateCacheForFilterChange();
+      _pageCursors.clear(); // Clear page cursors when filters change
+    }
+
+    // Try to load from multi-page cache first
+    if (!forceRefresh && !isInitialLoading && !isSilentRefresh) {
+      final cachedPage = _cacheService.getCachedPage(
+        statusFilter: selectedStatus,
+        searchQuery: searchQuery,
+        startDate: startDate?.toIso8601String(),
+        endDate: endDate?.toIso8601String(),
+        followUpFilter: null, // No separate follow-up filter
+        page: page,
+      );
+
+      if (cachedPage != null) {
+        print('[CACHE] Using cached page data - no network call needed');
+        setState(() {
+          appointments.clear();
+          appointments.addAll(cachedPage.appointments);
+          totalAppointments = cachedPage.totalAppointments;
+          totalPages = cachedPage.totalPages;
+          currentPage = page;
+          _isPaginationLoading = false;
+          _isLoading = false;
+          
+          // Apply filters and sorting to the loaded appointments
+          _applyFilters();
+        });
+        return;
       }
-    });
+    }
+
+    // Don't show loading state for silent background refreshes
+    if (!isSilentRefresh) {
+      setState(() {
+        if (isInitialLoading) {
+          // Keep isInitialLoading true for first load
+          _isLoading = true;
+        } else if (isPagination) {
+          _isPaginationLoading = true;
+        } else {
+          _isLoading = true;
+        }
+      });
+    }
 
     try {
-      print('📥 Loading ${appointments.isEmpty ? 'first' : 'next'} page of appointments with filter: $selectedStatus...');
+      print('📥 Loading page $page of appointments with filter: $selectedStatus...');
+      
+      // Get the cursor for the previous page to support pagination
+      DocumentSnapshot? lastDoc;
+      if (page > 1) {
+        lastDoc = _pageCursors[page - 1];
+      }
       
       final result = await PaginatedAppointmentService.getClinicAppointmentsPaginated(
         clinicId: _cachedClinicId!,
-        lastDocument: _lastDocument,
+        page: page,
+        itemsPerPage: 10, // Show 10 appointments per page
+        lastDocument: lastDoc, // Use cursor for pagination
         status: _getStatusFilterForService(), // Apply server-side status filtering
+        startDate: startDate, // Apply date range filter
+        endDate: endDate, // Apply date range filter
       );
 
-      setState(() {
+      // Update cache with current page data
+      _cacheService.updateCache(
+        appointments: result.appointments,
+        totalAppointments: result.totalCount ?? result.appointments.length,
+        totalPages: result.totalPages ?? 1,
+        statusFilter: selectedStatus,
+        searchQuery: searchQuery,
+        startDate: startDate?.toIso8601String(),
+        endDate: endDate?.toIso8601String(),
+        followUpFilter: null, // No separate follow-up filter
+        page: page,
+      );
+
+      if (isSilentRefresh) {
+        // For silent refresh, just update data without changing loading states
+        appointments.clear();
         appointments.addAll(result.appointments);
-        _lastDocument = result.lastDocument;
-        _hasMore = result.hasMore;
-        isInitialLoading = false;
-        isLoadingMore = false;
+        currentPage = result.currentPage ?? page;
         
-        print('✅ Loaded ${result.appointments.length} appointments. Total: ${appointments.length}, Has more: $_hasMore');
+        // Store the last document for this page (for next page navigation)
+        if (result.lastDocument != null && result.appointments.isNotEmpty) {
+          _pageCursors[page] = result.lastDocument;
+        }
         
-        // Apply filters
+        // Use actual counts from service
+        totalPages = result.totalPages ?? 1;
+        totalAppointments = result.totalCount ?? result.appointments.length;
+        
+        print('✅ Silently loaded page $page: ${result.appointments.length} appointments. Total: $totalAppointments, Pages: $totalPages');
+        print('📋 Appointment IDs on this page: ${result.appointments.map((a) => a.id).take(3).join(", ")}${result.appointments.length > 3 ? "..." : ""}');
+        
+        // Apply filters and sorting to the loaded appointments (this will trigger table update)
         _applyFilters();
-      });
+      } else {
+        setState(() {
+          appointments.clear();
+          appointments.addAll(result.appointments);
+          currentPage = result.currentPage ?? page;
+          
+          // Store the last document for this page (for next page navigation)
+          if (result.lastDocument != null && result.appointments.isNotEmpty) {
+            _pageCursors[page] = result.lastDocument;
+          }
+          
+          // Use actual counts from service
+          totalPages = result.totalPages ?? 1;
+          totalAppointments = result.totalCount ?? result.appointments.length;
+          
+          isInitialLoading = false;
+          _isLoading = false;
+          _isPaginationLoading = false;
+          
+          print('✅ Loaded page $page: ${result.appointments.length} appointments. Total: $totalAppointments, Pages: $totalPages');
+          print('📋 Appointment IDs on this page: ${result.appointments.map((a) => a.id).take(3).join(", ")}${result.appointments.length > 3 ? "..." : ""}');
+          
+          // Apply filters and sorting to the loaded appointments
+          _applyFilters();
+        });
+      }
     } catch (e) {
-      print('❌ Error loading appointments: $e');
-      setState(() {
-        error = 'Failed to load appointments';
-        isInitialLoading = false;
-        isLoadingMore = false;
-      });
+      print('❌ Error loading appointments page $page: $e');
+      // Don't show error UI for silent refresh failures
+      if (!isSilentRefresh) {
+        setState(() {
+          error = 'Failed to load appointments';
+          isInitialLoading = false;
+          _isLoading = false;
+          _isPaginationLoading = false;
+        });
+      }
     }
   }
 
-  /// Load appointments until we reach a target count (for maintaining scroll position)
-  Future<PaginatedAppointmentResult> _loadAppointmentsUntilCount({
-    required int targetCount,
-  }) async {
-    List<AppointmentModels.Appointment> allAppointments = [];
-    DocumentSnapshot? lastDoc;
-    bool hasMore = true;
-    
-    while (allAppointments.length < targetCount && hasMore) {
-      final result = await PaginatedAppointmentService.getClinicAppointmentsPaginated(
-        clinicId: _cachedClinicId!,
-        lastDocument: lastDoc,
-        status: _getStatusFilterForService(), // Apply same filter as regular loading
-      );
-      
-      allAppointments.addAll(result.appointments);
-      lastDoc = result.lastDocument;
-      hasMore = result.hasMore;
-      
-      // Safety break to avoid infinite loops
-      if (result.appointments.isEmpty) break;
-    }
-    
-    return PaginatedAppointmentResult(
-      appointments: allAppointments,
-      lastDocument: lastDoc,
-      hasMore: hasMore,
-    );
-  }
+
 
   /// Show a subtle notification when new appointments are detected
   void _showNewAppointmentsSnackbar(int count) {
@@ -323,75 +419,28 @@ class _OptimizedAppointmentManagementScreenState
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
         action: SnackBarAction(
-          label: 'Scroll to Top',
+          label: 'Go to Page 1',
           textColor: Colors.white,
           onPressed: () {
-            _scrollController.animateTo(
-              0,
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeOutCubic,
-            );
+            _onPageChanged(1);
           },
         ),
       ),
     );
   }
 
-  /// Show notification that new appointments are available but not loaded
-  void _showRefreshAvailableSnackbar() {
-    if (!mounted) return;
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.new_releases, color: Colors.white, size: 16),
-            const SizedBox(width: 8),
-            Text(
-              'New appointments available ${selectedStatus != 'All Status' ? 'in ${selectedStatus.toLowerCase()}' : ''}',
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.primary,
-        duration: const Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        action: SnackBarAction(
-          label: 'Refresh',
-          textColor: Colors.white,
-          onPressed: () {
-            _refreshData(); // Full refresh
-          },
-        ),
-      ),
-    );
-  }
 
-  /// Get expected count based on current filter and status counts
-  int _getExpectedFilteredCount() {
-    if (statusCounts == null) return 0;
-    
-    switch (selectedStatus) {
-      case 'Pending':
-        return statusCounts!.pendingCount;
-      case 'Confirmed':
-        return statusCounts!.confirmedCount;
-      case 'Completed':
-        return statusCounts!.completedCount;
-      case 'Cancelled':
-        return statusCounts!.cancelledCount;
-      case 'All Status':
-      default:
-        return statusCounts!.totalCount;
-    }
-  }
+
+
 
   /// Apply filters and sorting to appointments
   void _applyFilters() {
-    filteredAppointments = appointments.where((appointment) {
-      // Status filter
+    // First, filter all appointments
+    List<AppointmentModels.Appointment> allFiltered = appointments.where((appointment) {
+      // Status filter - handle both appointment status and follow-up status
       bool statusMatch = selectedStatus == 'All Status' ||
-          appointment.status.name.toLowerCase() == selectedStatus.toLowerCase();
+          appointment.status.name.toLowerCase() == selectedStatus.toLowerCase() ||
+          (selectedStatus == 'Follow-up' && appointment.isFollowUp == true);
 
       // Search filter
       bool searchMatch = searchQuery.isEmpty ||
@@ -399,18 +448,20 @@ class _OptimizedAppointmentManagementScreenState
           appointment.owner.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
           appointment.diseaseReason.toLowerCase().contains(searchQuery.toLowerCase());
 
-      return statusMatch && searchMatch;
+      // Pet type filter
+      bool petTypeMatch = selectedPetType == null ||
+          appointment.pet.type.toLowerCase() == selectedPetType!.toLowerCase();
+
+      // Breed filter
+      bool breedMatch = selectedBreed == null ||
+          (appointment.pet.breed != null &&
+              appointment.pet.breed!.toLowerCase() == selectedBreed!.toLowerCase());
+
+      return statusMatch && searchMatch && petTypeMatch && breedMatch;
     }).toList();
     
-    // Apply sorting by date
-    _sortAppointments();
-    
-    print('🔍 Filtered: ${filteredAppointments.length} of ${appointments.length} appointments');
-  }
-
-  /// Sort appointments by booked at date based on current sort order
-  void _sortAppointments() {
-    filteredAppointments.sort((a, b) {
+    // Apply sorting by date to all filtered results
+    allFiltered.sort((a, b) {
       try {
         final dateA = a.createdAt;
         final dateB = b.createdAt;
@@ -422,25 +473,45 @@ class _OptimizedAppointmentManagementScreenState
         }
       } catch (e) {
         print('Error comparing booked at dates for sorting: $e');
-        // Fallback to timestamp comparison
-        if (bookedAtSortOrder == SortOrder.ascending) {
-          return a.createdAt.compareTo(b.createdAt);
-        } else {
-          return b.createdAt.compareTo(a.createdAt);
-        }
+        return 0;
       }
     });
+    
+    // For search mode, Follow-up filter, or pet type/breed filters, show only the current page of filtered results
+    if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up' || selectedPetType != null || selectedBreed != null) {
+      final itemsPerPage = 10;
+      final startIndex = (currentPage - 1) * itemsPerPage;
+      final endIndex = (startIndex + itemsPerPage).clamp(0, allFiltered.length);
+      
+      filteredAppointments = allFiltered.sublist(startIndex, endIndex);
+      
+      // Update pagination for filtered results
+      totalAppointments = allFiltered.length;
+      totalPages = (totalAppointments / itemsPerPage).ceil();
+      if (totalPages == 0) totalPages = 1;
+      
+      print('🔍 Filtered results: ${allFiltered.length} total matches, showing page $currentPage (${filteredAppointments.length} appointments)');
+      print('📄 Pagination: Page $currentPage of $totalPages');
+    } else {
+      // For no search or client-side filtering, show all results from current page load
+      filteredAppointments = allFiltered;
+      print('🔍 Filtered: ${filteredAppointments.length} of ${appointments.length} appointments');
+    }
+    
+    // Notify table to update without rebuilding entire screen
+    _tableUpdateNotifier.value = !_tableUpdateNotifier.value;
   }
+
+
 
   /// Toggle booked at sort order
   void _onBookedAtSortChanged() {
-    setState(() {
-      bookedAtSortOrder = bookedAtSortOrder == SortOrder.ascending 
-          ? SortOrder.descending 
-          : SortOrder.ascending;
-    });
+    // Update state without rebuilding entire screen
+    bookedAtSortOrder = bookedAtSortOrder == SortOrder.ascending 
+        ? SortOrder.descending 
+        : SortOrder.ascending;
     _saveState();
-    _applyFilters();
+    _applyFilters(); // This will trigger table update via ValueNotifier
     print('📅 Booked At sort changed to: ${bookedAtSortOrder.displayName}');
   }
 
@@ -475,83 +546,25 @@ class _OptimizedAppointmentManagementScreenState
         return;
       }
       
-      print('🔄 Silently refreshing appointments and status counts in background...');
+      print('🔄 Silently refreshing current page and status counts in background...');
       
-      // Store current number of appointments to know how many pages we had loaded
-      final currentAppointmentCount = appointments.length;
+      // Store current filtered count to detect changes
       final currentFilteredCount = filteredAppointments.length;
       
-      // Load fresh status counts and appointments in parallel for better performance
-      final Future<AppointmentStatusCounts> statusCountsFuture = PaginatedAppointmentService.getAppointmentStatusCounts(
-        clinicId: _cachedClinicId!,
-      );
-      
-      // For better performance, just load the first page and detect if there are changes
-      // If user has scrolled down significantly, we'll show a notification instead of reloading everything
-      final shouldLoadAll = currentAppointmentCount <= 20; // Only reload all if few appointments loaded
-      
-      // Load appointments and status counts in parallel
-      late Future<PaginatedAppointmentResult> appointmentsFuture;
-      
-      if (shouldLoadAll) {
-        // Load enough appointments to cover what was previously loaded + buffer
-        appointmentsFuture = _loadAppointmentsUntilCount(
-          targetCount: currentAppointmentCount + 10,
-        );
-      } else {
-        // Just load first page and show notification if changes detected
-        appointmentsFuture = PaginatedAppointmentService.getClinicAppointmentsPaginated(
-          clinicId: _cachedClinicId!,
-          lastDocument: null,
-          status: _getStatusFilterForService(), // Apply same filter
-        );
-      }
-
-      // Wait for both operations to complete
-      final results = await Future.wait([
-        appointmentsFuture,
-        statusCountsFuture,
+      // Refresh status counts and current page in parallel (with silent refresh flag)
+      await Future.wait([
+        _loadPage(currentPage, isSilentRefresh: true),
+        _loadStatusCounts(),
       ]);
-
-      final appointmentsToLoad = results[0] as PaginatedAppointmentResult;
-      final statusCountsResult = results[1] as AppointmentStatusCounts;
-
-      if (mounted) {
-        setState(() {
-          appointments.clear();
-          appointments.addAll(appointmentsToLoad.appointments);
-          _lastDocument = appointmentsToLoad.lastDocument;
-          _hasMore = appointmentsToLoad.hasMore;
-          
-          // Update status counts - This triggers real-time badge updates!
-          statusCounts = statusCountsResult;
-          
-          // Apply filters
-          _applyFilters();
-          
-          // Handle notifications based on whether we did a full reload or partial
-          final newFilteredCount = filteredAppointments.length;
-          
-          if (shouldLoadAll) {
-            // Full reload - show notification if new appointments were added
-            if (newFilteredCount > currentFilteredCount) {
-              final newAppointments = newFilteredCount - currentFilteredCount;
-              _showNewAppointmentsSnackbar(newAppointments);
-            }
-          } else {
-            // Partial reload - check if there are likely new appointments not loaded
-            if (statusCounts != null) {
-              final expectedCount = _getExpectedFilteredCount();
-              // Only show notification if there's a significant difference (more than 2 appointments)
-              if (expectedCount > currentFilteredCount + 2) {
-                _showRefreshAvailableSnackbar();
-              }
-            }
-          }
-          
-          print('✅ Silent refresh complete: ${appointments.length} appointments, status counts: ${statusCountsResult.toString()}');
-        });
+      
+      // Check if there are new appointments and show notification
+      final newFilteredCount = filteredAppointments.length;
+      if (newFilteredCount > currentFilteredCount) {
+        final newAppointments = newFilteredCount - currentFilteredCount;
+        _showNewAppointmentsSnackbar(newAppointments);
       }
+      
+      print('✅ Silent refresh complete: ${appointments.length} appointments on page $currentPage');
     } catch (e) {
       print('❌ Error during silent refresh: $e');
       // Don't show error to user for background refresh
@@ -569,141 +582,423 @@ class _OptimizedAppointmentManagementScreenState
     ]);
   }
 
-  /// Smart refresh that preserves infinite scroll state after status changes
+  /// Refresh after status changes - reload current page and status counts
   Future<void> _refreshAfterStatusChange() async {
     if (_cachedClinicId == null || !mounted) return;
 
     try {
-      print('🔄 Smart refresh after status change - preserving scroll state...');
+      print('🔄 Refreshing after status change - reloading current page...');
       
-      // Store current scroll state
-      final currentAppointmentCount = appointments.length;
-      final currentScrollPosition = _scrollController.hasClients 
-          ? _scrollController.position.pixels 
-          : 0.0;
-      
-      // Refresh status counts immediately for instant badge updates
-      final statusCountsFuture = _loadStatusCounts();
-      
-      // Reload appointments to match current loaded count (preserve infinite scroll)
-      final appointmentsFuture = _loadAppointmentsUntilCount(
-        targetCount: currentAppointmentCount,
-      );
-
-      // Wait for both operations
-      final results = await Future.wait([
-        appointmentsFuture,
-        statusCountsFuture,
+      // Refresh both current page and status counts
+      await Future.wait([
+        _loadPage(currentPage),
+        _loadStatusCounts(),
       ]);
-
-      final appointmentsResult = results[0] as PaginatedAppointmentResult;
-
-      if (mounted) {
-        setState(() {
-          // Update appointments while preserving count
-          appointments.clear();
-          appointments.addAll(appointmentsResult.appointments);
-          _lastDocument = appointmentsResult.lastDocument;
-          _hasMore = appointmentsResult.hasMore;
-          
-          // Apply filters to update the displayed list
-          _applyFilters();
-          
-          print('✅ Smart refresh complete: preserved ${appointments.length} appointments');
-        });
-
-        // Restore scroll position after a brief delay
-        if (_scrollController.hasClients && currentScrollPosition > 0) {
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted && _scrollController.hasClients) {
-              _scrollController.animateTo(
-                currentScrollPosition,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-              );
-            }
-          });
-        }
-      }
+      
+      print('✅ Refresh after status change complete');
     } catch (e) {
-      print('❌ Error during smart refresh: $e');
-      // Fallback to regular refresh if smart refresh fails
+      print('❌ Error during refresh after status change: $e');
+      // Fallback to regular refresh if refresh fails
       await _refreshData();
     }
   }
 
-  /// Handle scroll events for infinite scrolling
-  void _onScroll() {
-    if (_scrollController.position.pixels >= 
-        _scrollController.position.maxScrollExtent - 200) {
-      // User is near bottom, load more
-      if (_hasMore && !isLoadingMore && !isInitialLoading) {
-        _loadMoreAppointments();
+  /// Handle page change (matches user management style)
+  void _onPageChanged(int page) {
+    print('🔄 Page change requested: $currentPage -> $page');
+    if (page != currentPage) {
+      // Update page without rebuilding entire screen
+      currentPage = page;
+      _saveState(); // Save state when page changes
+      
+      // For search mode, Follow-up filter, or pet type/breed filters, just re-apply filters with new page
+      if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up' || selectedPetType != null || selectedBreed != null) {
+        _applyFilters(); // This will paginate the filtered results and trigger table update
+      } else {
+        _loadPage(page, isPagination: true); // Load new page data with pagination flag
       }
+    } else {
+      print('⚠️ Same page requested, ignoring');
     }
   }
 
   /// Restore state from ScreenStateService
   void _restoreState() {
+    currentPage = _stateService.appointmentCurrentPage;
     searchQuery = _stateService.appointmentSearchQuery;
     selectedStatus = _stateService.appointmentSelectedStatus;
+    startDate = _stateService.appointmentStartDate;
+    endDate = _stateService.appointmentEndDate;
+    selectedPetType = _stateService.appointmentSelectedPetType;
+    selectedBreed = _stateService.appointmentSelectedBreed;
     bookedAtSortOrder = SortOrder.fromString(_stateService.appointmentDateSortOrder);
   }
 
   /// Save current state to ScreenStateService
   void _saveState() {
     _stateService.saveAppointmentState(
+      currentPage: currentPage,
       searchQuery: searchQuery,
       selectedStatus: selectedStatus,
       dateSortOrder: bookedAtSortOrder.value,
+      startDate: startDate,
+      endDate: endDate,
+      followUpFilter: null, // No longer using separate follow-up filter
+      selectedPetType: selectedPetType,
+      selectedBreed: selectedBreed,
     );
   }
 
   /// Handle search with debouncing
   void _onSearchChanged(String query) {
-    setState(() {
-      searchQuery = query;
-    });
-    _saveState();
-
     // Cancel previous timer
     _searchDebounce?.cancel();
 
-    // Debounce search to avoid excessive filtering
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-      _applyFilters();
-      setState(() {});
+    // Debounce both data loading to prevent excessive queries
+    _searchDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (mounted && query != searchQuery) {
+        // Update state without rebuilding entire screen
+        searchQuery = query;
+        currentPage = 1; // Reset to first page
+        _saveState();
+        _loadDataWithNewFilter();
+      }
     });
   }
 
   /// Handle status filter change
   void _onStatusChanged(String status) {
-    setState(() {
-      selectedStatus = status;
-    });
+    // Update state without rebuilding entire screen
+    selectedStatus = status;
+    currentPage = 1; // Reset to first page
     _saveState();
     
     // Reload data with new filter instead of just applying client-side filter
     _loadDataWithNewFilter();
   }
 
+  /// Handle start date change
+  void _onStartDateChanged(DateTime? date) {
+    // Update state without rebuilding entire screen
+    startDate = date;
+    // If endDate is null, set it to today
+    if (date != null && endDate == null) {
+      endDate = DateTime.now();
+    }
+    currentPage = 1; // Reset to first page
+    _saveState();
+    // Reload data with new date filter
+    _loadDataWithNewFilter();
+  }
+
+  /// Handle end date change
+  void _onEndDateChanged(DateTime? date) {
+    // Update state without rebuilding entire screen
+    endDate = date;
+    currentPage = 1; // Reset to first page
+    _saveState();
+    
+    // Reload data with new date filter
+    _loadDataWithNewFilter();
+  }
+
+  /// Handle pet type change
+  void _onPetTypeChanged(String? petType) {
+    // Update state without rebuilding entire screen
+    selectedPetType = petType;
+    // Reset breed when pet type changes
+    selectedBreed = null;
+    currentPage = 1; // Reset to first page
+    _saveState();
+    
+    // Reload data with new filter
+    _loadDataWithNewFilter();
+  }
+
+  /// Handle breed change
+  void _onBreedChanged(String? breed) {
+    // Update state without rebuilding entire screen
+    selectedBreed = breed;
+    currentPage = 1; // Reset to first page
+    _saveState();
+    
+    // Reload data with new filter
+    _loadDataWithNewFilter();
+  }
+
+  /// Handle export data - exports ALL filtered appointments to PDF
+  Future<void> _onExportData() async {
+    if (_cachedClinicId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to export: Clinic information not available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Generating PDF report...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+
+    try {
+      print('📊 Generating PDF report with filters...');
+      
+      // Fetch ALL filtered appointments (not just current page)
+      final result = await PaginatedAppointmentService.getClinicAppointmentsPaginated(
+        clinicId: _cachedClinicId!,
+        page: 1,
+        itemsPerPage: 999999, // Get all matching records
+        status: _getStatusFilterForService(),
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      List<AppointmentModels.Appointment> allAppointments = result.appointments;
+
+      // Apply search filter if present (client-side)
+      if (searchQuery.isNotEmpty) {
+        allAppointments = allAppointments.where((appointment) {
+          return appointment.pet.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+              appointment.owner.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+              appointment.diseaseReason.toLowerCase().contains(searchQuery.toLowerCase());
+        }).toList();
+      }
+
+      // Apply pet type filter if present (client-side)
+      if (selectedPetType != null) {
+        allAppointments = allAppointments.where((appointment) {
+          return appointment.pet.type.toLowerCase() == selectedPetType!.toLowerCase();
+        }).toList();
+      }
+
+      // Apply breed filter if present (client-side)
+      if (selectedBreed != null) {
+        allAppointments = allAppointments.where((appointment) {
+          return appointment.pet.breed != null &&
+              appointment.pet.breed!.toLowerCase() == selectedBreed!.toLowerCase();
+        }).toList();
+      }
+
+      // Apply sorting
+      allAppointments.sort((a, b) {
+        try {
+          final dateA = a.createdAt;
+          final dateB = b.createdAt;
+          
+          if (bookedAtSortOrder == SortOrder.ascending) {
+            return dateA.compareTo(dateB);
+          } else {
+            return dateB.compareTo(dateA);
+          }
+        } catch (e) {
+          return 0;
+        }
+      });
+
+      if (allAppointments.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No appointments to export'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get clinic details for logo and address
+      String clinicAddress = '';
+      Uint8List? clinicLogo;
+      
+      try {
+        final clinicDetails = await ClinicDetailsService.getClinicDetails(_cachedClinicId!);
+        if (clinicDetails != null) {
+          clinicAddress = clinicDetails.address;
+          
+          // Try to fetch clinic logo if available
+          if (clinicDetails.logoUrl != null && clinicDetails.logoUrl!.isNotEmpty) {
+            try {
+              final response = await http.get(Uri.parse(clinicDetails.logoUrl!));
+              if (response.statusCode == 200) {
+                clinicLogo = response.bodyBytes;
+              }
+            } catch (e) {
+              print('⚠️ Could not fetch clinic logo: $e');
+            }
+          }
+        }
+      } catch (e) {
+        print('⚠️ Could not fetch clinic details: $e');
+      }
+
+      // Get current user for "generated by"
+      String? generatedBy;
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          if (userDoc.exists) {
+            generatedBy = userDoc.data()?['name'] as String?;
+          }
+        }
+      } catch (e) {
+        print('⚠️ Could not fetch user name: $e');
+      }
+
+      // Generate PDF
+      final pdfBytes = await AppointmentPdfService.generateAppointmentReport(
+        appointments: allAppointments,
+        clinicName: _cachedClinicName ?? 'Veterinary Clinic',
+        clinicAddress: clinicAddress.isNotEmpty ? clinicAddress : 'Address not available',
+        clinicLogo: clinicLogo,
+        statusFilter: selectedStatus != 'All Status' ? selectedStatus : null,
+        searchQuery: searchQuery.isNotEmpty ? searchQuery : null,
+        startDate: startDate,
+        endDate: endDate,
+        petTypeFilter: selectedPetType,
+        breedFilter: selectedBreed,
+        generatedBy: generatedBy,
+      );
+
+      // Create filename with clinic name and timestamp
+      final clinicNameSafe = _cachedClinicName?.replaceAll(RegExp(r'[^\w\s-]'), '') ?? 'clinic';
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final filename = 'appointment_report_${clinicNameSafe}_$timestamp.pdf';
+      
+      file_downloader.downloadFile(filename, pdfBytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Generated PDF report with ${allAppointments.length} appointments'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      print('📊 Generated PDF report with ${allAppointments.length} appointments');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF report: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ Error generating PDF report: $e');
+    }
+  }
+
   /// Load fresh data when filter changes to ensure all matching appointments are shown
   Future<void> _loadDataWithNewFilter() async {
+    // Show loading state while fetching (not initial loading)
     setState(() {
-      isInitialLoading = true;
-      appointments.clear();
-      filteredAppointments.clear();
-      _lastDocument = null;
-      _hasMore = true;
+      _isLoading = true;
+      error = null;
     });
+    
+    appointments.clear();
+    filteredAppointments.clear();
+    currentPage = 1;
+    _pageCursors.clear(); // Clear page cursors when filters change
 
-    // Load appointments with the new status filter
-    await _loadMoreAppointments();
+    // If there's a search query, Follow-up filter, or pet type/breed filters, load ALL appointments for comprehensive filtering
+    if (searchQuery.isNotEmpty || selectedStatus == 'Follow-up' || selectedPetType != null || selectedBreed != null) {
+      await _loadAllAppointmentsForSearch();
+    } else {
+      // For no search or client-side filtering, use normal pagination
+      await _loadPage(1);
+    }
   }
+
+  /// Load all appointments when searching or using client-side filters (like Follow-up, pet type, breed)
+  Future<void> _loadAllAppointmentsForSearch() async {
+    if (_cachedClinicId == null) return;
+
+    try {
+      String filterType = 'filter';
+      if (searchQuery.isNotEmpty) filterType = 'search';
+      else if (selectedStatus == 'Follow-up') filterType = 'Follow-up filter';
+      else if (selectedPetType != null || selectedBreed != null) filterType = 'pet type/breed filter';
+      
+      print('🔍 Loading ALL appointments for $filterType...');
+      
+      // Load all appointments with status filter but no pagination
+      final result = await PaginatedAppointmentService.getClinicAppointmentsPaginated(
+        clinicId: _cachedClinicId!,
+        page: 1,
+        itemsPerPage: 1000, // Large number to get all appointments
+        status: _getStatusFilterForService(),
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      setState(() {
+        appointments.clear();
+        appointments.addAll(result.appointments);
+        totalAppointments = result.totalCount ?? result.appointments.length;
+        
+        // Apply search and other filters to the complete dataset
+        _applyFilters();
+        
+        isInitialLoading = false;
+        _isLoading = false;
+        
+        print('✅ Loaded ${appointments.length} appointments for $filterType');
+        print('🔍 Filtered results: ${filteredAppointments.length} appointments match criteria');
+      });
+    } catch (e) {
+      print('❌ Error loading all appointments for search: $e');
+      setState(() {
+        error = 'Failed to load appointments for search';
+        isInitialLoading = false;
+        _isLoading = false;
+      });
+    }
+  }
+
+
 
   /// Convert filter status string to AppointmentStatus enum for server-side filtering
   AppointmentStatus? _getStatusFilterForService() {
     if (selectedStatus == 'All Status') return null;
+    
+    // Follow-up filter doesn't map to appointment status enum
+    // It will be filtered client-side in _applyFilters()
+    if (selectedStatus == 'Follow-up') {
+      return null; // Return null to get all appointments, then filter client-side
+    }
     
     switch (selectedStatus.toLowerCase()) {
       case 'pending':
@@ -732,212 +1027,333 @@ class _OptimizedAppointmentManagementScreenState
       backgroundColor: AppColors.background,
       body: RefreshIndicator(
         onRefresh: _onRefresh,
-        child: CustomScrollView(
-          controller: _scrollController,
+        child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // Header
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const AppointmentHeader(),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              const AppointmentHeader(),
+              const SizedBox(height: 24),
 
-            // Loading state (initial)
-            if (isInitialLoading)
-              const SliverFillRemaining(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(color: AppColors.primary),
-                      SizedBox(height: 16),
-                      Text(
-                        'Loading appointments...',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
+              // Summary - always visible (loads immediately like clinic management)
+              AppointmentSummary(
+                statusCounts: statusCounts ?? AppointmentStatusCounts(
+                  pendingCount: 0,
+                  confirmedCount: 0,
+                  completedCount: 0,
+                  cancelledCount: 0,
+                  followUpCount: 0,
                 ),
-              )
-            
-            // Error state
-            else if (error != null)
-              SliverFillRemaining(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline,
-                            size: 48, color: AppColors.error),
-                        const SizedBox(height: 16),
-                        Text(error!,
-                            style: TextStyle(color: AppColors.error)),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () => _refreshData(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            
-            // Content
-            else ...[
-              // Summary
-              SliverToBoxAdapter(
-                child: Column(
+                isLoading: false, // No loading spinner, just show 0 counts initially
+              ),
+              const SizedBox(height: 24),
+              
+              // Filters - always visible (loads immediately like clinic management)
+              AppointmentFilters(
+                searchQuery: searchQuery,
+                selectedStatus: selectedStatus,
+                startDate: startDate,
+                endDate: endDate,
+                selectedPetType: selectedPetType,
+                selectedBreed: selectedBreed,
+                onSearchChanged: _onSearchChanged,
+                onStatusChanged: _onStatusChanged,
+                onStartDateChanged: _onStartDateChanged,
+                onEndDateChanged: _onEndDateChanged,
+                onPetTypeChanged: _onPetTypeChanged,
+                onBreedChanged: _onBreedChanged,
+                onExportData: _onExportData,
+              ),
+              const SizedBox(height: 16),
+
+              // Appointment list with loading overlay (matches breed/disease management pattern)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Stack(
                   children: [
-                    AppointmentSummary(
-                      statusCounts: statusCounts ?? AppointmentStatusCounts(
-                        pendingCount: 0,
-                        confirmedCount: 0,
-                        completedCount: 0,
-                        cancelledCount: 0,
-                      ),
-                      isLoading: isLoadingStatusCounts,
+                    // Table content - wrapped in ValueListenableBuilder
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _tableUpdateNotifier,
+                      builder: (context, _, __) {
+                        return (isInitialLoading || _isLoading) 
+                            ? _buildLoadingState() 
+                            : _buildAppointmentTable();
+                      },
                     ),
-                    const SizedBox(height: 24),
                     
-                    // Filters
-                    AppointmentFilters(
-                      searchQuery: searchQuery,
-                      selectedStatus: selectedStatus,
-                      onSearchChanged: _onSearchChanged,
-                      onStatusChanged: _onStatusChanged,
-                    ),
-                    const SizedBox(height: 16),
+                    // Show loading overlay during pagination only
+                    if (_isPaginationLoading)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.white.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 40,
+                                    height: 40,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Loading page $currentPage...',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
 
-              // Appointment list
-              if (filteredAppointments.isEmpty)
-                SliverFillRemaining(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.calendar_today,
-                              size: 48, color: AppColors.textSecondary),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No appointments found',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Try adjusting your filters',
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
+              // Error state (shown below table area if needed)
+              if (error != null && !isInitialLoading)
+                Container(
+                  margin: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.error),
                   ),
-                )
-              else
-                SliverToBoxAdapter(
-                  child: Container(
-                    margin: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        AppointmentTableHeader(
-                          bookedAtSortOrder: bookedAtSortOrder,
-                          onBookedAtSortChanged: _onBookedAtSortChanged,
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: AppColors.error),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          error!,
+                          style: TextStyle(color: AppColors.error),
                         ),
-                        
-                        // Lazy-loaded appointment rows
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: filteredAppointments.length,
-                          itemBuilder: (context, index) {
-                            final appointment = filteredAppointments[index];
-                            return AppointmentTableRow(
-                              appointment: appointment,
-                              onView: () => _onView(appointment),
-                              onAccept: appointment.status == AppointmentModels.AppointmentStatus.pending
-                                  ? () => _onAccept(appointment)
-                                  : null,
-                              onMarkDone: appointment.status == AppointmentModels.AppointmentStatus.confirmed
-                                  ? () => _onMarkDone(appointment)
-                                  : null,
-                              onReject: appointment.status == AppointmentModels.AppointmentStatus.pending
-                                  ? () => _onReject(appointment)
-                                  : null,
-                              onEdit: () => _onEdit(appointment),
-                              onDelete: () => _onDelete(appointment),
-                            );
-                          },
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _refreshData(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
                         ),
-                      ],
-                    ),
+                        child: const Text('Retry'),
+                      ),
+                    ],
                   ),
                 ),
 
-              // Loading more indicator
-              if (isLoadingMore)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
-
-              // End of list indicator
-              if (!_hasMore && filteredAppointments.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Center(
-                      child: Text(
-                        'No more appointments',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              // Bottom spacing
+              const SizedBox(height: 24),
             ],
-
-            // Bottom spacing
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 24),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+
+  /// Build loading state (matches breed/disease management style)
+  Widget _buildLoadingState() {
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(80.0),
+              child: Column(
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading appointments...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build empty state (matches breed/disease management style)
+  Widget _buildEmptyState() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(80.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.calendar_today,
+                size: 80,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'No appointments found',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try adjusting your filters',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build appointment table (separated for efficient updates)
+  Widget _buildAppointmentTable() {
+    if (filteredAppointments.isEmpty) {
+      return Column(
+        children: [
+          _buildEmptyState(),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Table header
+              AppointmentTableHeader(
+                bookedAtSortOrder: bookedAtSortOrder,
+                onBookedAtSortChanged: _onBookedAtSortChanged,
+              ),
+              
+              // Divider
+              Divider(height: 1, thickness: 1, color: AppColors.border),
+              
+              // Appointment rows
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filteredAppointments.length,
+                itemBuilder: (context, index) {
+                  final appointment = filteredAppointments[index];
+                  return AppointmentTableRow(
+                    appointment: appointment,
+                    onView: () => _onView(appointment),
+                    onAccept: appointment.status == AppointmentModels.AppointmentStatus.pending
+                        ? () => _onAccept(appointment)
+                        : null,
+                    onMarkDone: appointment.status == AppointmentModels.AppointmentStatus.confirmed
+                        ? () => _onMarkDone(appointment)
+                        : null,
+                    onReject: appointment.status == AppointmentModels.AppointmentStatus.pending
+                        ? () => _onReject(appointment)
+                        : null,
+                    onEdit: () => _onEdit(appointment),
+                    onDelete: () => _onDelete(appointment),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // Pagination Controls
+        if (totalPages > 1) ...[
+          const SizedBox(height: 24),
+          PaginationWidget(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            totalItems: totalAppointments,
+            onPageChanged: _onPageChanged,
+            isLoading: _isPaginationLoading,
+          ),
+        ],
+      ],
+    );
+  }
+
+
 
   // Action handlers
   void _onView(AppointmentModels.Appointment appointment) {

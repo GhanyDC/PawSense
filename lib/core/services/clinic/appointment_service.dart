@@ -5,6 +5,7 @@ import 'package:pawsense/core/models/clinic/appointment_models.dart' as Appointm
 import 'package:pawsense/core/models/user/pet_model.dart' as UserModels;
 import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
 import 'package:pawsense/core/services/notifications/appointment_booking_integration.dart';
+import 'package:pawsense/core/services/admin/admin_appointment_notification_integrator.dart';
 
 class AppointmentService {
   static const String _collection = 'appointments';
@@ -44,8 +45,19 @@ class AppointmentService {
       final appointments = <AppointmentModels.Appointment>[];
 
       for (final doc in querySnapshot.docs) {
-        final appointmentBooking = AppointmentBooking.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-        final appointment = await _convertBookingToAppointment(appointmentBooking);
+        final data = doc.data() as Map<String, dynamic>;
+        
+        // Check if this is a follow-up appointment with embedded data
+        AppointmentModels.Appointment? appointment;
+        if (data['pet'] != null && data['owner'] != null) {
+          // Follow-up appointment format with embedded data
+          appointment = await _convertFollowUpAppointment(data, doc.id);
+        } else {
+          // Legacy booking format - fetch pet/owner separately
+          final appointmentBooking = AppointmentBooking.fromMap(data, doc.id);
+          appointment = await _convertBookingToAppointment(appointmentBooking);
+        }
+        
         if (appointment != null) {
           appointments.add(appointment);
         }
@@ -55,6 +67,95 @@ class AppointmentService {
     } catch (e) {
       print('Error getting clinic appointments: $e');
       return [];
+    }
+  }
+
+  /// Convert follow-up appointment with embedded data to Appointment for display
+  static Future<AppointmentModels.Appointment?> _convertFollowUpAppointment(
+      Map<String, dynamic> data, String documentId) async {
+    try {
+      // Helper function to safely convert Timestamp to DateTime
+      DateTime _safeTimestampToDate(dynamic value, DateTime defaultValue) {
+        if (value == null) return defaultValue;
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return defaultValue;
+      }
+
+      // Helper function for nullable DateTime
+      DateTime? _safeTimestampToDateNullable(dynamic value) {
+        if (value == null) return null;
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return null;
+      }
+
+      final now = DateTime.now();
+      
+      // Extract embedded pet data
+      final petData = data['pet'] as Map<String, dynamic>? ?? {};
+      final pet = AppointmentModels.Pet(
+        id: petData['id'] ?? '',
+        name: petData['name'] ?? 'Unknown Pet',
+        type: petData['type'] ?? 'Unknown',
+        emoji: petData['emoji'] ?? _getPetEmoji(petData['type'] ?? ''),
+        breed: petData['breed'] ?? 'Unknown',
+        age: petData['age'] ?? 0,
+        imageUrl: petData['imageUrl'],
+      );
+
+      // Extract embedded owner data
+      final ownerData = data['owner'] as Map<String, dynamic>? ?? {};
+      final owner = AppointmentModels.Owner(
+        id: ownerData['id'] ?? '',
+        name: ownerData['name'] ?? 'Unknown Owner',
+        phone: ownerData['phone'] ?? 'N/A',
+        email: ownerData['email'] ?? 'N/A',
+      );
+
+      // Parse time slot or create from time
+      final timeSlot = data['timeSlot'] ?? _createTimeSlot(data['time'] ?? '');
+
+      // Parse status (convert string to AppointmentModels.AppointmentStatus)
+      AppointmentModels.AppointmentStatus status;
+      if (data['status'] != null) {
+        try {
+          final statusStr = data['status'].toString();
+          status = AppointmentModels.AppointmentStatus.values.firstWhere(
+            (e) => e.name == statusStr,
+            orElse: () => AppointmentModels.AppointmentStatus.pending,
+          );
+        } catch (e) {
+          status = AppointmentModels.AppointmentStatus.pending;
+        }
+      } else {
+        status = AppointmentModels.AppointmentStatus.pending;
+      }
+
+      final appointment = AppointmentModels.Appointment(
+        id: documentId,
+        clinicId: data['clinicId'] ?? '',
+        date: data['date'] ?? '',
+        time: data['time'] ?? '',
+        timeSlot: timeSlot,
+        pet: pet,
+        diseaseReason: data['diseaseReason'] ?? 'N/A',
+        owner: owner,
+        status: status,
+        createdAt: _safeTimestampToDate(data['createdAt'], now),
+        updatedAt: _safeTimestampToDate(data['updatedAt'], now),
+        cancelReason: data['cancelReason'],
+        cancelledAt: _safeTimestampToDateNullable(data['cancelledAt']),
+        assessmentResultId: data['assessmentResultId'],
+        isFollowUp: data['isFollowUp'] == true,
+        previousAppointmentId: data['previousAppointmentId'],
+        notes: data['notes'],
+      );
+
+      return appointment;
+    } catch (e) {
+      print('❌ Error converting follow-up appointment to display model: $e');
+      return null;
     }
   }
 
@@ -366,10 +467,18 @@ class AppointmentService {
         print('Warning: Could not fetch appointment details for notifications: $e');
       }
 
-      await _firestore.collection(_collection).doc(appointmentId).update({
+      // Add special handling for admin cancellation
+      final updateData = <String, dynamic>{
         'status': status.toString().split('.').last,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
-      });
+      };
+
+      if (status == AppointmentModels.AppointmentStatus.cancelled) {
+        updateData['cancelReason'] = 'Cancelled by clinic administration';
+        updateData['cancelledAt'] = Timestamp.fromDate(DateTime.now());
+      }
+
+      await _firestore.collection(_collection).doc(appointmentId).update(updateData);
 
       // Create notification for status change (if we have appointment details)
       if (appointment != null) {
@@ -386,6 +495,19 @@ class AppointmentService {
             reason: status == AppointmentModels.AppointmentStatus.cancelled ? 
               'Cancelled by clinic administration' : null,
           );
+
+          // Additional admin notification for cancellation by admin
+          if (status == AppointmentModels.AppointmentStatus.cancelled) {
+            await AdminAppointmentNotificationIntegrator.notifyAppointmentCancelledByAdmin(
+              appointmentId: appointmentId,
+              petName: appointment.pet.name,
+              ownerName: appointment.owner.name,
+              appointmentDate: DateTime.tryParse(appointment.date.replaceAll('-', '')) ?? DateTime.now(),
+              appointmentTime: appointment.time,
+              serviceName: appointment.serviceType ?? 'General Consultation',
+              cancellationReason: 'Cancelled by clinic administration',
+            );
+          }
         } catch (notificationError) {
           print('⚠️ Failed to create status change notification: $notificationError');
           // Don't fail the status update if notification fails
@@ -593,6 +715,47 @@ class AppointmentService {
         'status': AppointmentModels.AppointmentStatus.confirmed.toString().split('.').last,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
+
+      // Get appointment details for admin notification
+      try {
+        final appointmentData = appointmentDoc.data()!;
+        final petId = appointmentData['petId'] as String;
+        final userId = appointmentData['userId'] as String;
+        final serviceName = appointmentData['serviceName'] as String? ?? 'General Consultation';
+        
+        // Get pet and user details for notification
+        final petDoc = await _firestore.collection('pets').doc(petId).get();
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        
+        String petName = 'Pet';
+        String ownerName = 'Pet Owner';
+        
+        if (petDoc.exists) {
+          final petData = petDoc.data()!;
+          petName = petData['name'] ?? petData['petName'] ?? 'Pet';
+        }
+        
+        if (userDoc.exists) {
+          final userData = userDoc.data()!;
+          ownerName = '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
+          if (ownerName.isEmpty) {
+            ownerName = userData['username'] ?? 'Pet Owner';
+          }
+        }
+        
+        // Trigger admin notification for acceptance
+        await AdminAppointmentNotificationIntegrator.notifyAppointmentAccepted(
+          appointmentId: appointmentId,
+          petName: petName,
+          ownerName: ownerName,
+          appointmentDate: appointmentDate,
+          appointmentTime: appointmentTime,
+          serviceName: serviceName,
+        );
+      } catch (notificationError) {
+        print('⚠️ Failed to create admin notification for appointment acceptance: $notificationError');
+        // Don't fail the acceptance if notification fails
+      }
       
       return {
         'success': true,
@@ -610,12 +773,64 @@ class AppointmentService {
   /// Reject an appointment (change status to cancelled with reason)
   static Future<bool> rejectAppointment(String appointmentId, String cancelReason) async {
     try {
+      // Get appointment details first for notification
+      final appointmentDoc = await _firestore.collection(_collection).doc(appointmentId).get();
+      if (!appointmentDoc.exists) {
+        print('Appointment not found for rejection');
+        return false;
+      }
+
       await _firestore.collection(_collection).doc(appointmentId).update({
         'status': AppointmentModels.AppointmentStatus.cancelled.toString().split('.').last,
-        'cancelReason': cancelReason,
+        'cancelReason': 'Rejected by admin: $cancelReason',
         'cancelledAt': Timestamp.fromDate(DateTime.now()),
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
+
+      // Get appointment details for admin notification
+      try {
+        final appointmentData = appointmentDoc.data()!;
+        final petId = appointmentData['petId'] as String;
+        final userId = appointmentData['userId'] as String;
+        final serviceName = appointmentData['serviceName'] as String? ?? 'General Consultation';
+        final appointmentDate = (appointmentData['appointmentDate'] as Timestamp).toDate();
+        final appointmentTime = appointmentData['appointmentTime'] as String;
+        
+        // Get pet and user details for notification
+        final petDoc = await _firestore.collection('pets').doc(petId).get();
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        
+        String petName = 'Pet';
+        String ownerName = 'Pet Owner';
+        
+        if (petDoc.exists) {
+          final petData = petDoc.data()!;
+          petName = petData['name'] ?? petData['petName'] ?? 'Pet';
+        }
+        
+        if (userDoc.exists) {
+          final userData = userDoc.data()!;
+          ownerName = '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
+          if (ownerName.isEmpty) {
+            ownerName = userData['username'] ?? 'Pet Owner';
+          }
+        }
+        
+        // Trigger admin notification for rejection
+        await AdminAppointmentNotificationIntegrator.notifyAppointmentRejected(
+          appointmentId: appointmentId,
+          petName: petName,
+          ownerName: ownerName,
+          appointmentDate: appointmentDate,
+          appointmentTime: appointmentTime,
+          serviceName: serviceName,
+          rejectionReason: cancelReason,
+        );
+      } catch (notificationError) {
+        print('⚠️ Failed to create admin notification for appointment rejection: $notificationError');
+        // Don't fail the rejection if notification fails
+      }
+
       return true;
     } catch (e) {
       print('Error rejecting appointment: $e');

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
 import 'package:pawsense/core/models/clinic/appointment_models.dart' as AppointmentModels;
@@ -5,67 +6,85 @@ import 'package:pawsense/core/models/user/pet_model.dart' as UserModels;
 
 /// Paginated appointment service for efficient data loading
 class PaginatedAppointmentService {
-  static const int _pageSize = 10; // Load 10 appointments at a time for faster initial load
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Get paginated appointments for a clinic
+  /// Get paginated appointments for a clinic with page-based pagination
   static Future<PaginatedAppointmentResult> getClinicAppointmentsPaginated({
     required String clinicId,
     DocumentSnapshot? lastDocument,
     DateTime? startDate,
     DateTime? endDate,
     AppointmentStatus? status,
+    int page = 1,
+    int itemsPerPage = 10,
   }) async {
     try {
       Query query = _firestore
           .collection('appointments')
           .where('clinicId', isEqualTo: clinicId);
 
-      // Add date filters if provided
-      if (startDate != null) {
-        query = query.where('appointmentDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
-      }
-      if (endDate != null) {
-        query = query.where('appointmentDate',
-            isLessThanOrEqualTo: Timestamp.fromDate(endDate));
-      }
+  // Add date filters if provided - filter by booking creation date (createdAt / bookedAt)
+  // Normalize to start and end of day so UI date pickers behave as expected
+  if (startDate != null) {
+    // Set to start of day (00:00:00)
+    final normalizedStartDate = DateTime(startDate.year, startDate.month, startDate.day, 0, 0, 0);
+    query = query.where('createdAt',
+    isGreaterThanOrEqualTo: Timestamp.fromDate(normalizedStartDate));
+  }
+  if (endDate != null) {
+    // Set to end of day (23:59:59)
+    final normalizedEndDate = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+    query = query.where('createdAt',
+    isLessThanOrEqualTo: Timestamp.fromDate(normalizedEndDate));
+  }
 
       // Add status filter if provided
       if (status != null) {
         query = query.where('status', isEqualTo: status.toString().split('.').last);
       }
 
-      // Order by appointment date
-      query = query.orderBy('appointmentDate', descending: false);
+      // Order by created date descending (newest first)
+      query = query.orderBy('createdAt', descending: true);
 
-      // Pagination: start after last document if provided
-      if (lastDocument != null) {
-        query = query.startAfterDocument(lastDocument);
-      }
+      // Get total count for pagination info
+      final countSnapshot = await query.count().get();
+      final totalCount = countSnapshot.count ?? 0;
+      final totalPages = (totalCount / itemsPerPage).ceil();
 
-      // Limit to page size + 1 to check if there are more pages
-      query = query.limit(_pageSize + 1);
+      // Load enough documents to support pagination
+      // For small datasets, we can afford to load more and slice
+      final maxToLoad = math.min(totalCount, 500); // Cap at 500 for performance
+      query = query.limit(maxToLoad);
 
       final querySnapshot = await query.get();
       
-      // Check if there are more pages
-      final hasMore = querySnapshot.docs.length > _pageSize;
+      // Calculate pagination slice
+      final startIndex = (page - 1) * itemsPerPage;
+      final endIndex = math.min(startIndex + itemsPerPage, querySnapshot.docs.length);
       
-      // Take only the requested page size
-      final docs = hasMore 
-          ? querySnapshot.docs.sublist(0, _pageSize)
-          : querySnapshot.docs;
+      final docs = startIndex < querySnapshot.docs.length 
+          ? querySnapshot.docs.sublist(startIndex, endIndex)
+          : <QueryDocumentSnapshot>[];
+      
+      print('📊 Pagination Debug: page=$page, itemsPerPage=$itemsPerPage, totalDocs=${querySnapshot.docs.length}, showing=${docs.length}');
+      
+      // Check if there are more pages
+      final hasMore = page < totalPages;
       
       final appointments = <AppointmentModels.Appointment>[];
 
       // Convert bookings to appointments in parallel for faster loading
       final futures = docs.map((doc) async {
-        final booking = AppointmentBooking.fromMap(
-          doc.data() as Map<String, dynamic>, 
-          doc.id
-        );
-        return await _convertBookingToAppointment(booking);
+        final data = doc.data() as Map<String, dynamic>;
+        
+        // Check if this is a follow-up appointment with embedded data
+        if (data['pet'] != null && data['owner'] != null) {
+          return await _convertFollowUpAppointment(data, doc.id);
+        } else {
+          // Legacy booking format - fetch pet/owner separately
+          final booking = AppointmentBooking.fromMap(data, doc.id);
+          return await _convertBookingToAppointment(booking);
+        }
       });
 
       final results = await Future.wait(futures);
@@ -80,6 +99,9 @@ class PaginatedAppointmentService {
         appointments: appointments,
         lastDocument: docs.isNotEmpty ? docs.last : null,
         hasMore: hasMore,
+        totalCount: totalCount,
+        totalPages: totalPages,
+        currentPage: page,
       );
     } catch (e) {
       print('❌ Error getting paginated appointments: $e');
@@ -87,6 +109,9 @@ class PaginatedAppointmentService {
         appointments: [],
         lastDocument: null,
         hasMore: false,
+        totalCount: 0,
+        totalPages: 0,
+        currentPage: page,
       );
     }
   }
@@ -113,6 +138,25 @@ class PaginatedAppointmentService {
     }
   }
 
+  /// Get count of follow-up appointments for a clinic
+  static Future<int> getFollowUpAppointmentCount({
+    required String clinicId,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection('appointments')
+          .where('clinicId', isEqualTo: clinicId)
+          .where('isFollowUp', isEqualTo: true)
+          .count()
+          .get();
+      
+      return snapshot.count ?? 0;
+    } catch (e) {
+      print('❌ Error getting follow-up appointment count: $e');
+      return 0;
+    }
+  }
+
   /// Get appointment counts by status for a clinic (for status badges/summary)
   static Future<AppointmentStatusCounts> getAppointmentStatusCounts({
     required String clinicId,
@@ -124,6 +168,7 @@ class PaginatedAppointmentService {
         getAppointmentCount(clinicId: clinicId, status: AppointmentStatus.confirmed),
         getAppointmentCount(clinicId: clinicId, status: AppointmentStatus.completed),
         getAppointmentCount(clinicId: clinicId, status: AppointmentStatus.cancelled),
+        getFollowUpAppointmentCount(clinicId: clinicId),
       ]);
 
       return AppointmentStatusCounts(
@@ -131,6 +176,7 @@ class PaginatedAppointmentService {
         confirmedCount: futures[1],
         completedCount: futures[2],
         cancelledCount: futures[3],
+        followUpCount: futures[4],
       );
     } catch (e) {
       print('❌ Error getting appointment status counts: $e');
@@ -139,7 +185,97 @@ class PaginatedAppointmentService {
         confirmedCount: 0,
         completedCount: 0,
         cancelledCount: 0,
+        followUpCount: 0,
       );
+    }
+  }
+
+  /// Convert follow-up appointment with embedded data to Appointment for display
+  static Future<AppointmentModels.Appointment?> _convertFollowUpAppointment(
+      Map<String, dynamic> data, String documentId) async {
+    try {
+      // Helper function to safely convert Timestamp to DateTime
+      DateTime _safeTimestampToDate(dynamic value, DateTime defaultValue) {
+        if (value == null) return defaultValue;
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return defaultValue;
+      }
+
+      // Helper function for nullable DateTime
+      DateTime? _safeTimestampToDateNullable(dynamic value) {
+        if (value == null) return null;
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return null;
+      }
+
+      final now = DateTime.now();
+      
+      // Extract embedded pet data
+      final petData = data['pet'] as Map<String, dynamic>? ?? {};
+      final pet = AppointmentModels.Pet(
+        id: petData['id'] ?? '',
+        name: petData['name'] ?? 'Unknown Pet',
+        type: petData['type'] ?? 'Unknown',
+        emoji: petData['emoji'] ?? _getPetEmoji(petData['type'] ?? ''),
+        breed: petData['breed'] ?? 'Unknown',
+        age: petData['age'] ?? 0,
+        imageUrl: petData['imageUrl'],
+      );
+
+      // Extract embedded owner data
+      final ownerData = data['owner'] as Map<String, dynamic>? ?? {};
+      final owner = AppointmentModels.Owner(
+        id: ownerData['id'] ?? '',
+        name: ownerData['name'] ?? 'Unknown Owner',
+        phone: ownerData['phone'] ?? 'N/A',
+        email: ownerData['email'] ?? 'N/A',
+      );
+
+      // Parse time slot or create from time
+      final timeSlot = data['timeSlot'] ?? _createTimeSlot(data['time'] ?? '');
+
+      // Parse status (convert string to AppointmentModels.AppointmentStatus)
+      AppointmentModels.AppointmentStatus status;
+      if (data['status'] != null) {
+        try {
+          final statusStr = data['status'].toString();
+          status = AppointmentModels.AppointmentStatus.values.firstWhere(
+            (e) => e.name == statusStr,
+            orElse: () => AppointmentModels.AppointmentStatus.pending,
+          );
+        } catch (e) {
+          status = AppointmentModels.AppointmentStatus.pending;
+        }
+      } else {
+        status = AppointmentModels.AppointmentStatus.pending;
+      }
+
+      final appointment = AppointmentModels.Appointment(
+        id: documentId,
+        clinicId: data['clinicId'] ?? '',
+        date: data['date'] ?? '',
+        time: data['time'] ?? '',
+        timeSlot: timeSlot,
+        pet: pet,
+        diseaseReason: data['diseaseReason'] ?? 'N/A',
+        owner: owner,
+        status: status,
+        createdAt: _safeTimestampToDate(data['createdAt'], now),
+        updatedAt: _safeTimestampToDate(data['updatedAt'], now),
+        cancelReason: data['cancelReason'],
+        cancelledAt: _safeTimestampToDateNullable(data['cancelledAt']),
+        assessmentResultId: data['assessmentResultId'],
+        isFollowUp: data['isFollowUp'] == true,
+        previousAppointmentId: data['previousAppointmentId'],
+        notes: data['notes'],
+      );
+
+      return appointment;
+    } catch (e) {
+      print('❌ Error converting follow-up appointment to display model: $e');
+      return null;
     }
   }
 
@@ -330,11 +466,17 @@ class PaginatedAppointmentResult {
   final List<AppointmentModels.Appointment> appointments;
   final DocumentSnapshot? lastDocument;
   final bool hasMore;
+  final int? totalCount;
+  final int? totalPages;
+  final int? currentPage;
 
   PaginatedAppointmentResult({
     required this.appointments,
     required this.lastDocument,
     required this.hasMore,
+    this.totalCount,
+    this.totalPages,
+    this.currentPage,
   });
 }
 
@@ -344,12 +486,14 @@ class AppointmentStatusCounts {
   final int confirmedCount;
   final int completedCount;
   final int cancelledCount;
+  final int followUpCount;
 
   AppointmentStatusCounts({
     required this.pendingCount,
     required this.confirmedCount,
     required this.completedCount,
     required this.cancelledCount,
+    this.followUpCount = 0,
   });
 
   /// Get total count of all appointments
@@ -357,6 +501,6 @@ class AppointmentStatusCounts {
 
   @override
   String toString() {
-    return 'AppointmentStatusCounts(pending: $pendingCount, confirmed: $confirmedCount, completed: $completedCount, cancelled: $cancelledCount, total: $totalCount)';
+    return 'AppointmentStatusCounts(pending: $pendingCount, confirmed: $confirmedCount, completed: $completedCount, cancelled: $cancelledCount, followUp: $followUpCount, total: $totalCount)';
   }
 }

@@ -26,6 +26,7 @@ class _AddServiceModalState extends State<AddServiceModal> {
   
   ServiceCategory _selectedCategory = ServiceCategory.consultation;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -66,6 +67,7 @@ class _AddServiceModalState extends State<AddServiceModal> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null; // Clear previous errors
     });
 
     try {
@@ -83,6 +85,7 @@ class _AddServiceModalState extends State<AddServiceModal> {
         widget.onServiceAdded();
         if (mounted) {
           Navigator.of(context).pop();
+          // Show success message on parent screen after modal closes
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Service added successfully!'),
@@ -92,25 +95,21 @@ class _AddServiceModalState extends State<AddServiceModal> {
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to add service'),
-              backgroundColor: AppColors.error,
-            ),
-          );
+          setState(() {
+            _errorMessage = 'Failed to add service. Please try again.';
+            _isLoading = false;
+          });
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() {
+          _errorMessage = 'Error: $e';
+          _isLoading = false;
+        });
       }
     } finally {
-      if (mounted) {
+      if (mounted && _errorMessage == null) {
         setState(() {
           _isLoading = false;
         });
@@ -182,6 +181,40 @@ class _AddServiceModalState extends State<AddServiceModal> {
             ),
             SizedBox(height: kSpacingLarge),
 
+            // Error Banner
+            if (_errorMessage != null)
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(kSpacingMedium),
+                margin: EdgeInsets.only(bottom: kSpacingMedium),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(kBorderRadiusSmall),
+                  border: Border.all(color: AppColors.error),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                    SizedBox(width: kSpacingSmall),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontSize: kFontSizeSmall,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 18, color: AppColors.error),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      onPressed: () => setState(() => _errorMessage = null),
+                    ),
+                  ],
+                ),
+              ),
+
             // Form
             Form(
               key: _formKey,
@@ -240,7 +273,9 @@ class _AddServiceModalState extends State<AddServiceModal> {
                   SizedBox(height: kSpacingSmall),
                   TextFormField(
                     controller: _descriptionController,
-                    maxLines: 3,
+                    maxLines: 6,
+                    maxLength: 300,
+                    onChanged: (value) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: 'Describe the service...',
                       border: OutlineInputBorder(
@@ -260,6 +295,9 @@ class _AddServiceModalState extends State<AddServiceModal> {
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Please enter a description';
+                      }
+                      if (value.length > 300) {
+                        return 'Description cannot exceed 300 characters';
                       }
                       return null;
                     },
@@ -340,9 +378,9 @@ class _AddServiceModalState extends State<AddServiceModal> {
                             SizedBox(height: kSpacingSmall),
                             TextFormField(
                               controller: _priceController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              keyboardType: TextInputType.number,
                               inputFormatters: [
-                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                                FilteringTextInputFormatter.digitsOnly, // Only allow digits (integers)
                               ],
                               decoration: InputDecoration(
                                 hintText: '0',
@@ -372,9 +410,9 @@ class _AddServiceModalState extends State<AddServiceModal> {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Required';
                                 }
-                                final number = double.tryParse(value.trim());
+                                final number = int.tryParse(value.trim());
                                 if (number == null || number < 0) {
-                                  return 'Must be a valid number';
+                                  return 'Must be a valid integer';
                                 }
                                 return null;
                               },

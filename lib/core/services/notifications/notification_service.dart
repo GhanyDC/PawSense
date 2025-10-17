@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/models/notifications/notification_model.dart';
+import 'package:pawsense/core/utils/app_logger.dart';
 
 class NotificationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,13 +19,13 @@ class NotificationService {
   /// Trigger an immediate update of notification streams
   static void triggerUpdate() {
     _updateController.add(true);
-    print('🚀 Triggered notification update');
+    AppLogger.notification('Triggered notification update');
   }
   
   /// Add notification to local read cache
   static void _addToReadCache(String notificationId) {
     _localReadCache.add(notificationId);
-    print('📝 Added to read cache: $notificationId');
+    AppLogger.notification('Added to read cache: $notificationId');
   }
   
   /// Check if notification is in local read cache
@@ -35,25 +36,19 @@ class NotificationService {
   /// Remove notification from local read cache
   static void _removeFromReadCache(String notificationId) {
     _localReadCache.remove(notificationId);
-    print('🗑️ Removed from read cache: $notificationId');
+    AppLogger.notification('Removed from read cache: $notificationId');
   }
 
   /// Clear all read cache (useful for testing or when notifications are updated externally)
   static void clearReadCache() {
     _localReadCache.clear();
-    print('🧹 Cleared all read cache');
+    AppLogger.notification('Cleared all read cache');
   }
 
   /// Update the appointment notification cache when real notifications are created/updated
   static void _updateAppointmentCache(String userId, String appointmentId, bool hasRealNotification) {
     final cacheKey = '${userId}_$appointmentId';
     _appointmentNotificationCache[cacheKey] = hasRealNotification;
-  }
-
-  /// Clear appointment notification cache (useful when appointments are deleted)
-  static void _clearAppointmentCache(String userId, String appointmentId) {
-    final cacheKey = '${userId}_$appointmentId';
-    _appointmentNotificationCache.remove(cacheKey);
   }
 
   /// Get user notifications stream
@@ -145,8 +140,8 @@ class NotificationService {
         // Initial update
         updateCount();
         
-        // MINIMAL FIX: Only change 500ms to 5 seconds to reduce Firebase reads
-        periodicSub = Stream.periodic(const Duration(seconds: 5))
+        // OPTIMIZED: Reduce frequency to 60 seconds to prevent database spam
+        periodicSub = Stream.periodic(const Duration(seconds: 60))
             .listen((_) => updateCount());
         
         // Immediate updates when triggered
@@ -539,7 +534,7 @@ class NotificationService {
                 category: NotificationCategory.message,
                 priority: NotificationPriority.medium,
                 isRead: false,
-                actionUrl: '/messages/${conversationId}',
+                actionUrl: '/messaging',
                 actionLabel: 'Read Messages',
                 createdAt: lastMessageTime,
                 metadata: {
@@ -681,8 +676,8 @@ class NotificationService {
 
       combinedController = StreamController<bool>(
         onListen: () {
-          // Start periodic updates
-          periodicSub = Stream.periodic(const Duration(seconds: 5))
+          // OPTIMIZED: Start periodic updates less frequently
+          periodicSub = Stream.periodic(const Duration(seconds: 60))
               .listen((_) => combinedController.add(true));
           
           // Listen to manual triggers

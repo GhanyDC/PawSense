@@ -6,6 +6,7 @@ import 'package:pawsense/core/config/firebase_options.dart';
 import 'package:pawsense/core/config/app_router.dart';
 import 'package:pawsense/core/services/shared/data_service.dart';
 import 'package:pawsense/core/services/notifications/appointment_reminder_service.dart';
+import 'package:pawsense/core/widgets/shared/global_notification_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,13 +31,15 @@ class PawSenseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      debugShowCheckedModeBanner: false,
-      title: 'PawSense - Your Pet Care Companion',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
-      routerConfig: AppRouter.router,
+    return GlobalNotificationWrapper(
+      child: MaterialApp.router(
+        debugShowCheckedModeBanner: false,
+        title: 'PawSense - Your Pet Care Companion',
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.light, // Always use light mode
+        routerConfig: AppRouter.router,
+      ),
     );
   }
 } 

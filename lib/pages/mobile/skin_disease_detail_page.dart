@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
+import 'package:pawsense/core/widgets/shared/ui/scroll_to_top_fab.dart';
 import 'package:go_router/go_router.dart';
 
 /// Skin Disease Detail Page (Mobile/User)
@@ -51,6 +52,11 @@ class _SkinDiseaseDetailPageState extends State<SkinDiseaseDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: ScrollToTopFab(
+        scrollController: _scrollController,
+        showThreshold: 250.0, // Higher threshold since this is a detail page
+        tooltip: 'Scroll to top',
+      ),
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [

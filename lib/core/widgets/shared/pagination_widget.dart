@@ -22,8 +22,15 @@ class PaginationWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (totalPages <= 1) return const SizedBox();
 
-    return Container(
-      padding: EdgeInsets.all(kSpacingMedium),
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.78, // Limit to 80% of screen width
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: kSpacingMedium,
+          vertical: kSpacingMedium,
+        ),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(kBorderRadius),
@@ -106,16 +113,17 @@ class PaginationWidget extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 
   int _getStartItem() {
-    const itemsPerPage = 5; // Fixed at 5 items per page
+    const itemsPerPage = 10; // Updated to 10 items per page
     return ((currentPage - 1) * itemsPerPage) + 1;
   }
 
   int _getEndItem() {
-    const itemsPerPage = 5; // Fixed at 5 items per page
+    const itemsPerPage = 10; // Updated to 10 items per page
     final endItem = currentPage * itemsPerPage;
     return endItem > totalItems ? totalItems : endItem;
   }

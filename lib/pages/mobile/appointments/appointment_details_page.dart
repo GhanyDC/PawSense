@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
@@ -8,6 +9,7 @@ import 'package:pawsense/core/services/user/pet_service.dart';
 import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
 import 'package:pawsense/core/models/user/pet_model.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
+import 'package:pawsense/core/widgets/shared/rating/rate_clinic_modal.dart';
 
 class AppointmentDetailsPage extends StatefulWidget {
   final String appointmentId;
@@ -125,6 +127,7 @@ class _AppointmentDetailsPageState extends State<AppointmentDetailsPage> {
       appBar: AppBar(
         backgroundColor: AppColors.white,
         elevation: 0,
+        centerTitle: true,
         title: const Text(
           'Appointment Details',
           style: TextStyle(
@@ -197,115 +200,107 @@ class _AppointmentDetailsPageState extends State<AppointmentDetailsPage> {
     final appointment = _appointment!;
     
     return SingleChildScrollView(
-      padding: kMobileMarginContainer,
+      padding: const EdgeInsets.all(kMobilePaddingLarge),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Status Header Card
-          _buildStatusHeader(appointment),
-          const SizedBox(height: kMobileSizedBoxLarge),
+          // Status Section
+          _buildStatusSection(appointment),
           
-          // Appointment Info Card
-          _buildAppointmentInfoCard(appointment),
-          const SizedBox(height: kMobileSizedBoxLarge),
+          const SizedBox(height: kMobileSizedBoxXLarge),
           
-          // Pet Info Card
+          // Pet Information
           if (_pet != null) ...[
-            _buildPetInfoCard(_pet!),
-            const SizedBox(height: kMobileSizedBoxLarge),
+            _buildPetInfoSection(_pet!),
+            const SizedBox(height: kMobileSizedBoxXLarge),
           ],
           
-          // Clinic Info Card
+          // Appointment Information
+          _buildAppointmentInfoSection(appointment),
+          
+          const SizedBox(height: kMobileSizedBoxXLarge),
+          
+          // Clinic Information
           if (_clinic != null) ...[
-            _buildClinicInfoCard(_clinic!),
-            const SizedBox(height: kMobileSizedBoxLarge),
+            _buildClinicInfoSection(_clinic!),
+            const SizedBox(height: kMobileSizedBoxXLarge),
           ],
           
-          // Service Details Card
-          _buildServiceDetailsCard(appointment),
-          const SizedBox(height: kMobileSizedBoxLarge),
-          
-          // Notes Card (if any)
+          // Notes (if any)
           if (appointment.notes.isNotEmpty) ...[
-            _buildNotesCard(appointment),
-            const SizedBox(height: kMobileSizedBoxLarge),
+            _buildNotesSection(appointment),
+            const SizedBox(height: kMobileSizedBoxXLarge),
           ],
           
-          // Action Buttons
-          _buildActionButtons(appointment),
+          // Clinic Evaluation (only for completed appointments)
+          if (appointment.status == AppointmentStatus.completed) ...[
+            _buildClinicEvaluationSection(appointment),
+            const SizedBox(height: kMobileSizedBoxXLarge),
+          ],
+          
+          // Rate Clinic button (only for completed appointments that haven't been rated)
+          if (appointment.status == AppointmentStatus.completed && 
+              appointment.hasRated != true) ...[
+            _buildRateClinicButton(appointment),
+            const SizedBox(height: kMobileSizedBoxXLarge),
+          ],
+          
+          // Cancel button (only for pending/confirmed appointments)
+          if (appointment.status == AppointmentStatus.pending ||
+              appointment.status == AppointmentStatus.confirmed) ...[
+            _buildCancelButton(appointment),
+            const SizedBox(height: kMobileSizedBoxXLarge),
+          ],
+          
+          // Additional spacing for safe area
+          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildStatusHeader(AppointmentBooking appointment) {
-    final status = appointment.status;
-    Color statusColor;
-    Color backgroundColor;
-    IconData statusIcon;
-    
-    switch (status) {
-      case AppointmentStatus.pending:
-        statusColor = AppColors.warning;
-        backgroundColor = AppColors.warning.withValues(alpha: 0.1);
-        statusIcon = Icons.schedule;
-        break;
-      case AppointmentStatus.confirmed:
-        statusColor = AppColors.success;
-        backgroundColor = AppColors.success.withValues(alpha: 0.1);
-        statusIcon = Icons.check_circle;
-        break;
-      case AppointmentStatus.completed:
-        statusColor = AppColors.info;
-        backgroundColor = AppColors.info.withValues(alpha: 0.1);
-        statusIcon = Icons.task_alt;
-        break;
-      case AppointmentStatus.cancelled:
-        statusColor = AppColors.error;
-        backgroundColor = AppColors.error.withValues(alpha: 0.1);
-        statusIcon = Icons.cancel;
-        break;
-      default:
-        statusColor = AppColors.textSecondary;
-        backgroundColor = AppColors.textSecondary.withValues(alpha: 0.1);
-        statusIcon = Icons.help_outline;
-    }
-    
+  Widget _buildStatusSection(AppointmentBooking appointment) {
     return Container(
-      width: double.infinity,
-      padding: kMobilePaddingCard,
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
       decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: kMobileBorderRadiusCardPreset,
+        color: _getStatusColor(appointment.status).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
         border: Border.all(
-          color: statusColor.withValues(alpha: 0.3),
-          width: 1,
+          color: _getStatusColor(appointment.status).withValues(alpha: 0.3),
         ),
       ),
       child: Row(
         children: [
-          Icon(
-            statusIcon,
-            color: statusColor,
-            size: 24,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _getStatusColor(appointment.status).withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _getStatusIcon(appointment.status),
+              color: _getStatusColor(appointment.status),
+              size: 20,
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: kMobileSizedBoxMedium),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Status: ${status.name.toUpperCase()}',
+                  _getStatusTitle(appointment.status),
                   style: kMobileTextStyleTitle.copyWith(
-                    color: statusColor,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
+                    color: _getStatusColor(appointment.status),
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
-                  _getStatusDescription(status),
+                  _getStatusDescriptionDetailed(appointment.status),
                   style: kMobileTextStyleSubtitle.copyWith(
-                    color: statusColor.withValues(alpha: 0.8),
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -316,361 +311,511 @@ class _AppointmentDetailsPageState extends State<AppointmentDetailsPage> {
     );
   }
 
-  Widget _buildAppointmentInfoCard(AppointmentBooking appointment) {
+  Widget _buildPetInfoSection(Pet pet) {
     return Container(
-      width: double.infinity,
-      padding: kMobilePaddingCard,
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: kMobileBorderRadiusCardPreset,
-        boxShadow: kMobileCardShadow,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Appointment Information',
-            style: kMobileTextStyleTitle.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: kMobileSizedBoxMedium),
-          
-          _buildInfoRow(
-            icon: Icons.calendar_today,
-            label: 'Date',
-            value: '${appointment.appointmentDate.day}/${appointment.appointmentDate.month}/${appointment.appointmentDate.year}',
-          ),
-          const SizedBox(height: kMobileSizedBoxSmall),
-          
-          _buildInfoRow(
-            icon: Icons.access_time,
-            label: 'Time',
-            value: appointment.appointmentTime,
-          ),
-          const SizedBox(height: kMobileSizedBoxSmall),
-          
-          _buildInfoRow(
-            icon: Icons.schedule,
-            label: 'Created',
-            value: _formatDateTime(appointment.createdAt),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPetInfoCard(Pet pet) {
-    return Container(
-      width: double.infinity,
-      padding: kMobilePaddingCard,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: kMobileBorderRadiusCardPreset,
-        boxShadow: kMobileCardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Pet Information',
-            style: kMobileTextStyleTitle.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: kMobileSizedBoxMedium),
-          
           Row(
             children: [
-              // Pet avatar
               Container(
-                width: 50,
-                height: 50,
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
                   color: AppColors.primary.withValues(alpha: 0.1),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.2),
-                  ),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: pet.imageUrl != null && pet.imageUrl!.isNotEmpty
-                    ? ClipOval(
-                        child: Image.network(
-                          pet.imageUrl!,
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(
-                              Icons.pets,
-                              color: AppColors.primary,
-                              size: 24,
-                            );
-                          },
-                        ),
-                      )
-                    : Icon(
-                        Icons.pets,
-                        color: AppColors.primary,
-                        size: 24,
-                      ),
+                child: Icon(
+                  Icons.pets,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: kMobileSizedBoxMedium),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      pet.petName,
-                      style: kMobileTextStyleTitle.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${pet.petType} • ${pet.breed}',
-                      style: kMobileTextStyleSubtitle.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      '${pet.age} years old',
-                      style: kMobileTextStyleSubtitle.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'Pet Information',
+                  style: kMobileTextStyleTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: kMobileSizedBoxMedium),
+          _buildModalInfoRow('Pet Name', pet.petName),
+          _buildModalInfoRow('Species', pet.petType),
+          _buildModalInfoRow('Breed', pet.breed),
+          _buildModalInfoRow('Age', pet.ageString),
+          _buildModalInfoRow('Weight', '${pet.weight} kg'),
         ],
       ),
     );
   }
 
-  Widget _buildClinicInfoCard(Map<String, dynamic> clinic) {
+  Widget _buildAppointmentInfoSection(AppointmentBooking appointment) {
     return Container(
-      width: double.infinity,
-      padding: kMobilePaddingCard,
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: kMobileBorderRadiusCardPreset,
-        boxShadow: kMobileCardShadow,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Clinic Information',
-            style: kMobileTextStyleTitle.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.event_note,
+                  color: AppColors.info,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: kMobileSizedBoxMedium),
+              Expanded(
+                child: Text(
+                  'Appointment Information',
+                  style: kMobileTextStyleTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: kMobileSizedBoxMedium),
-          
-          _buildInfoRow(
-            icon: Icons.local_hospital,
-            label: 'Name',
-            value: clinic['name'] ?? 'Unknown Clinic',
-          ),
-          const SizedBox(height: kMobileSizedBoxSmall),
-          
-          if (clinic['address'] != null) ...[
-            _buildInfoRow(
-              icon: Icons.location_on,
-              label: 'Address',
-              value: clinic['address'],
-            ),
-            const SizedBox(height: kMobileSizedBoxSmall),
-          ],
-          
-          if (clinic['phone'] != null) ...[
-            _buildInfoRow(
-              icon: Icons.phone,
-              label: 'Phone',
-              value: clinic['phone'],
-            ),
-          ],
+          _buildModalInfoRow('Service', appointment.serviceName),
+          _buildModalInfoRow('Date', _formatDate(appointment.appointmentDate)),
+          _buildModalInfoRow('Time', appointment.appointmentTime),
+          _buildModalInfoRow('Type', _formatAppointmentType(appointment.type)),
+          if (appointment.duration != null)
+            _buildModalInfoRow('Duration', appointment.duration!),
+          if (appointment.estimatedPrice != null)
+            _buildModalInfoRow('Estimated Price', 'PHP ${appointment.estimatedPrice!.toStringAsFixed(2)}'),
+          _buildModalInfoRow('Booked On', _formatDateTime(appointment.createdAt)),
         ],
       ),
     );
   }
 
-  Widget _buildServiceDetailsCard(AppointmentBooking appointment) {
+  Widget _buildClinicInfoSection(Map<String, dynamic> clinic) {
     return Container(
-      width: double.infinity,
-      padding: kMobilePaddingCard,
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: kMobileBorderRadiusCardPreset,
-        boxShadow: kMobileCardShadow,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Service Details',
-            style: kMobileTextStyleTitle.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.local_hospital,
+                  color: AppColors.success,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: kMobileSizedBoxMedium),
+              Expanded(
+                child: Text(
+                  'Clinic Information',
+                  style: kMobileTextStyleTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: kMobileSizedBoxMedium),
-          
-          _buildInfoRow(
-            icon: Icons.medical_services,
-            label: 'Service',
-            value: appointment.serviceName,
-          ),
-          const SizedBox(height: kMobileSizedBoxSmall),
-          
-          if (appointment.duration != null) ...[
-            _buildInfoRow(
-              icon: Icons.timer,
-              label: 'Duration',
-              value: appointment.duration!,
-            ),
-            const SizedBox(height: kMobileSizedBoxSmall),
-          ],
-          
-          if (appointment.estimatedPrice != null) ...[
-            _buildInfoRow(
-              icon: Icons.attach_money,
-              label: 'Estimated Price',
-              value: '\$${appointment.estimatedPrice!.toStringAsFixed(2)}',
-            ),
-          ],
+          _buildModalInfoRow('Clinic Name', clinic['name'] ?? 'Unknown Clinic'),
+          if (clinic['address'] != null)
+            _buildModalInfoRow('Address', clinic['address']),
+          if (clinic['phone'] != null)
+            _buildModalInfoRow('Phone', clinic['phone']),
+          if (clinic['email'] != null)
+            _buildModalInfoRow('Email', clinic['email']),
         ],
       ),
     );
   }
 
-  Widget _buildNotesCard(AppointmentBooking appointment) {
+  Widget _buildNotesSection(AppointmentBooking appointment) {
     return Container(
-      width: double.infinity,
-      padding: kMobilePaddingCard,
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: kMobileBorderRadiusCardPreset,
-        boxShadow: kMobileCardShadow,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Additional Notes',
-            style: kMobileTextStyleTitle.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.note_outlined,
+                  color: AppColors.warning,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: kMobileSizedBoxMedium),
+              Expanded(
+                child: Text(
+                  'Notes',
+                  style: kMobileTextStyleTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: kMobileSizedBoxMedium),
-          Text(
-            appointment.notes,
-            style: kMobileTextStyleSubtitle.copyWith(
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(AppointmentBooking appointment) {
-    return Column(
-      children: [
-        // Cancel button (only for pending/confirmed appointments)
-        if (appointment.status == AppointmentStatus.pending ||
-            appointment.status == AppointmentStatus.confirmed) ...[
-          SizedBox(
+          Container(
             width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _showCancelDialog(appointment),
-              icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Cancel Appointment'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: BorderSide(color: AppColors.error),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              appointment.notes,
+              style: kMobileTextStyleSubtitle.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 13,
               ),
             ),
           ),
-          const SizedBox(height: kMobileSizedBoxMedium),
         ],
-        
-        // Back to appointments button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () => context.go('/home?tab=history'),
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Back to Appointments'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildInfoRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 16,
-          color: AppColors.primary,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$label:',
-          style: kMobileTextStyleSubtitle.copyWith(
-            fontWeight: FontWeight.w500,
-            color: AppColors.textSecondary,
+  Widget _buildClinicEvaluationSection(AppointmentBooking appointment) {
+    // Check if there's any evaluation data to display
+    final hasEvaluation = (appointment.diagnosis?.isNotEmpty ?? false) ||
+                         (appointment.treatment?.isNotEmpty ?? false) ||
+                         (appointment.prescription?.isNotEmpty ?? false) ||
+                         (appointment.clinicNotes?.isNotEmpty ?? false);
+
+    if (!hasEvaluation) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(kMobilePaddingMedium),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusCard),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.medical_information_outlined,
+                  color: AppColors.success,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: kMobileSizedBoxMedium),
+              Expanded(
+                child: Text(
+                  'Clinic Evaluation',
+                  style: kMobileTextStyleTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: kMobileTextStyleSubtitle.copyWith(
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-      ],
+          const SizedBox(height: kMobileSizedBoxMedium),
+          
+          // Diagnosis
+          if (appointment.diagnosis?.isNotEmpty ?? false)
+            _buildModalInfoRow('Diagnosis', appointment.diagnosis!),
+          
+          // Treatment
+          if (appointment.treatment?.isNotEmpty ?? false)
+            _buildModalInfoRow('Treatment', appointment.treatment!),
+          
+          // Prescription
+          if (appointment.prescription?.isNotEmpty ?? false)
+            _buildModalInfoRow('Prescription', appointment.prescription!),
+          
+          // Clinic Notes
+          if (appointment.clinicNotes?.isNotEmpty ?? false)
+            _buildModalInfoRow('Clinical Notes', appointment.clinicNotes!),
+        ],
+      ),
     );
   }
 
-  String _getStatusDescription(AppointmentStatus status) {
+  Widget _buildCancelButton(AppointmentBooking appointment) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _showCancelDialog(appointment),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.error,
+          foregroundColor: AppColors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(kMobileBorderRadiusButton),
+          ),
+        ),
+        icon: const Icon(Icons.cancel_outlined),
+        label: const Text(
+          'Cancel Appointment',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRateClinicButton(AppointmentBooking appointment) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _showRateClinicModal(appointment),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(kMobileBorderRadiusButton),
+          ),
+        ),
+        icon: const Icon(Icons.star_outline),
+        label: const Text(
+          'Rate This Clinic',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showRateClinicModal(AppointmentBooking appointment) async {
+    // Get current user
+    final currentUser = await AuthGuard.getCurrentUser();
+    if (currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User not found. Please log in again.')),
+        );
+      }
+      return;
+    }
+
+    // Get clinic name - fetch from Firestore if not available in state
+    String clinicName = 'Unknown Clinic';
+    if (_clinic != null && _clinic!['clinicName'] != null) {
+      clinicName = _clinic!['clinicName'] as String;
+    } else {
+      try {
+        // Fetch clinic name from Firestore
+        final clinicDoc = await FirebaseFirestore.instance
+            .collection('clinics')
+            .doc(appointment.clinicId)
+            .get();
+        if (clinicDoc.exists && clinicDoc.data()?['clinicName'] != null) {
+          clinicName = clinicDoc.data()!['clinicName'] as String;
+        }
+      } catch (e) {
+        print('Error fetching clinic name: $e');
+      }
+    }
+
+    // Show rating modal
+    final rated = await RateClinicModal.show(
+      context: context,
+      clinicId: appointment.clinicId,
+      clinicName: clinicName,
+      userId: currentUser.uid,
+      appointmentId: appointment.id!,
+    );
+
+    // Refresh appointment if rating was submitted
+    if (rated == true && mounted) {
+      setState(() {
+        _appointment = appointment.copyWith(hasRated: true);
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thank you for rating this clinic!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
+
+  Widget _buildModalInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: kMobileTextStyleSubtitle.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: kMobileTextStyleSubtitle.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${_formatDate(date)} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatAppointmentType(AppointmentType type) {
+    switch (type) {
+      case AppointmentType.general:
+        return 'General Checkup';
+      case AppointmentType.emergency:
+        return 'Emergency';
+      case AppointmentType.followUp:
+        return 'Follow-up';
+      case AppointmentType.vaccination:
+        return 'Vaccination';
+      case AppointmentType.surgery:
+        return 'Surgery';
+      case AppointmentType.consultation:
+        return 'Consultation';
+    }
+  }
+
+  Color _getStatusColor(AppointmentStatus status) {
     switch (status) {
       case AppointmentStatus.pending:
-        return 'Your appointment is being reviewed';
+        return AppColors.warning;
+      case AppointmentStatus.confirmed:
+        return AppColors.success;
+      case AppointmentStatus.completed:
+        return AppColors.info;
+      case AppointmentStatus.cancelled:
+      case AppointmentStatus.rescheduled:
+        return AppColors.error;
+    }
+  }
+
+  IconData _getStatusIcon(AppointmentStatus status) {
+    switch (status) {
+      case AppointmentStatus.pending:
+        return Icons.schedule;
+      case AppointmentStatus.confirmed:
+        return Icons.check_circle_outline;
+      case AppointmentStatus.completed:
+        return Icons.task_alt;
+      case AppointmentStatus.cancelled:
+      case AppointmentStatus.rescheduled:
+        return Icons.cancel_outlined;
+    }
+  }
+
+  String _getStatusTitle(AppointmentStatus status) {
+    switch (status) {
+      case AppointmentStatus.pending:
+        return 'Pending Approval';
+      case AppointmentStatus.confirmed:
+        return 'Confirmed';
+      case AppointmentStatus.completed:
+        return 'Completed';
+      case AppointmentStatus.cancelled:
+        return 'Cancelled';
+      case AppointmentStatus.rescheduled:
+        return 'Rescheduled';
+    }
+  }
+
+  String _getStatusDescriptionDetailed(AppointmentStatus status) {
+    switch (status) {
+      case AppointmentStatus.pending:
+        return 'Waiting for clinic confirmation';
       case AppointmentStatus.confirmed:
         return 'Your appointment is confirmed';
       case AppointmentStatus.completed:
         return 'This appointment has been completed';
       case AppointmentStatus.cancelled:
         return 'This appointment was cancelled';
-      default:
-        return 'Status unknown';
+      case AppointmentStatus.rescheduled:
+        return 'This appointment was rescheduled';
     }
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   void _showCancelDialog(AppointmentBooking appointment) {

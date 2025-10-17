@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import '../../../core/services/auth/auth_service_mobile.dart';
@@ -96,6 +97,93 @@ class _SignUpPageState extends State<SignUpPage>
     super.dispose();
   }
 
+  String? _validateField(String keyName, String value) {
+    switch (keyName) {
+      case 'firstName':
+        return nameValidator(value.trim(), 'First name');
+      case 'lastName':
+        return nameValidator(value.trim(), 'Last name');
+      case 'email':
+        return emailValidator(value.trim());
+      case 'phone':
+        return phoneValidator(value.trim());
+      case 'address':
+        return addressValidator(value.trim());
+      case 'password':
+        // Also validate confirm password when password changes
+        if (_confirmPasswordController.text.isNotEmpty) {
+          _fieldErrors['confirmPassword'] = confirmPasswordValidator(
+            _confirmPasswordController.text.trim(), 
+            value.trim()
+          );
+        }
+        // Don't return error text for password field - we'll show requirements instead
+        return null;
+      case 'confirmPassword':
+        return confirmPasswordValidator(value.trim(), _passwordController.text.trim());
+      default:
+        return null;
+    }
+  }
+
+  Map<String, bool> _getPasswordRequirements(String password) {
+    return {
+      'lowercase': RegExp(r'[a-z]').hasMatch(password),
+      'uppercase': RegExp(r'[A-Z]').hasMatch(password),
+      'number': RegExp(r'[0-9]').hasMatch(password),
+      'minLength': password.length >= 8,
+    };
+  }
+
+  Widget _buildPasswordRequirements() {
+    final password = _passwordController.text;
+    final requirements = _getPasswordRequirements(password);
+    
+    if (password.isEmpty) return SizedBox.shrink();
+    
+    return Container(
+      margin: EdgeInsets.only(top: 8),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildRequirementItem('A lowercase letter', requirements['lowercase']!),
+          SizedBox(height: 4),
+          _buildRequirementItem('A capital (uppercase) letter', requirements['uppercase']!),
+          SizedBox(height: 4),
+          _buildRequirementItem('A number', requirements['number']!),
+          SizedBox(height: 4),
+          _buildRequirementItem('Minimum 8 characters', requirements['minLength']!),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementItem(String text, bool isMet) {
+    return Row(
+      children: [
+        Icon(
+          isMet ? Icons.check : Icons.close,
+          color: isMet ? Colors.green : Colors.red,
+          size: 16,
+        ),
+        SizedBox(width: 8),
+        Text(
+          text,
+          style: kTextStyleSmall.copyWith(
+            color: isMet ? Colors.green : Colors.red,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _handleSignup() async {
     // Close any existing snackbar to prevent stacking
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -107,15 +195,15 @@ class _SignUpPageState extends State<SignUpPage>
     bool hasError = false;
     List<String> errorMessages = [];
 
-    // Validate fields using validators
-    String? firstNameError = requiredValidator(_firstNameController.text.trim(), 'first name');
+    // Validate fields using improved validators
+    String? firstNameError = nameValidator(_firstNameController.text.trim(), 'First name');
     if (firstNameError != null) {
       _fieldErrors['firstName'] = firstNameError;
       errorMessages.add(firstNameError);
       hasError = true;
     }
 
-    String? lastNameError = requiredValidator(_lastNameController.text.trim(), 'last name');
+    String? lastNameError = nameValidator(_lastNameController.text.trim(), 'Last name');
     if (lastNameError != null) {
       _fieldErrors['lastName'] = lastNameError;
       errorMessages.add(lastNameError);
@@ -136,18 +224,28 @@ class _SignUpPageState extends State<SignUpPage>
       hasError = true;
     }
 
-    String? addressError = requiredValidator(_addressController.text.trim(), 'address');
+    String? addressError = addressValidator(_addressController.text.trim());
     if (addressError != null) {
       _fieldErrors['address'] = addressError;
       errorMessages.add(addressError);
       hasError = true;
     }
 
-    String? passwordError = passwordValidator(_passwordController.text.trim());
-    if (passwordError != null) {
-      _fieldErrors['password'] = passwordError;
-      errorMessages.add(passwordError);
+    // Check if password meets all requirements
+    final passwordValue = _passwordController.text.trim();
+    final passwordRequirements = _getPasswordRequirements(passwordValue);
+    final allRequirementsMet = passwordRequirements.values.every((met) => met);
+    
+    if (passwordValue.isEmpty) {
+      _fieldErrors['password'] = 'Enter password';
+      errorMessages.add('Enter password');
       hasError = true;
+    } else if (!allRequirementsMet) {
+      _fieldErrors['password'] = 'Password does not meet requirements';
+      errorMessages.add('Password does not meet requirements');
+      hasError = true;
+    } else {
+      _fieldErrors['password'] = null;
     }
 
     String? confirmPasswordError = confirmPasswordValidator(_confirmPasswordController.text.trim(), _passwordController.text.trim());
@@ -255,7 +353,6 @@ class _SignUpPageState extends State<SignUpPage>
         firstName: formattedFirstName,
         lastName: formattedLastName,
         contactNumber: _phoneController.text.trim(),
-        dateOfBirth: null,
         agreedToTerms: _acceptTerms,
         address: _addressController.text.trim(),
       );
@@ -391,13 +488,23 @@ class _SignUpPageState extends State<SignUpPage>
                         keyName: 'firstName',
                         controller: _firstNameController,
                         label: 'First Name',
+                        maxLength: 30,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-']")),
+                          LengthLimitingTextInputFormatter(30),
+                        ],
                       ),
-                      SizedBox(height: 12),
+                      SizedBox(height: 16),
 
                       _buildCompactTextFormField(
                         keyName: 'lastName',
                         controller: _lastNameController,
                         label: 'Last Name',
+                        maxLength: 30,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\-']")),
+                          LengthLimitingTextInputFormatter(30),
+                        ],
                       ),
                       SizedBox(height: 16),
 
@@ -406,6 +513,10 @@ class _SignUpPageState extends State<SignUpPage>
                         controller: _emailController,
                         label: 'Email',
                         keyboardType: TextInputType.emailAddress,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.deny(RegExp(r'^\s')), // Prevent starting with space
+                          FilteringTextInputFormatter.deny(RegExp(r'\s$')), // Prevent ending with space
+                        ],
                       ),
                       SizedBox(height: 12),
 
@@ -414,6 +525,11 @@ class _SignUpPageState extends State<SignUpPage>
                         controller: _phoneController,
                         label: 'Contact number',
                         keyboardType: TextInputType.phone,
+                        maxLength: 11,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(11),
+                        ],
                       ),
                       SizedBox(height: 12),
 
@@ -421,6 +537,11 @@ class _SignUpPageState extends State<SignUpPage>
                         keyName: 'address',
                         controller: _addressController,
                         label: 'Address',
+                        maxLength: 200,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z0-9\s\-'.,#/]")),
+                          LengthLimitingTextInputFormatter(200),
+                        ],
                       ),
                       SizedBox(height: 12),
 
@@ -429,6 +550,10 @@ class _SignUpPageState extends State<SignUpPage>
                         controller: _passwordController,
                         label: 'Password',
                         obscureText: _obscurePassword,
+                        maxLength: 128,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(128),
+                        ],
                         suffixIcon: IconButton(
                           onPressed: () {
                             setState(() {
@@ -444,6 +569,10 @@ class _SignUpPageState extends State<SignUpPage>
                           ),
                         ),
                       ),
+                      
+                      // Password requirements
+                      _buildPasswordRequirements(),
+                      
                       SizedBox(height: 12),
 
                       _buildCompactTextFormField(
@@ -451,6 +580,10 @@ class _SignUpPageState extends State<SignUpPage>
                         controller: _confirmPasswordController,
                         label: 'Confirm Password',
                         obscureText: _obscureConfirmPassword,
+                        maxLength: 128,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(128),
+                        ],
                         suffixIcon: IconButton(
                           onPressed: () {
                             setState(() {
@@ -579,7 +712,7 @@ class _SignUpPageState extends State<SignUpPage>
                         ),
                       ),
 
-                      SizedBox(height: 16),
+                      SizedBox(height: 20),
 
                       // Sign in link
                       Row(
@@ -610,7 +743,7 @@ class _SignUpPageState extends State<SignUpPage>
                           ),
                         ],
                       ),
-                      SizedBox(height: 30),
+                      SizedBox(height: 70),
 
                       Image.asset(
                         'assets/img/image 9.png',
@@ -637,9 +770,11 @@ class _SignUpPageState extends State<SignUpPage>
     bool readOnly = false,
     Widget? suffixIcon,
     VoidCallback? onTap,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
   }) {
     return Container(
-      height: 48,
+      // Remove fixed height to allow for error text
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
@@ -663,10 +798,13 @@ class _SignUpPageState extends State<SignUpPage>
         obscureText: obscureText,
         readOnly: readOnly,
         onTap: onTap,
-        onChanged: (_) {
-          if (_fieldErrors[keyName] != null) {
-            setState(() => _fieldErrors[keyName] = null);
-          }
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
+        onChanged: (value) {
+          // Real-time validation
+          setState(() {
+            _fieldErrors[keyName] = _validateField(keyName, value);
+          });
         },
         style: kTextStyleSmall.copyWith(
           color: AppColors.textPrimary,
@@ -712,6 +850,14 @@ class _SignUpPageState extends State<SignUpPage>
             : null,
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           isDense: true,
+          counterText: "", // Always hide character counter
+          errorText: _fieldErrors[keyName],
+          errorStyle: kTextStyleSmall.copyWith(
+            color: AppColors.error,
+            fontSize: 12,
+            height: 1.2,
+          ),
+          errorMaxLines: 2,
         ),
       ),
     );

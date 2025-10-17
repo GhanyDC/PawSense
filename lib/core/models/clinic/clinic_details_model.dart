@@ -22,6 +22,7 @@ class ClinicDetails {
   final DateTime? updatedAt;
   final String? updatedBy;
   final Map<String, dynamic>? socialMedia;
+  final String? logoUrl;
 
   const ClinicDetails({
     required this.id,
@@ -42,6 +43,7 @@ class ClinicDetails {
     this.updatedAt,
     this.updatedBy,
     this.socialMedia,
+    this.logoUrl,
 
   });
 
@@ -66,6 +68,7 @@ class ClinicDetails {
       'updatedAt': updatedAt?.toIso8601String(),
       'updatedBy': updatedBy,
       'socialMedia': socialMedia,
+      'logoUrl': logoUrl,
     };
   }
 
@@ -160,6 +163,9 @@ class ClinicDetails {
       
       final socialMedia = map['socialMedia'];
       print('DEBUG: socialMedia: $socialMedia');
+      
+      final logoUrl = map['logoUrl'];
+      print('DEBUG: logoUrl: $logoUrl');
 
       return ClinicDetails(
         id: id,
@@ -180,6 +186,7 @@ class ClinicDetails {
         updatedAt: updatedAt,
         updatedBy: updatedBy,
         socialMedia: socialMedia,
+        logoUrl: logoUrl,
       );
     } catch (e, stackTrace) {
       print('ERROR in ClinicDetails.fromMap: $e');
@@ -233,6 +240,7 @@ class ClinicDetails {
       updatedAt: updatedAt ?? this.updatedAt,
       updatedBy: updatedBy ?? this.updatedBy,
       socialMedia: socialMedia ?? this.socialMedia,
+      logoUrl: logoUrl ?? this.logoUrl,
 
     );
   }

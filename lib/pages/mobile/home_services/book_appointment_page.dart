@@ -7,11 +7,34 @@ import 'package:pawsense/core/services/clinic/clinic_list_service.dart';
 import 'package:pawsense/core/services/user/pet_service.dart';
 import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/services/clinic/appointment_service.dart';
+import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
 import 'package:pawsense/core/models/user/pet_model.dart';
+import 'package:pawsense/core/models/clinic/clinic_schedule_model.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
 import 'package:pawsense/core/services/notifications/appointment_booking_integration.dart';
 import 'package:pawsense/core/services/user/assessment_result_service.dart';
 import 'package:pawsense/core/models/user/assessment_result_model.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
+import 'dart:async';
+
+/// Cache entry for clinic schedule with real-time invalidation support
+class _CachedSchedule {
+  final WeeklySchedule schedule;
+  final DateTime cachedAt;
+  final DateTime? lastModified;
+  
+  _CachedSchedule(this.schedule, this.cachedAt, this.lastModified);
+  
+  bool get isExpired {
+    final now = DateTime.now();
+    return now.difference(cachedAt) > const Duration(minutes: 30); // Extended cache time since we have real-time updates
+  }
+  
+  bool isNewerThan(DateTime? otherModified) {
+    if (lastModified == null || otherModified == null) return false;
+    return lastModified!.isAfter(otherModified) || lastModified!.isAtSameMomentAs(otherModified);
+  }
+}
 
 class BookAppointmentPage extends StatefulWidget {
   final String? preselectedClinicId;
@@ -34,17 +57,35 @@ class BookAppointmentPage extends StatefulWidget {
 class _BookAppointmentPageState extends State<BookAppointmentPage> {
   String _selectedService = 'General Checkup';
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
+  String? _selectedTimeSlot; // New: selected time slot as string
   String? _selectedPetId;
   String? _selectedClinicId;
   final TextEditingController _notesController = TextEditingController();
   
   bool _loading = true;
+  bool _isBooking = false; // Prevent duplicate submission
   List<Pet> _userPets = [];
   List<Map<String, dynamic>> _availableClinics = [];
   List<Map<String, dynamic>> _availableServices = [];
   AssessmentResult? _assessmentResult;
   bool _petAutoRegistered = false;
+  
+  // New: Clinic schedule data
+  WeeklySchedule? _clinicSchedule;
+  List<String> _availableTimeSlots = [];
+  bool _loadingTimeSlots = false;
+  
+  // Holiday dates for the selected clinic
+  List<DateTime> _holidayDates = [];
+  
+  // Real-time listener management
+  StreamSubscription<DocumentSnapshot>? _scheduleListener;
+  
+  // Static cache for clinic schedules (shared across all instances)
+  static final Map<String, _CachedSchedule> _scheduleCache = {};
+  
+  // Static real-time listeners (shared across all instances)
+  static final Map<String, StreamSubscription<DocumentSnapshot>> _scheduleListeners = {};
 
   final List<String> _defaultServices = [
     'General Checkup',
@@ -198,6 +239,9 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           _selectedService = _availableServices.first['serviceName'];
         }
       });
+      
+      // Load clinic schedule after loading services
+      await _loadClinicSchedule(clinicId);
     } catch (e) {
       print('Error loading services for clinic: $e');
       // Use default services as fallback
@@ -216,12 +260,442 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
       });
     }
   }
+  
+  /// Load clinic schedule with real-time updates and smart caching
+  Future<void> _loadClinicSchedule(String clinicId) async {
+    try {
+      print('📅 Loading clinic schedule for clinic: $clinicId');
+      
+      // Setup real-time listener if not already exists
+      await _setupScheduleListener(clinicId);
+      
+      // Load holidays for this clinic
+      await _loadHolidays(clinicId);
+      
+      // Check cache first
+      final cachedEntry = _scheduleCache[clinicId];
+      if (cachedEntry != null && !cachedEntry.isExpired) {
+        print('✅ Using cached schedule for clinic: $clinicId');
+        setState(() {
+          _clinicSchedule = cachedEntry.schedule;
+          
+          // Always validate and update the selected date when schedule loads
+          final newDate = _findNextAvailableDate(_selectedDate);
+          if (newDate != _selectedDate) {
+            _selectedDate = newDate;
+            print('⚠️ Initial date was not available, updated to: $_selectedDate');
+          }
+        });
+        
+        // Load available time slots for the selected date
+        await _loadAvailableTimeSlots();
+        return;
+      }
+      
+      // Fetch from Firestore if not in cache or expired
+      print('🔄 Fetching fresh schedule from Firestore...');
+      await _fetchAndCacheSchedule(clinicId);
+      
+    } catch (e) {
+      print('❌ Error loading clinic schedule: $e');
+      // Don't block user from booking, just log the error
+    }
+  }
+  
+  /// Load holidays for a clinic
+  Future<void> _loadHolidays(String clinicId) async {
+    try {
+      final holidays = await ClinicScheduleService.getHolidays(clinicId);
+      setState(() {
+        _holidayDates = holidays;
+      });
+      print('✅ Loaded ${holidays.length} holidays for clinic: $clinicId');
+    } catch (e) {
+      print('❌ Error loading holidays: $e');
+      setState(() {
+        _holidayDates = [];
+      });
+    }
+  }
+  
+  /// Setup real-time listener for clinic schedule changes
+  Future<void> _setupScheduleListener(String clinicId) async {
+    // Cancel existing listener for this clinic if any
+    _scheduleListeners[clinicId]?.cancel();
+    
+    // Set up new listener
+    _scheduleListeners[clinicId] = FirebaseFirestore.instance
+        .collection('clinicSchedules')
+        .doc(clinicId)
+        .snapshots()
+        .listen(
+      (DocumentSnapshot snapshot) {
+        if (snapshot.exists && mounted) {
+          _handleScheduleUpdate(clinicId, snapshot);
+        }
+      },
+      onError: (error) {
+        print('❌ Error in schedule listener for clinic $clinicId: $error');
+      },
+    );
+    
+    print('🎧 Real-time listener setup for clinic schedule: $clinicId');
+  }
+  
+  /// Handle real-time schedule updates
+  void _handleScheduleUpdate(String clinicId, DocumentSnapshot snapshot) async {
+    try {
+      final data = snapshot.data() as Map<String, dynamic>?;
+      if (data == null) return;
+      
+      final lastModified = (data['updatedAt'] as Timestamp?)?.toDate() ?? 
+                          (data['lastModified'] as Timestamp?)?.toDate();
+      
+      // Check if we need to update the cache
+      final cachedEntry = _scheduleCache[clinicId];
+      if (cachedEntry != null && cachedEntry.isNewerThan(lastModified)) {
+        return; // Cache is already up to date
+      }
+      
+      print('🔄 Schedule updated for clinic $clinicId, refreshing cache...');
+      
+      // Parse the updated schedule from document data
+      final daysData = data['days'] as Map<String, dynamic>? ?? {};
+      final Map<String, ClinicScheduleModel> schedules = {};
+      
+      for (final dayName in WeeklySchedule.daysOfWeek) {
+        final dayKey = dayName.toLowerCase();
+        if (daysData.containsKey(dayKey)) {
+          final dayData = daysData[dayKey] as Map<String, dynamic>;
+          schedules[dayName] = ClinicScheduleModel(
+            id: '${clinicId}_$dayKey',
+            clinicId: clinicId,
+            dayOfWeek: dayData['dayOfWeek'] ?? dayName,
+            openTime: dayData['openTime'],
+            closeTime: dayData['closeTime'],
+            isOpen: dayData['isOpen'] ?? false,
+            breakTimes: (dayData['breakTimes'] as List<dynamic>?)
+                ?.map((bt) => BreakTime.fromMap(bt))
+                .toList() ?? [],
+            notes: dayData['notes'],
+            slotsPerHour: dayData['slotsPerHour'] ?? 3,
+            slotDurationMinutes: dayData['slotDurationMinutes'] ?? 20,
+            createdAt: (data['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            updatedAt: (dayData['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            isActive: dayData['isActive'] ?? true,
+          );
+        } else {
+          // Create default closed schedule for missing days
+          schedules[dayName] = ClinicScheduleModel(
+            id: '${clinicId}_$dayKey',
+            clinicId: clinicId,
+            dayOfWeek: dayName,
+            openTime: null,
+            closeTime: null,
+            isOpen: false,
+            breakTimes: [],
+            notes: null,
+            slotsPerHour: 3,
+            slotDurationMinutes: 20,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            isActive: true,
+          );
+        }
+      }
+      
+      final schedule = WeeklySchedule(schedules: schedules);
+      
+      // Update cache with new data
+      _scheduleCache[clinicId] = _CachedSchedule(
+        schedule, 
+        DateTime.now(), 
+        lastModified,
+      );
+      
+      // Update UI if this is the currently selected clinic
+      if (_selectedClinicId == clinicId && mounted) {
+        // Reload holidays when schedule updates
+        await _loadHolidays(clinicId);
+        
+        setState(() {
+          _clinicSchedule = schedule;
+          
+          // Revalidate selected date
+          final newDate = _findNextAvailableDate(_selectedDate);
+          if (newDate != _selectedDate) {
+            _selectedDate = newDate;
+            print('⚠️ Selected date updated due to schedule change: $_selectedDate');
+          }
+        });
+        
+        // Reload available time slots
+        await _loadAvailableTimeSlots();
+        
+        // Show notification to user about schedule update
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Clinic schedule updated'),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.success,
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+      
+      print('✅ Schedule cache updated for clinic: $clinicId');
+    } catch (e) {
+      print('❌ Error handling schedule update for clinic $clinicId: $e');
+    }
+  }
+  
+  /// Fetch and cache schedule from Firestore
+  Future<void> _fetchAndCacheSchedule(String clinicId) async {
+    final schedule = await ClinicScheduleService.getWeeklySchedule(clinicId);
+    
+    // Get the document to check last modified time
+    final doc = await FirebaseFirestore.instance
+        .collection('clinicSchedules')
+        .doc(clinicId)
+        .get();
+    
+    DateTime? lastModified;
+    if (doc.exists) {
+      final data = doc.data() as Map<String, dynamic>;
+      lastModified = (data['updatedAt'] as Timestamp?)?.toDate() ?? 
+                     (data['lastModified'] as Timestamp?)?.toDate();
+    }
+    
+      // Store in cache with last modified timestamp
+      _scheduleCache[clinicId] = _CachedSchedule(schedule, DateTime.now(), lastModified);    setState(() {
+      _clinicSchedule = schedule;
+      
+      // Always validate and update the selected date when schedule loads
+      final newDate = _findNextAvailableDate(_selectedDate);
+      if (newDate != _selectedDate) {
+        _selectedDate = newDate;
+        print('⚠️ Initial date was not available, updated to: $_selectedDate');
+      }
+    });
+    
+    // Load available time slots for the selected date
+    await _loadAvailableTimeSlots();
+    
+    print('✅ Clinic schedule fetched and cached successfully');
+  }
+  
+  /// Load available time slots for the selected date
+  Future<void> _loadAvailableTimeSlots() async {
+    if (_selectedClinicId == null || _clinicSchedule == null) {
+      setState(() {
+        _availableTimeSlots = [];
+        _selectedTimeSlot = null;
+      });
+      return;
+    }
+    
+    setState(() => _loadingTimeSlots = true);
+    
+    try {
+      // Get day name from selected date
+      const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      final dayName = daysOfWeek[_selectedDate.weekday - 1];
+      
+      // Get schedule for this day
+      final daySchedule = _clinicSchedule!.schedules[dayName];
+      
+      if (daySchedule == null || !daySchedule.isOpen || daySchedule.openTime == null || daySchedule.closeTime == null) {
+        setState(() {
+          _availableTimeSlots = [];
+          _selectedTimeSlot = null;
+          _loadingTimeSlots = false;
+        });
+        return;
+      }
+      
+      // Generate hourly time slots (e.g., "09:00 - 10:00")
+      final slots = <String>[];
+      final openParts = daySchedule.openTime!.split(':');
+      final closeParts = daySchedule.closeTime!.split(':');
+      final openHour = int.parse(openParts[0]);
+      final closeHour = int.parse(closeParts[0]);
+      
+      // Generate 1-hour blocks
+      for (int hour = openHour; hour < closeHour; hour++) {
+        final startTime = '${hour.toString().padLeft(2, '0')}:00';
+        final endHour = hour + 1;
+        final endTime = '${endHour.toString().padLeft(2, '0')}:00';
+        
+        // Check if this hour block is during a break time
+        bool isDuringBreak = false;
+        for (final breakTime in daySchedule.breakTimes) {
+          // Check if the entire hour block overlaps with break time
+          if (_isHourBlockInBreak(startTime, endTime, breakTime.startTime, breakTime.endTime)) {
+            isDuringBreak = true;
+            break;
+          }
+        }
+        
+        if (!isDuringBreak) {
+          // Check if at least one slot in this hour is available AND not full
+          bool hasAvailableSlot = false;
+          final slotsPerHour = daySchedule.slotsPerHour;
+          final minutesPerSlot = 60 ~/ slotsPerHour;
+          
+          for (int slot = 0; slot < slotsPerHour; slot++) {
+            final minute = slot * minutesPerSlot;
+            final timeString = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+            
+            // Check if slot is within operating hours and not during break
+            final canBook = await AppointmentService.canBookAtTime(
+              _selectedClinicId!,
+              _selectedDate,
+              timeString,
+            );
+            
+            if (!canBook) continue; // Skip if not within schedule
+            
+            // Check if slot is at full capacity
+            final isFull = await AppointmentBookingService.isTimeSlotFull(
+              clinicId: _selectedClinicId!,
+              appointmentDate: _selectedDate,
+              appointmentTime: timeString,
+            );
+            
+            if (!isFull) {
+              hasAvailableSlot = true;
+              break; // Found at least one available slot in this hour that's not full
+            }
+          }
+          
+          if (hasAvailableSlot) {
+            // Store as "HH:00 - HH:00" format for display
+            slots.add('$startTime - $endTime');
+          }
+        }
+      }
+      
+      setState(() {
+        _availableTimeSlots = slots;
+        // Auto-select first available slot if current selection is not available
+        if (_selectedTimeSlot == null || !slots.contains(_selectedTimeSlot)) {
+          _selectedTimeSlot = slots.isNotEmpty ? slots.first : null;
+        }
+        _loadingTimeSlots = false;
+      });
+      
+      print('✅ Loaded ${slots.length} hourly time slots for ${dayName}');
+    } catch (e) {
+      print('❌ Error loading time slots: $e');
+      setState(() {
+        _availableTimeSlots = [];
+        _selectedTimeSlot = null;
+        _loadingTimeSlots = false;
+      });
+    }
+  }
+  
+  /// Check if an hour block overlaps with a break time
+  bool _isHourBlockInBreak(String blockStart, String blockEnd, String breakStart, String breakEnd) {
+    final blockStartMinutes = _timeToMinutes(blockStart);
+    final blockEndMinutes = _timeToMinutes(blockEnd);
+    final breakStartMinutes = _timeToMinutes(breakStart);
+    final breakEndMinutes = _timeToMinutes(breakEnd);
+    
+    // Check if there's any overlap between the hour block and break time
+    return !(blockEndMinutes <= breakStartMinutes || blockStartMinutes >= breakEndMinutes);
+  }
+  
+  /// Convert time string (HH:mm) to minutes since midnight
+  int _timeToMinutes(String time) {
+    final parts = time.split(':');
+    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  }
+  
+  /// Check if a date should be enabled (clinic is open on this day)
+  bool _isDateEnabled(DateTime date) {
+    if (_clinicSchedule == null) return true; // Allow all dates if schedule not loaded
+    
+    // First check if date is a holiday (compare date-only)
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final isHoliday = _holidayDates.any((holiday) {
+      final holidayOnly = DateTime(holiday.year, holiday.month, holiday.day);
+      return holidayOnly == dateOnly;
+    });
+    
+    if (isHoliday) {
+      return false; // Holidays are closed
+    }
+    
+    // Then check regular schedule
+    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final dayName = daysOfWeek[date.weekday - 1];
+    final daySchedule = _clinicSchedule!.schedules[dayName];
+    
+    return daySchedule != null && daySchedule.isOpen;
+  }
+  
+  /// Find the next available date starting from the given date
+  DateTime _findNextAvailableDate(DateTime startDate) {
+    // If clinic schedule is not loaded yet, return tomorrow as default
+    if (_clinicSchedule == null) {
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      return startDate.isBefore(tomorrow) ? tomorrow : startDate;
+    }
+    
+    DateTime checkDate = startDate;
+    final maxDate = DateTime.now().add(const Duration(days: 365));
+    
+    // Ensure we don't go back in time - start from today if startDate is in the past
+    final today = DateTime.now();
+    if (checkDate.isBefore(DateTime(today.year, today.month, today.day))) {
+      checkDate = DateTime(today.year, today.month, today.day);
+    }
+    
+    // Check up to 30 days ahead to find an available date
+    for (int i = 0; i < 30; i++) {
+      if (checkDate.isAfter(maxDate)) break;
+      
+      if (_isDateEnabled(checkDate)) {
+        return checkDate;
+      }
+      
+      checkDate = checkDate.add(const Duration(days: 1));
+    }
+    
+    // Fallback to tomorrow if no available date found
+    return DateTime.now().add(const Duration(days: 1));
+  }
+  
+
 
   @override
   void dispose() {
     _notesController.dispose();
+    _scheduleListener?.cancel();
     super.dispose();
   }
+  
+  /// Clean up real-time listeners for a specific clinic
+  static void _cleanupListenerForClinic(String clinicId) {
+    _scheduleListeners[clinicId]?.cancel();
+    _scheduleListeners.remove(clinicId);
+    print('🧹 Cleaned up listener for clinic: $clinicId');
+  }
+
+  
+  /// Force refresh schedule for a specific clinic (useful for admin operations)
+
 
   @override
   Widget build(BuildContext context) {
@@ -452,6 +926,11 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                       ),
                     )).toList(),
                     onChanged: (value) {
+                      // Cleanup previous clinic listener if switching clinics
+                      if (_selectedClinicId != null && _selectedClinicId != value) {
+                        _cleanupListenerForClinic(_selectedClinicId!);
+                      }
+                      
                       setState(() => _selectedClinicId = value);
                       if (value != null) {
                         _loadServicesForClinic(value);
@@ -926,6 +1405,13 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
   }
 
   Widget _buildDateField() {
+    // Check if selected date is a holiday
+    final dateOnly = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final isSelectedDateHoliday = _holidayDates.any((holiday) {
+      final holidayOnly = DateTime(holiday.year, holiday.month, holiday.day);
+      return holidayOnly == dateOnly;
+    });
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -940,29 +1426,67 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
         const SizedBox(height: 8),
         InkWell(
           onTap: () async {
+            // Ensure we have a valid initial date before opening the picker
+            DateTime initialDate = _selectedDate;
+            if (!_isDateEnabled(initialDate)) {
+              initialDate = _findNextAvailableDate(DateTime.now());
+              // Update the selected date to the valid initial date
+              setState(() {
+                _selectedDate = initialDate;
+              });
+            }
+            
             final date = await showDatePicker(
               context: context,
-              initialDate: _selectedDate,
+              initialDate: initialDate,
               firstDate: DateTime.now(),
               lastDate: DateTime.now().add(const Duration(days: 365)),
+              helpText: 'Select Appointment Date',
+              selectableDayPredicate: (DateTime date) {
+                // Disable dates where clinic is closed or it's a holiday
+                return _isDateEnabled(date);
+              },
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: ColorScheme.light(
+                      primary: AppColors.primary,
+                      onPrimary: Colors.white,
+                      surface: Colors.white,
+                      onSurface: AppColors.textPrimary,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
             );
             if (date != null) {
               setState(() => _selectedDate = date);
+              // Reload available time slots when date changes
+              await _loadAvailableTimeSlots();
             }
           },
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: isSelectedDateHoliday ? AppColors.error : AppColors.border),
               borderRadius: BorderRadius.circular(8),
+              color: isSelectedDateHoliday ? AppColors.error.withOpacity(0.05) : Colors.white,
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today, size: 18, color: AppColors.primary),
+                Icon(
+                  isSelectedDateHoliday ? Icons.event_busy : Icons.calendar_today, 
+                  size: 18, 
+                  color: isSelectedDateHoliday ? AppColors.error : AppColors.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                  style: const TextStyle(fontSize: 16),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isSelectedDateHoliday ? AppColors.error : AppColors.textPrimary,
+                  ),
                 ),
                 const Spacer(),
                 Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
@@ -970,6 +1494,33 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
             ),
           ),
         ),
+        if (isSelectedDateHoliday) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.info_outline, size: 14, color: AppColors.error),
+              const SizedBox(width: 4),
+              Text(
+                'Clinic is closed on this date (Holiday)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.error,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ] else if (_holidayDates.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Gray dates are closed or holidays',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textTertiary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -979,7 +1530,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Preferred Time',
+          'Available Time Slots',
           style: kMobileTextStyleTitle.copyWith(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -987,17 +1538,8 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           ),
         ),
         const SizedBox(height: 8),
-        InkWell(
-          onTap: () async {
-            final time = await showTimePicker(
-              context: context,
-              initialTime: _selectedTime,
-            );
-            if (time != null) {
-              setState(() => _selectedTime = time);
-            }
-          },
-          child: Container(
+        if (_loadingTimeSlots)
+          Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               border: Border.all(color: AppColors.border),
@@ -1005,20 +1547,108 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
             ),
             child: Row(
               children: [
-                Icon(Icons.access_time, size: 18, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(
-                  _selectedTime.format(context),
-                  style: const TextStyle(fontSize: 16),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
                 ),
-                const Spacer(),
-                Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                const SizedBox(width: 12),
+                Text(
+                  'Loading available times...',
+                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                ),
               ],
             ),
+          )
+        else if (_availableTimeSlots.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.error),
+              borderRadius: BorderRadius.circular(8),
+              color: AppColors.error.withOpacity(0.05),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'No available time slots for this date',
+                    style: TextStyle(fontSize: 14, color: AppColors.error),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedTimeSlot,
+                isExpanded: true,
+                icon: Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                items: _availableTimeSlots.map((String time) {
+                  return DropdownMenuItem<String>(
+                    value: time,
+                    child: Row(
+                      children: [
+                        Icon(Icons.access_time, size: 18, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatTimeSlot(time),
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      _selectedTimeSlot = newValue;
+                    });
+                  }
+                },
+              ),
+            ),
           ),
-        ),
       ],
     );
+  }
+  
+  /// Format time slot for display (e.g., "09:00 - 10:00" -> "9:00 AM - 10:00 AM")
+  String _formatTimeSlot(String timeRange) {
+    // Handle new format "HH:mm - HH:mm"
+    if (timeRange.contains(' - ')) {
+      final parts = timeRange.split(' - ');
+      final startTime = _formatSingleTime(parts[0]);
+      final endTime = _formatSingleTime(parts[1]);
+      return '$startTime - $endTime';
+    }
+    
+    // Fallback for old format "HH:mm"
+    return _formatSingleTime(timeRange);
+  }
+  
+  /// Format a single time (e.g., "09:00" -> "9:00 AM")
+  String _formatSingleTime(String time) {
+    final parts = time.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
   }
 
   Widget _buildNotesField() {
@@ -1057,11 +1687,12 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
     final bool canBook = _selectedClinicId != null && 
                         _selectedPetId != null &&
                         _userPets.isNotEmpty && 
-                        _availableClinics.isNotEmpty;
+                        _availableClinics.isNotEmpty &&
+                        !_isBooking; // Disable during booking
     
     return SizedBox(
       width: double.infinity,
-      height: 50,
+      height: 55,
       child: ElevatedButton(
         onPressed: canBook ? _bookAppointment : null,
         style: ElevatedButton.styleFrom(
@@ -1072,12 +1703,21 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           ),
           elevation: 0,
         ),
-        child: Text(
-          canBook ? 'Book Appointment' : 'Select Pet & Clinic',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+        child: _isBooking 
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
+              ),
+            )
+          : Text(
+              canBook ? 'Book Appointment' : 'Select Pet & Clinic',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ),
     );
@@ -1127,6 +1767,12 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
   }
 
   void _bookAppointment() async {
+    // Prevent duplicate submission
+    if (_isBooking) {
+      print('🚫 Booking already in progress, ignoring duplicate request');
+      return;
+    }
+    
     // Validation
     if (_selectedPetId == null || _userPets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1157,9 +1803,30 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
       );
       return;
     }
+    
+    // Validate time slot selection
+    if (_selectedTimeSlot == null || _selectedTimeSlot!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an available time slot'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+    
+    // Set booking flag to prevent duplicate submissions
+    setState(() => _isBooking = true);
 
-    // Format time for validation (HH:mm)
-    final formattedTime = '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
+    // Extract start time from hour block format "HH:mm - HH:mm"
+    String formattedTime;
+    if (_selectedTimeSlot!.contains(' - ')) {
+      // New format: take the start time of the hour block
+      formattedTime = _selectedTimeSlot!.split(' - ')[0];
+    } else {
+      // Fallback for old format
+      formattedTime = _selectedTimeSlot!;
+    }
 
     // Show loading
     showDialog(
@@ -1249,8 +1916,8 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
         estimatedPrice = 0.00;
       }
 
-      // Save appointment to Firebase
-      final appointmentId = await AppointmentBookingService.bookAppointment(
+      // Save appointment to Firebase with duplicate prevention
+      final bookingResult = await AppointmentBookingService.bookAppointment(
         petId: _selectedPetId!,
         clinicId: _selectedClinicId!,
         serviceName: _selectedService,
@@ -1265,8 +1932,15 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
 
       // Hide loading
       if (mounted) Navigator.of(context).pop();
+      
+      // Reset booking flag
+      if (mounted) setState(() => _isBooking = false);
 
-      if (appointmentId != null) {
+      final success = bookingResult['success'] as bool;
+      final message = bookingResult['message'] as String;
+      final appointmentId = bookingResult['appointmentId'] as String?;
+
+      if (success && appointmentId != null) {
         // Create pending appointment notification immediately
         try {
           final currentUser = await AuthGuard.getCurrentUser();
@@ -1286,6 +1960,10 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           print('⚠️ Failed to create pending notification: $notificationError');
           // Don't block the success flow if notification fails
         }
+        
+        // Invalidate appointment history cache after successful booking
+        await _invalidateAppointmentHistoryCache();
+        
         // Success
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1306,17 +1984,32 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
           });
         }
       } else {
-        // Error
+        // Handle different error cases
+        String errorMessage = message;
+        
+        if (bookingResult['rateLimitExceeded'] == true) {
+          errorMessage = 'Too many booking attempts. Please wait a few minutes before trying again.';
+        } else if (bookingResult['isDuplicate'] == true) {
+          errorMessage = 'You already have an appointment for this pet at this time. Please choose a different time.';
+        } else if (bookingResult['slotFull'] == true) {
+          errorMessage = 'This time slot was just booked. Please select a different time.';
+          // Refresh time slots to show updated availability
+          await _loadAvailableTimeSlots();
+        }
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to book appointment. Please try again.'),
+            SnackBar(
+              content: Text(errorMessage),
               backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 4),
             ),
           );
         }
       }
     } catch (e) {
+      // Reset booking flag on error
+      if (mounted) setState(() => _isBooking = false);
       // Hide loading
       if (mounted) Navigator.of(context).pop();
       
@@ -1403,7 +2096,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                     trailing: const Icon(Icons.access_time, color: AppColors.primary),
                     onTap: () {
                       setState(() {
-                        _selectedTime = timeOfDay;
+                        _selectedTimeSlot = slot;
                       });
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1504,6 +2197,24 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
       } else {
         context.go('/home');
       }
+    }
+  }
+
+  // Cache invalidation method
+  Future<void> _invalidateAppointmentHistoryCache() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final cache = DataCache();
+        
+        // Invalidate appointment history cache using the same pattern as home_page.dart
+        final appointmentCacheKey = 'user_appointments_${user.uid}';
+        cache.invalidate(appointmentCacheKey);
+        
+        print('DEBUG: Appointment history cache invalidated after booking for user: ${user.uid}');
+      }
+    } catch (e) {
+      print('DEBUG: Error invalidating appointment history cache: $e');
     }
   }
 }

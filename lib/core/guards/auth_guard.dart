@@ -90,18 +90,25 @@ class AuthGuard {
   /// Internal method to fetch user data (separated for deduplication)
   static Future<UserModel?> _fetchCurrentUser(User user) async {
     try {
+      print('AuthGuard: Fetching user data for UID: ${user.uid}');
+      
       // Verify token is still valid (use cached token)
       final token = await _tokenManager.getToken();
-      if (token == null) return null;
+      if (token == null) {
+        print('AuthGuard: No valid token found');
+        return null;
+      }
       
       // Fetch user data from Firestore
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists) {
         final userData = UserModel.fromMap(doc.data()!);
+        print('AuthGuard: User data loaded successfully for role: ${userData.role}');
         
         // For admin users, check Firestore approval status on session restoration
         // Skip approval validation for super admin users
         if (userData.role == 'admin') {
+          print('AuthGuard: Validating clinic approval status for admin user');
           await _validateClinicApprovalStatusForSession(user.uid);
         }
         
@@ -109,13 +116,20 @@ class AuthGuard {
         // Cache user data for 5 minutes
         _userCacheExpiresAt = DateTime.now().add(const Duration(minutes: 5));
         return _cachedUser;
+      } else {
+        print('AuthGuard: User document not found in Firestore');
+        return null;
       }
-      return null;
     } catch (e) {
+      print('❌ AuthGuard: Error fetching user data: $e');
+      
       // If approval validation fails, sign out the user
       if (e.toString().contains('account-')) {
+        print('AuthGuard: Account-related error, signing out user');
         await _auth.signOut();
         _clearCache();
+      } else {
+        print('AuthGuard: Network or temporary error, not signing out user');
       }
       return null;
     }
@@ -288,29 +302,39 @@ class AuthGuard {
   /// Internal method to perform route validation (separated for deduplication)
   static Future<String?> _performRouteValidation(String routePath) async {
     try {
+      print('AuthGuard: Starting route validation for: $routePath');
+      
       // Get current user (this also validates authentication)
       final user = await getCurrentUser();
       if (user == null) {
-        print('AuthGuard: No authenticated user, redirecting to login');
+        print('AuthGuard: No authenticated user found, redirecting to login');
         return kIsWeb ? '/web_login' : '/signin';
       }
 
-      print('AuthGuard: User found with role: ${user.role}');
+      print('AuthGuard: User authenticated - UID: ${user.uid}, Role: ${user.role}');
       
       // Check role-based access
       final redirectPath = _validateRoleBasedAccess(routePath, user.role);
       
       if (redirectPath != null) {
-        print('AuthGuard: Access denied, redirecting to: $redirectPath');
+        print('AuthGuard: Access denied for route $routePath, redirecting to: $redirectPath');
       } else {
         print('AuthGuard: Access granted for route: $routePath');
       }
       
       return redirectPath;
     } catch (e) {
-      print('AuthGuard: Error during route validation: $e');
-      // On error, redirect to login to prevent navigation stack issues
-      return '/web_login';
+      print('❌ AuthGuard: Error during route validation for $routePath: $e');
+      print('❌ AuthGuard: Stack trace: ${StackTrace.current}');
+      // On error, try to avoid redirecting to prevent logout loops
+      // Only redirect if we can't determine the user's authentication state
+      if (e.toString().contains('account-')) {
+        print('AuthGuard: Account-related error, redirecting to login');
+        return kIsWeb ? '/web_login' : '/signin';
+      } else {
+        print('AuthGuard: Network or temporary error, allowing access to prevent logout');
+        return null; // Allow access on temporary errors
+      }
     }
   }
 
@@ -370,6 +394,7 @@ class AuthGuard {
       '/messaging',
       '/ai-history',
       '/appointment-history',
+      '/appointments',
       '/pets',
       '/add-pet',
       '/edit-pet',
@@ -378,12 +403,17 @@ class AuthGuard {
       '/first-aid-guide',
       '/pet-care-tips',
       '/faqs',
+      '/clinics',
+      '/clinic-details',
+      '/skin-disease-library',
     ];
     
     // Check if it's a mobile route pattern (including dynamic routes)
     bool isMobileRoute = mobileRoutes.any((route) => routePath.startsWith(route)) ||
                         routePath.startsWith('/ai-history/') ||
-                        routePath.startsWith('/appointment-history/');
+                        routePath.startsWith('/appointment-history/') ||
+                        routePath.startsWith('/alerts/') ||
+                        routePath.startsWith('/appointments/');
     
     if (isMobileRoute) {
       // Mobile routes are accessible to all authenticated users
