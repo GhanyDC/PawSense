@@ -11,11 +11,13 @@ import '../../../core/models/clinic/clinic_details_model.dart';
 import '../../../core/models/clinic/clinic_service_model.dart';
 import '../../../core/models/clinic/clinic_certification_model.dart';
 import '../../../core/models/clinic/clinic_license_model.dart';
+import '../../../core/models/system/legal_document_model.dart';
 import '../../../core/services/auth/auth_service.dart';
 import '../../../core/utils/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/utils/text_utils.dart';
+import '../../../core/widgets/web/legal_document_acceptance_dialog.dart';
 
 class AdminSignupPage extends StatefulWidget {
   const AdminSignupPage({super.key});
@@ -1863,56 +1865,140 @@ class _AdminSignupPageState extends State<AdminSignupPage> {
           _buildLicensesSection(),
           const SizedBox(height: 32),
 
-          // Terms and Conditions
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Checkbox(
-                value: _agreedToTerms,
-                onChanged: (value) =>
-                    setState(() => _agreedToTerms = value ?? false),
-                activeColor: AppColors.primary,
+          // Terms and Conditions - Requires modal acceptance
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _fieldErrors['terms'] != null 
+                  ? AppColors.error.withOpacity(0.05)
+                  : AppColors.primary.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _fieldErrors['terms'] != null 
+                    ? AppColors.error.withOpacity(0.3)
+                    : AppColors.primary.withOpacity(0.2),
+                width: 1.5,
               ),
-              Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: kTextStyleSmall.copyWith(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    children: [
-                      const TextSpan(text: 'I agree to the '),
-                      TextSpan(
-                        text: 'Terms and Conditions',
-                        style: kTextStyleSmall.copyWith(
-                          fontSize: 14,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w500,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Checkbox(
+                  value: _agreedToTerms,
+                  onChanged: (value) async {
+                    if (value == true && !_agreedToTerms) {
+                      // Show modal dialog requiring scroll and acceptance
+                      final agreed = await showDialog<bool>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const LegalDocumentAcceptanceDialog(
+                          documentType: DocumentType.termsAndConditions,
                         ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            // Handle terms and conditions tap
-                          },
-                      ),
-                      const TextSpan(text: ' and '),
-                      TextSpan(
-                        text: 'Privacy Policy',
-                        style: kTextStyleSmall.copyWith(
-                          fontSize: 14,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            // Handle privacy policy tap
-                          },
-                      ),
-                    ],
+                      );
+                      setState(() {
+                        _agreedToTerms = agreed == true;
+                        if (_agreedToTerms) {
+                          _fieldErrors['terms'] = null;
+                        }
+                      });
+                    } else if (value == false) {
+                      setState(() => _agreedToTerms = false);
+                    }
+                  },
+                  activeColor: AppColors.primary,
+                  side: BorderSide(
+                    color: _fieldErrors['terms'] != null 
+                        ? AppColors.error 
+                        : AppColors.textTertiary,
+                    width: 2,
                   ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () async {
+                      if (!_agreedToTerms) {
+                        // Show modal dialog requiring scroll and acceptance
+                        final agreed = await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const LegalDocumentAcceptanceDialog(
+                            documentType: DocumentType.termsAndConditions,
+                          ),
+                        );
+                        setState(() {
+                          _agreedToTerms = agreed == true;
+                          if (_agreedToTerms) {
+                            _fieldErrors['terms'] = null;
+                          }
+                        });
+                      } else {
+                        setState(() => _agreedToTerms = false);
+                      }
+                    },
+                    child: RichText(
+                      text: TextSpan(
+                        style: kTextStyleSmall.copyWith(
+                          fontSize: 14,
+                          color: _fieldErrors['terms'] != null 
+                              ? AppColors.error 
+                              : AppColors.textSecondary,
+                        ),
+                        children: [
+                          const TextSpan(text: 'I have read and agree to the '),
+                          TextSpan(
+                            text: 'Terms and Conditions',
+                            style: kTextStyleSmall.copyWith(
+                              fontSize: 14,
+                              color: _fieldErrors['terms'] != null 
+                                  ? AppColors.error 
+                                  : AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                          const TextSpan(text: ' (click to view)'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
+          if (_fieldErrors['terms'] != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: AppColors.error.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _fieldErrors['terms']!,
+                      style: kTextStyleSmall.copyWith(
+                        fontSize: 13,
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
