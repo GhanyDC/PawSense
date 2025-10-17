@@ -93,7 +93,7 @@ class _UserSearchAndFilterState extends State<UserSearchAndFilter> {
                 fillColor: AppColors.white,
               ),
               style: kTextStyleRegular.copyWith(color: AppColors.textPrimary),
-              items: ['All Roles', 'user', 'admin', 'super_admin'].map((role) {
+              items: ['All Roles', 'user', 'admin'].map((role) {
                 return DropdownMenuItem(
                   value: role,
                   child: Text(
@@ -172,8 +172,6 @@ class _UserSearchAndFilterState extends State<UserSearchAndFilter> {
         return 'User';
       case 'admin':
         return 'Admin';
-      case 'super_admin':
-        return 'Super Admin';
       default:
         return role.toUpperCase();
     }

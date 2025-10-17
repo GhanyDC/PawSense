@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:pawsense/core/utils/file_downloader.dart' as file_downloader;
 import 'package:pawsense/core/models/clinic/clinic_registration_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
@@ -12,6 +15,7 @@ import '../../../core/widgets/shared/pagination_widget.dart';
 import '../../../core/services/super_admin/super_admin_service.dart';
 import '../../../core/services/super_admin/clinic_cache_service.dart';
 import '../../../core/services/super_admin/screen_state_service.dart';
+import '../../../core/services/super_admin/clinic_pdf_service.dart';
 
 class ClinicManagementScreen extends StatefulWidget {
   const ClinicManagementScreen({Key? key}) : super(key: key ?? const PageStorageKey('clinic_management'));
@@ -650,6 +654,102 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> with Au
     }
   }
 
+  Future<void> _handleExportCSV() async {
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Generating PDF report...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+
+    try {
+      // Convert filter string to API format
+      String? statusFilter;
+      if (_selectedStatus.isNotEmpty && _selectedStatus != 'All Status') {
+        statusFilter = _selectedStatus.toLowerCase();
+      }
+
+      // Fetch ALL filtered clinics (not just current page)
+      final result = await SuperAdminService.getPaginatedClinicRegistrations(
+        page: 1,
+        itemsPerPage: 999999, // Get all matching records
+        statusFilter: statusFilter,
+        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+      );
+
+      final allFilteredClinics = result['clinics'] as List<ClinicRegistration>;
+
+      if (allFilteredClinics.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No clinics to export'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get current admin name
+      String? adminName = 'Super Admin';
+
+      // Generate PDF
+      final Uint8List pdfBytes = await ClinicPdfService.generateClinicReport(
+        clinics: allFilteredClinics,
+        statusFilter: _selectedStatus != 'All Status' ? _selectedStatus : null,
+        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+        generatedBy: adminName,
+      );
+
+      // Download PDF
+      final fileName = 'clinic_report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      file_downloader.downloadFile(fileName, pdfBytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ PDF report generated with ${allFilteredClinics.length} clinics'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      print('📊 Exported ${allFilteredClinics.length} clinics to PDF');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ Error generating PDF: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
@@ -696,12 +796,7 @@ class _ClinicManagementScreenState extends State<ClinicManagementScreen> with Au
               selectedStatus: _selectedStatus,
               onSearchChanged: _onSearchChanged,
               onStatusChanged: _onStatusFilterChanged,
-              onExportData: () {
-                // TODO: Implement export functionality
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Export functionality coming soon')),
-                );
-              },
+              onExportData: _handleExportCSV,
             ),
             
             SizedBox(height: kSpacingLarge),

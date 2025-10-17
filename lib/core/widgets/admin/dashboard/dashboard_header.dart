@@ -5,11 +5,13 @@ import 'period_button.dart';
 
 class DashboardHeader extends StatelessWidget {
   final String selectedPeriod;
+  final String? userName;
   final Function(String) onPeriodChanged;
 
   const DashboardHeader({
     super.key,
     required this.selectedPeriod,
+    this.userName,
     required this.onPeriodChanged,
   });
 
@@ -25,6 +27,12 @@ class DashboardHeader extends StatelessWidget {
   }
 
   Widget _buildHeaderInfo() {
+    // Build welcome message with dynamic name
+    String welcomeMessage = 'Welcome back';
+    if (userName != null && userName!.isNotEmpty) {
+      welcomeMessage = 'Welcome back, $userName';
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -36,7 +44,7 @@ class DashboardHeader extends StatelessWidget {
             ),
         SizedBox(height: 4),
         Text(
-          'Welcome back, Dr. Johnson',
+          welcomeMessage,
           style: TextStyle(
             fontSize: kFontSizeRegular,
             color: AppColors.textSecondary,

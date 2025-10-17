@@ -18,15 +18,15 @@ import 'package:pawsense/core/widgets/user/home/history_section.dart';
 import 'package:pawsense/core/widgets/user/home/ai_history_list.dart';
 import 'package:pawsense/core/widgets/user/home/appointment_history_list.dart';
 import 'package:pawsense/core/widgets/user/shared/modals/pet_assessment_modal.dart';
+import 'package:pawsense/core/widgets/shared/ui/scroll_to_top_fab.dart';
 import 'package:pawsense/core/services/user/assessment_result_service.dart';
 import 'package:pawsense/core/models/user/assessment_result_model.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart' as booking;
 import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/utils/data_cache.dart';
 import 'package:pawsense/core/services/notifications/notification_service.dart';
-import 'package:pawsense/core/services/notifications/notification_overlay_manager.dart';
-import 'package:pawsense/core/utils/notification_helper.dart';
-import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
+import 'package:pawsense/core/services/notifications/global_notification_manager.dart';
+import 'dart:async';
 
 class UserHomePage extends StatefulWidget {
   const UserHomePage({super.key});
@@ -44,6 +44,7 @@ class _UserHomePageState extends State<UserHomePage> {
   final GlobalKey<PetInfoCardState> _petCardKey = GlobalKey<PetInfoCardState>();
   bool _hasInitiallyLoaded = false; // Track if initial load is complete
   bool _isInternalTabSwitch = false; // Track if this is just a tab switch
+  final ScrollController _historyScrollController = ScrollController(); // Scroll controller for history tab
 
   // Dynamic health data generated from AI history
   List<HealthData> _healthData = [];
@@ -56,13 +57,17 @@ class _UserHomePageState extends State<UserHomePage> {
   // Dynamic appointment history data from database
   List<AppointmentHistoryData> _appointmentHistory = [];
   bool _appointmentHistoryLoading = false;
+  StreamSubscription<List<booking.AppointmentBooking>>? _appointmentStreamSubscription;
+  
+  // Closest upcoming appointment data
+  String? _nextAppointmentDate;
+  String? _nextAppointmentTime;
   
   final DataCache _cache = DataCache();
   
   // Notification system
   int _notificationCount = 0;
   late Stream<int> _notificationStream;
-  List<AlertData> _lastKnownAlerts = [];
 
   @override
   void initState() {
@@ -72,8 +77,9 @@ class _UserHomePageState extends State<UserHomePage> {
 
   @override
   void dispose() {
-    // Clean up notification overlay
-    NotificationOverlayManager.clearAll();
+    // Global notification manager handles cleanup automatically
+    _appointmentStreamSubscription?.cancel();
+    _historyScrollController.dispose();
     super.dispose();
   }
 
@@ -205,13 +211,11 @@ class _UserHomePageState extends State<UserHomePage> {
 
   // Public method to refresh appointment history (can be called after booking appointment)
   void refreshAppointmentHistory({bool forceRefresh = true}) {
-    // When called externally (like after booking), usually want fresh data
+    // With streams, the data will automatically update, but we can restart the stream if needed
     if (_userModel != null) {
-      // Invalidate cache when new appointment is booked
-      final cacheKey = 'user_appointments_${_userModel!.uid}';
-      _cache.invalidate(cacheKey);
+      print('DEBUG: Refreshing appointment history stream');
+      _fetchAppointmentHistory(forceRefresh: forceRefresh);
     }
-    _fetchAppointmentHistory(forceRefresh: forceRefresh);
   }
 
   Future<void> _fetchUser() async {
@@ -275,10 +279,47 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
-  void _initializeNotificationStream() {
+  void _initializeNotificationStream() async {
+    if (_userModel == null) {
+      debugPrint('⚠️ Cannot initialize notifications: _userModel is null');
+      return;
+    }
+    
+    try {
+      // Use global notification manager
+      final globalManager = GlobalNotificationManager();
+      
+      // Listen to unread count changes
+      globalManager.unreadCountStream.listen((count) {
+        debugPrint('� Global unread count updated to: $count');
+        if (mounted) {
+          setState(() {
+            _notificationCount = count;
+          });
+        }
+      });
+      
+      // Get initial count
+      final initialCount = globalManager.unreadCount;
+      setState(() {
+        _notificationCount = initialCount;
+      });
+      
+      debugPrint('✅ Home page connected to global notification manager');
+      debugPrint('📊 Initial unread count: $initialCount');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to connect to global notifications: $e');
+      debugPrint('🔄 Falling back to old notification system');
+      // Fallback to old system if needed
+      _initializeFallbackNotifications();
+    }
+  }
+
+  // Fallback method in case of initialization failure
+  void _initializeFallbackNotifications() {
     if (_userModel == null) return;
     
-    // Listen to notification count
     _notificationStream = NotificationService.getUnreadNotificationsCount(_userModel!.uid);
     _notificationStream.listen((count) {
       if (mounted) {
@@ -287,38 +328,17 @@ class _UserHomePageState extends State<UserHomePage> {
         });
       }
     });
-    
-    // Listen to new notifications for popup display
-    NotificationService.getAllUserNotifications(_userModel!.uid).listen((notifications) {
-      if (!mounted) return;
-      
-      final alertData = notifications
-          .map((notification) => NotificationHelper.fromNotificationModel(notification))
-          .toList();
-      
-      // Check for new unread notifications
-      final newAlerts = alertData.where((alert) => 
-          !alert.isRead && 
-          !_lastKnownAlerts.any((known) => known.id == alert.id)
-      ).toList();
-      
-      // Show popup for new notifications
-      for (final alert in newAlerts) {
-        NotificationOverlayManager.showNotification(
-          context,
-          alert,
-          userId: _userModel?.uid,
-          onTap: () {
-            // Navigate to alerts page
-            setState(() {
-              _currentNavIndex = 2; // Alerts tab
-            });
-          },
-        );
-      }
-      
-      _lastKnownAlerts = alertData;
-    });
+  }
+
+  // Debug method to test popup notifications (can be called manually for testing)
+  void debugTestPopupNotification() {
+    try {
+      final globalManager = GlobalNotificationManager();
+      globalManager.showTestPopup(context);
+      debugPrint('🧪 Debug: Test popup notification triggered via global manager');
+    } catch (e) {
+      debugPrint('❌ Error in debug popup test: $e');
+    }
   }
 
   Future<void> _fetchAssessmentHistory({bool forceRefresh = false}) async {
@@ -432,25 +452,8 @@ class _UserHomePageState extends State<UserHomePage> {
     
     print('DEBUG: Fetching appointment history for user: ${_userModel!.uid}, forceRefresh: $forceRefresh');
     
-    final cacheKey = 'user_appointments_${_userModel!.uid}';
-    
-    // Try to get cached data first (unless forcing refresh)
-    if (!forceRefresh) {
-      final cachedAppointments = _cache.get<List<booking.AppointmentBooking>>(cacheKey);
-      if (cachedAppointments != null) {
-        print('DEBUG: Using cached appointments (${cachedAppointments.length} appointments)');
-        
-        final appointmentHistoryData = _convertAppointmentsToHistoryData(cachedAppointments);
-        
-        if (mounted) {
-          setState(() {
-            _appointmentHistory = appointmentHistoryData;
-            _appointmentHistoryLoading = false;
-          });
-        }
-        return;
-      }
-    }
+    // Cancel existing subscription if any
+    await _appointmentStreamSubscription?.cancel();
     
     // Show loading only if we don't have data yet
     final showLoading = _appointmentHistory.isEmpty;
@@ -462,38 +465,55 @@ class _UserHomePageState extends State<UserHomePage> {
     }
 
     try {
-      print('DEBUG: Fetching appointments from API for user: ${_userModel!.uid}');
-      final appointments = await AppointmentBookingService.getUserAppointments(_userModel!.uid);
-      print('DEBUG: Fetched ${appointments.length} appointments from API');
+      print('DEBUG: Setting up real-time appointment stream');
       
-      // Verify all appointments belong to the current user
-      final invalidAppointments = appointments.where((appointment) => appointment.userId != _userModel!.uid).toList();
-      if (invalidAppointments.isNotEmpty) {
-        print('ERROR: Found ${invalidAppointments.length} appointments that do not belong to current user!');
-        print('Current user: ${_userModel!.uid}');
-        for (var appointment in invalidAppointments) {
-          print('Invalid appointment: ${appointment.id} belongs to user: ${appointment.userId}');
-        }
-      }
+      // Subscribe to real-time updates
+      _appointmentStreamSubscription = AppointmentBookingService
+          .getUserAppointmentsStream(_userModel!.uid)
+          .listen(
+        (appointments) {
+          print('DEBUG: Received ${appointments.length} appointments from stream');
+          
+          // Verify all appointments belong to the current user
+          final invalidAppointments = appointments.where((appointment) => appointment.userId != _userModel!.uid).toList();
+          if (invalidAppointments.isNotEmpty) {
+            print('ERROR: Found ${invalidAppointments.length} appointments that do not belong to current user!');
+            print('Current user: ${_userModel!.uid}');
+            for (var appointment in invalidAppointments) {
+              print('Invalid appointment: ${appointment.id} belongs to user: ${appointment.userId}');
+            }
+          }
+          
+          // Filter to only include appointments for current user (safety check)
+          final validAppointments = appointments.where((appointment) => appointment.userId == _userModel!.uid).toList();
+          print('DEBUG: After filtering, ${validAppointments.length} valid appointments for current user');
+          
+          final appointmentHistoryData = _convertAppointmentsToHistoryData(validAppointments);
+          print('DEBUG: Converted to ${appointmentHistoryData.length} appointment history items');
+          
+          // Calculate closest upcoming appointment from real-time data
+          _calculateClosestUpcomingAppointment(validAppointments);
+          
+          if (mounted) {
+            setState(() {
+              _appointmentHistory = appointmentHistoryData;
+              _appointmentHistoryLoading = false;
+            });
+          }
+        },
+        onError: (error) {
+          print('Error in appointment stream: $error');
+          if (mounted) {
+            setState(() {
+              _appointmentHistoryLoading = false;
+            });
+          }
+        },
+      );
       
-      // Filter to only include appointments for current user (safety check)
-      final validAppointments = appointments.where((appointment) => appointment.userId == _userModel!.uid).toList();
-      print('DEBUG: After filtering, ${validAppointments.length} valid appointments for current user');
-      
-      // Cache the fresh data (3 minutes TTL)
-      _cache.put(cacheKey, validAppointments, ttl: const Duration(minutes: 3));
-      
-      final appointmentHistoryData = _convertAppointmentsToHistoryData(validAppointments);
-      print('DEBUG: Converted to ${appointmentHistoryData.length} appointment history items');
-      
-      if (mounted) {
-        setState(() {
-          _appointmentHistory = appointmentHistoryData;
-          _appointmentHistoryLoading = false;
-        });
-      }
+      print('DEBUG: Successfully subscribed to appointment stream');
     } catch (e) {
-      print('Error fetching appointment history: $e');
+      print('Error setting up appointment stream: $e');
       if (mounted) {
         setState(() {
           _appointmentHistoryLoading = false;
@@ -503,7 +523,39 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   List<AppointmentHistoryData> _convertAppointmentsToHistoryData(List<booking.AppointmentBooking> appointments) {
-    return appointments.map((appointment) {
+    print('DEBUG: Converting ${appointments.length} appointments to history data');
+    
+    // Create a map to track unique appointments (ignoring status changes)
+    // Key insight: Same appointment with different statuses = ONE appointment entry
+    final Map<String, booking.AppointmentBooking> uniqueAppointments = {};
+    
+    for (final appointment in appointments) {
+      // Create a unique key based ONLY on service, date, and time (NOT status)
+      // This ensures that "Consultation Service 31/10 09:00" appears only ONCE
+      // regardless of whether it was Pending → Confirmed → Cancelled
+      final uniqueKey = '${appointment.serviceName}_${appointment.appointmentDate.toIso8601String().split('T')[0]}_${appointment.appointmentTime}';
+      
+      // Keep the appointment with the most recent update time (latest status)
+      if (!uniqueAppointments.containsKey(uniqueKey)) {
+        uniqueAppointments[uniqueKey] = appointment;
+        print('DEBUG: Added new appointment: ${appointment.serviceName} on ${appointment.appointmentDate.toIso8601String().split('T')[0]} at ${appointment.appointmentTime} - Status: ${appointment.status}');
+      } else {
+        // Compare update times to keep the most recent version
+        final existingAppointment = uniqueAppointments[uniqueKey]!;
+        
+        if (appointment.updatedAt.isAfter(existingAppointment.updatedAt)) {
+          print('DEBUG: Updating appointment status: ${appointment.serviceName} from ${existingAppointment.status} to ${appointment.status}');
+          uniqueAppointments[uniqueKey] = appointment;
+        } else {
+          print('DEBUG: Keeping existing appointment status: ${appointment.serviceName} - ${existingAppointment.status}');
+        }
+      }
+    }
+    
+    print('DEBUG: After deduplication: ${uniqueAppointments.length} unique appointments');
+    
+    // Convert the unique appointments to history data and maintain creation date order
+    final historyList = uniqueAppointments.values.map((appointment) {
       // Convert booking AppointmentStatus to history AppointmentStatus
       AppointmentStatus historyStatus;
       switch (appointment.status) {
@@ -522,22 +574,36 @@ class _UserHomePageState extends State<UserHomePage> {
           break;
       }
       
-      // Format the subtitle with date and time
+      // Format the subtitle with date, time, and status
       final dateStr = '${appointment.appointmentDate.day}/${appointment.appointmentDate.month}';
-      final subtitle = '$dateStr • ${appointment.appointmentTime}';
+      final statusStr = _getStatusDisplayName(appointment.status);
+      final subtitle = '$dateStr • ${appointment.appointmentTime} • $statusStr';
       
       return AppointmentHistoryData(
         id: appointment.id ?? '',
-        title: _getStatusTitle(appointment.status),
+        title: _getStatusTitle(appointment),
         subtitle: subtitle,
         status: historyStatus,
         timestamp: appointment.appointmentDate,
-        clinicName: appointment.serviceName, // Use service name as clinic info
+        clinicName: appointment.serviceName, // Store service name for reference
+        createdAt: appointment.createdAt, // Add createdAt for sorting
       );
     }).toList();
+    
+    // Sort by creation date (most recently booked first)
+    historyList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    return historyList;
   }
   
-  String _getStatusTitle(booking.AppointmentStatus status) {
+  String _getStatusTitle(booking.AppointmentBooking appointment) {
+    // Use service name as the primary title instead of just status
+    return appointment.serviceName.isNotEmpty 
+        ? appointment.serviceName 
+        : 'Veterinary Appointment';
+  }
+
+  String _getStatusDisplayName(booking.AppointmentStatus status) {
     switch (status) {
       case booking.AppointmentStatus.pending:
         return 'Pending';
@@ -550,6 +616,50 @@ class _UserHomePageState extends State<UserHomePage> {
       case booking.AppointmentStatus.rescheduled:
         return 'Rescheduled';
     }
+  }
+
+  void _calculateClosestUpcomingAppointment(List<booking.AppointmentBooking> appointments) {
+    String? nextDate;
+    String? nextTime;
+    
+    if (appointments.isNotEmpty) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day); // Start of today
+      
+      // Filter to only include confirmed appointments that are today or in the future
+      final upcomingAppointments = appointments.where((appointment) {
+        return appointment.status == booking.AppointmentStatus.confirmed &&
+               (appointment.appointmentDate.isAtSameMomentAs(today) ||
+                appointment.appointmentDate.isAfter(today));
+      }).toList();
+      
+      // Sort by date and time to find the closest one
+      if (upcomingAppointments.isNotEmpty) {
+        upcomingAppointments.sort((a, b) {
+          final dateComparison = a.appointmentDate.compareTo(b.appointmentDate);
+          if (dateComparison != 0) return dateComparison;
+          
+          // If same date, sort by time
+          return a.appointmentTime.compareTo(b.appointmentTime);
+        });
+        
+        final closestAppointment = upcomingAppointments.first;
+        // Format date as "Oct 9" or similar
+        final appointmentDate = closestAppointment.appointmentDate;
+        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        nextDate = '${months[appointmentDate.month - 1]} ${appointmentDate.day}';
+        nextTime = closestAppointment.appointmentTime;
+        
+        print('DEBUG: Found closest upcoming appointment: $nextDate at $nextTime');
+      } else {
+        print('DEBUG: No upcoming appointments found');
+      }
+    }
+    
+    // Update the state variables
+    _nextAppointmentDate = nextDate;
+    _nextAppointmentTime = nextTime;
   }
 
   List<AIHistoryData> _convertAssessmentResultsToAIHistory(List<AssessmentResult> assessmentResults) {
@@ -759,7 +869,9 @@ class _UserHomePageState extends State<UserHomePage> {
       body: _loading 
           ? _buildLoadingState()
           : _userModel != null 
-              ? _buildHomeContent()
+              ? _currentTabIndex == 1 
+                  ? _buildHistoryWithScrollToTop()
+                  : _buildHomeContent()
               : _buildErrorState(),
       bottomNavigationBar: UserBottomNavBar(
         currentIndex: _currentNavIndex,
@@ -875,8 +987,8 @@ class _UserHomePageState extends State<UserHomePage> {
 
                       PetInfoCard(
                         key: _petCardKey,
-                        nextAppointmentDate: null, // No appointment
-                        nextAppointmentTime: null, // No appointment
+                        nextAppointmentDate: _nextAppointmentDate,
+                        nextAppointmentTime: _nextAppointmentTime,
                       ),
 
                       // Add space between pets and health snapshot
@@ -927,6 +1039,64 @@ class _UserHomePageState extends State<UserHomePage> {
       onViewAllPressed: () {
         // Handle view all history
       },
+      onAppointmentUpdated: () {
+        // Refresh appointment history when an appointment is updated (e.g., cancelled)
+        refreshAppointmentHistory(forceRefresh: true);
+      },
+    );
+  }
+
+  Widget _buildHistoryWithScrollToTop() {
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: () async {
+            await _fetchAssessmentHistory(forceRefresh: true);
+            await _fetchAppointmentHistory(forceRefresh: true);
+          },
+          color: AppColors.primary,
+          child: SingleChildScrollView(
+            controller: _historyScrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                // Tab Toggle
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: kMobileMarginHorizontal, vertical: kMobileSizedBoxXLarge),
+                  child: TabToggle(
+                    selectedIndex: _currentTabIndex,
+                    onTabChanged: (index) {
+                      if (mounted) {
+                        setState(() {
+                          _currentTabIndex = index;
+                          _isInternalTabSwitch = true;
+                        });
+                      }
+                    },
+                    tabs: const ['Dashboard', 'History'],
+                  ),
+                ),
+                
+                // History Content
+                _buildHistoryContent(),
+                
+                const SizedBox(height: 32), // Bottom padding
+              ],
+            ),
+          ),
+        ),
+        
+        // Scroll to Top FAB
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: ScrollToTopFab(
+            scrollController: _historyScrollController,
+            showThreshold: 200.0,
+            tooltip: 'Scroll to top',
+          ),
+        ),
+      ],
     );
   }
 
@@ -947,7 +1117,7 @@ class _UserHomePageState extends State<UserHomePage> {
         icon: Icons.message,
         backgroundColor: const Color(0xFF007AFF).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/messaging');
+          context.push('/messaging?source=services');
         },
       ),
       ServiceItem(
@@ -960,12 +1130,12 @@ class _UserHomePageState extends State<UserHomePage> {
         },
       ),
       ServiceItem(
-        title: 'Pet Care Tips',
-        subtitle: 'Daily care',
-        icon: Icons.lightbulb_outline,
+        title: 'Skin Disease Info',
+        subtitle: 'Learn about conditions',
+        icon: Icons.medical_information_outlined,
         backgroundColor: const Color(0xFF34C759).withValues(alpha: 0.1),
         onTap: () {
-          context.push('/pet-care-tips');
+          context.push('/skin-disease-library?source=services');
         },
       ),
     ];

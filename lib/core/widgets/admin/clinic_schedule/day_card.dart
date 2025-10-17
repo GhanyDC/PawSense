@@ -42,34 +42,74 @@ class DayCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              day.name,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: _getTextColor(),
-              ),
+            Row(
+              children: [
+                Text(
+                  day.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _getTextColor(),
+                  ),
+                ),
+                if (day.isHoliday) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.event_busy,
+                    size: 14,
+                    color: isSelected ? AppColors.white : Colors.red.shade400,
+                  ),
+                ],
+              ],
             ),
-            if (day.openTime != null && day.closeTime != null) ...[
+            if (day.isHoliday) ...[
               const SizedBox(height: 4),
-              Text(
-                '${day.openTime} - ${day.closeTime}',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: _getSubtextColor(),
-                  fontWeight: FontWeight.w500,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected 
+                    ? AppColors.white.withOpacity(0.2)
+                    : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isSelected 
+                      ? AppColors.white.withOpacity(0.3)
+                      : Colors.red.shade200,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  'HOLIDAY',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: isSelected ? AppColors.white : Colors.red.shade600,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-            ],
-            if (day.appointments.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                day.appointments,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _getSubtextColor(),
+            ] else ...[
+              if (day.openTime != null && day.closeTime != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${day.openTime} - ${day.closeTime}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: _getSubtextColor(),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
+              ],
+              if (day.appointments.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  day.appointments,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _getSubtextColor(),
+                  ),
+                ),
+              ],
             ],
             if (day.slotsInfo != null) ...[
               const SizedBox(height: 4),
@@ -138,6 +178,21 @@ class DayCard extends StatelessWidget {
         colors: [AppColors.background, AppColors.background],
       );
     }
+    if (day.isHoliday) {
+      // Special gradient for holidays
+      if (isSelected) {
+        return LinearGradient(
+          colors: [Colors.red.shade400, Colors.red.shade500],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      }
+      return LinearGradient(
+        colors: [Colors.red.shade50, Colors.red.shade100],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+    }
     if (isSelected) {
       return LinearGradient(
         colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
@@ -154,6 +209,9 @@ class DayCard extends StatelessWidget {
 
   Color _getTextColor() {
     if (day.isDisabled) return AppColors.textSecondary;
+    if (day.isHoliday) {
+      return isSelected ? AppColors.white : Colors.red.shade700;
+    }
     if (isSelected) return AppColors.white;
     return AppColors.primary;
   }

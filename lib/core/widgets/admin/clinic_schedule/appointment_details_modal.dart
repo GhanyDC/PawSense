@@ -41,11 +41,16 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
   Map<String, dynamic>? _assessmentData;
   bool _isLoadingAssessment = false;
   bool _isGeneratingPDF = false;
+  
+  // Previous appointment data for follow-ups
+  Appointment? _previousAppointment;
+  bool _isLoadingPreviousAppointment = false;
 
   @override
   void initState() {
     super.initState();
     _loadAssessmentData();
+    _loadPreviousAppointmentData();
   }
 
   Future<void> _loadAssessmentData() async {
@@ -69,9 +74,97 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
         });
       }
     } catch (e) {
-      print('Error loading assessment data: $e');
+      debugPrint('Error loading assessment data: $e');
       if (mounted) {
         setState(() => _isLoadingAssessment = false);
+      }
+    }
+  }
+
+  Future<void> _loadPreviousAppointmentData() async {
+  // Check follow-up status and previous appointment id
+    
+    // Only load if this is a follow-up appointment
+    if (widget.appointment.isFollowUp != true || 
+        widget.appointment.previousAppointmentId == null ||
+        widget.appointment.previousAppointmentId!.isEmpty) {
+      // not a follow-up or missing previousAppointmentId
+      return;
+    }
+
+    setState(() => _isLoadingPreviousAppointment = true);
+
+    try {
+      final previousAppointmentDoc = await FirebaseFirestore.instance
+          .collection('appointments')
+          .doc(widget.appointment.previousAppointmentId)
+          .get();
+      if (previousAppointmentDoc.exists && mounted) {
+        final rawData = previousAppointmentDoc.data()!;
+        // Normalize legacy field names -> expected model keys
+        final normalized = Map<String, dynamic>.from(rawData);
+
+        // appointmentDate (Timestamp) -> date (YYYY-MM-DD)
+        if ((normalized['date'] == null || normalized['date'].toString().isEmpty) && normalized['appointmentDate'] != null) {
+          try {
+            final ts = normalized['appointmentDate'];
+            if (ts is Timestamp) {
+              final d = ts.toDate();
+              normalized['date'] = '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+            } else if (ts is String) {
+              normalized['date'] = ts;
+            }
+          } catch (e) {
+            debugPrint('Failed to normalize appointmentDate: $e');
+          }
+        }
+
+        // appointmentTime -> time
+        if ((normalized['time'] == null || normalized['time'].toString().isEmpty) && normalized['appointmentTime'] != null) {
+          normalized['time'] = normalized['appointmentTime'].toString();
+        }
+
+        // serviceName -> diseaseReason (legacy mapping)
+        if ((normalized['diseaseReason'] == null || normalized['diseaseReason'].toString().isEmpty) && normalized['serviceName'] != null) {
+          normalized['diseaseReason'] = normalized['serviceName'].toString();
+        }
+
+        // petId / userId legacy fields: ensure minimal pet/owner objects exist for model
+        if (normalized['pet'] == null && normalized['petId'] != null) {
+          normalized['pet'] = {
+            'id': normalized['petId'],
+            'name': normalized['petName'] ?? '',
+            'type': normalized['petType'] ?? '',
+            'emoji': normalized['petEmoji'] ?? '🐕',
+            'breed': normalized['petBreed'],
+            'age': normalized['petAge'],
+            'imageUrl': normalized['petImageUrl'],
+          };
+        }
+
+        if (normalized['owner'] == null && normalized['userId'] != null) {
+          normalized['owner'] = {
+            'id': normalized['userId'],
+            'name': normalized['userName'] ?? '',
+            'phone': normalized['userPhone'] ?? '',
+            'email': normalized['userEmail'],
+          };
+        }
+
+        setState(() {
+          _previousAppointment = Appointment.fromFirestore(normalized, previousAppointmentDoc.id);
+          _isLoadingPreviousAppointment = false;
+        });
+      } else if (!previousAppointmentDoc.exists) {
+        // previous appointment doc not found
+        if (mounted) {
+          setState(() => _isLoadingPreviousAppointment = false);
+        }
+      }
+    } catch (e) {
+      // error loading previous appointment data
+      if (mounted) {
+        setState(() => _isLoadingPreviousAppointment = false);
       }
     }
   }
@@ -260,67 +353,83 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
   }
 
   List<Widget> _buildAssessmentResults() {
+    final widgets = <Widget>[];
+
+    // Analysis Results
     final analysisResults = _assessmentData!['analysisResults'] as List?;
+    if (analysisResults != null && analysisResults.isNotEmpty) {
+      widgets.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+
+            ...analysisResults.map<Widget>((result) {
+              if (result is! Map<String, dynamic>) return const SizedBox.shrink();
+              
+              final condition = result['condition'] as String?;
+              final percentage = result['percentage'] as num?;
+              final colorHex = result['colorHex'] as String?;
+              
+              if (condition == null || percentage == null) return const SizedBox.shrink();
+              
+              Color conditionColor = const Color(0xFF7C3AED);
+              if (colorHex != null && colorHex.startsWith('#')) {
+                try {
+                  conditionColor = Color(int.parse(colorHex.substring(1), radix: 16) + 0xFF000000);
+                } catch (e) {
+                  // Use default color if parsing fails
+                }
+              }
+              
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: conditionColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        condition,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${percentage.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: conditionColor,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      );
+    }
+
+    // Detection Results and Uploaded Images removed - showing only AI Analysis Results
     
-    if (analysisResults == null || analysisResults.isEmpty) {
+    if (widgets.isEmpty) {
       return [
         const Text(
-          'No analysis results available',
+          'No assessment data available',
           style: TextStyle(color: Colors.grey),
         ),
       ];
     }
-    
-    return analysisResults.map<Widget>((result) {
-      if (result is! Map<String, dynamic>) return const SizedBox.shrink();
-      
-      final condition = result['condition'] as String?;
-      final percentage = result['percentage'] as num?;
-      final colorHex = result['colorHex'] as String?;
-      
-      if (condition == null || percentage == null) return const SizedBox.shrink();
-      
-      Color conditionColor = const Color(0xFF7C3AED);
-      if (colorHex != null && colorHex.startsWith('#')) {
-        try {
-          conditionColor = Color(int.parse(colorHex.substring(1), radix: 16) + 0xFF000000);
-        } catch (e) {
-          // Use default color if parsing fails
-        }
-      }
-      
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                color: conditionColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                condition,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Text(
-              '${percentage.toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: conditionColor,
-              ),
-            ),
-          ],
-        ),
-      );
-    }).toList();
+
+    return widgets;
   }
 
   @override
@@ -335,6 +444,9 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
       ),
       child: Container(
         width: 500,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -359,8 +471,15 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
             ),
             const SizedBox(height: 20),
 
-            // Pet Information
-            Row(
+            // Scrollable Content
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Pet Information
+                    Row(
               children: [
                 _buildPetImage(),
                 const SizedBox(width: 16),
@@ -401,9 +520,201 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
             ),
             const SizedBox(height: 24),
 
+            // Cancellation Reason (if cancelled)
+            if (widget.appointment.status == AppointmentStatus.cancelled && 
+                widget.appointment.cancelReason != null &&
+                widget.appointment.cancelReason!.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red, width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.cancel, size: 18, color: Colors.red),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Cancellation Reason:',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.appointment.cancelReason!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             // Appointment Information
             _buildInfoSection('Date & Time', '$formattedDate at $formattedTime'),
             const SizedBox(height: 16),
+            
+            // Follow-up badge and previous appointment information
+            if (widget.appointment.isFollowUp == true) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+                ),
+               child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.sync, size: 18, color: Color(0xFF3B82F6)),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Follow-up Appointment',
+                          style: TextStyle(
+                            color: Color(0xFF3B82F6),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: Color(0xFF3B82F6)),
+                    const SizedBox(height: 12),
+                    
+                    // Previous appointment details
+                    if (_isLoadingPreviousAppointment)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (_previousAppointment != null) ...[
+                      // Previous Visit Details
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.history, size: 16, color: Color(0xFF3B82F6)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Previous Visit Details:',
+                                  style: TextStyle(
+                                    color: Color(0xFF3B82F6),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildPreviousAppointmentDetail('Date', _formatDate(_previousAppointment!.date)),
+                                const SizedBox(height: 4),
+                                _buildPreviousAppointmentDetail('Time', _previousAppointment!.time),
+                                const SizedBox(height: 4),
+                                _buildPreviousAppointmentDetail('Reason', _previousAppointment!.diseaseReason),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      // Clinic Evaluation Section
+                      if (_previousAppointment!.diagnosis != null && _previousAppointment!.diagnosis!.isNotEmpty ||
+                          _previousAppointment!.treatment != null && _previousAppointment!.treatment!.isNotEmpty ||
+                          _previousAppointment!.prescription != null && _previousAppointment!.prescription!.isNotEmpty ||
+                          _previousAppointment!.clinicNotes != null && _previousAppointment!.clinicNotes!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.medical_services, size: 16, color: Color(0xFF3B82F6)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Clinic Evaluation:',
+                                    style: TextStyle(
+                                      color: Color(0xFF3B82F6),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  
+                                  // Diagnosis
+                                  if (_previousAppointment!.diagnosis != null && 
+                                      _previousAppointment!.diagnosis!.isNotEmpty) ...[
+                                    _buildPreviousAppointmentDetail('Diagnosis', _previousAppointment!.diagnosis!),
+                                    const SizedBox(height: 4),
+                                  ],
+                                  
+                                  // Treatment
+                                  if (_previousAppointment!.treatment != null && 
+                                      _previousAppointment!.treatment!.isNotEmpty) ...[
+                                    _buildPreviousAppointmentDetail('Treatment', _previousAppointment!.treatment!),
+                                    const SizedBox(height: 4),
+                                  ],
+                                  
+                                  // Prescription
+                                  if (_previousAppointment!.prescription != null && 
+                                      _previousAppointment!.prescription!.isNotEmpty) ...[
+                                    _buildPreviousAppointmentDetail('Prescription', _previousAppointment!.prescription!),
+                                    const SizedBox(height: 4),
+                                  ],
+                                  
+                                  // Clinic Notes
+                                  if (_previousAppointment!.clinicNotes != null && 
+                                      _previousAppointment!.clinicNotes!.isNotEmpty) ...[
+                                    _buildPreviousAppointmentDetail('Clinic Notes', _previousAppointment!.clinicNotes!),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ] else ...[
+                      Text(
+                        'Previous appointment details not available',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            
             _buildInfoSection('Reason for Visit', widget.appointment.diseaseReason),
             const SizedBox(height: 16),
 
@@ -487,8 +798,10 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
                 ),
               ),
             ],
-            
-            const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -518,5 +831,70 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
         ),
       ],
     );
+  }
+
+  Widget _buildEvaluationRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            '$label:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[800],
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreviousAppointmentDetail(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF3B82F6),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (e) {
+      return dateString;
+    }
   }
 }

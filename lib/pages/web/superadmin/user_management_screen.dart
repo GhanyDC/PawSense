@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:pawsense/core/utils/file_downloader.dart' as file_downloader;
 import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
@@ -12,6 +15,7 @@ import '../../../core/services/super_admin/super_admin_service.dart';
 import '../../../core/services/super_admin/user_cache_service.dart';
 import '../../../core/services/super_admin/screen_state_service.dart';
 import '../../../core/widgets/super_admin/user_management/add_user_modal.dart';
+import '../../../core/services/super_admin/user_pdf_service.dart';
 
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({Key? key}) : super(key: key ?? const PageStorageKey('user_management'));
@@ -201,7 +205,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
           'total': _totalUsers,
           'active': _getMockUsersWithStatus().where((u) => u['isActive'] == true).length,
           'suspended': _getMockUsersWithStatus().where((u) => u['isActive'] == false).length,
-          'admins': _getMockUsersWithStatus().where((u) => (u['user'] as UserModel).role == 'admin' || (u['user'] as UserModel).role == 'super_admin').length,
+          'admins': _getMockUsersWithStatus().where((u) => (u['user'] as UserModel).role == 'admin').length,
           'users': _getMockUsersWithStatus().where((u) => (u['user'] as UserModel).role == 'user').length,
         };
         _isLoading = false;
@@ -544,6 +548,111 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
     }
   }
 
+  Future<void> _handleExportCSV() async {
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Generating PDF report...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+
+    try {
+      // Convert filter strings to API format
+      String? roleFilter;
+      if (_selectedRole != 'All Roles' && _selectedRole.isNotEmpty) {
+        roleFilter = _selectedRole.toLowerCase().replaceAll(' ', '_');
+      }
+      
+      String? statusFilter;
+      if (_selectedStatus != 'All Status' && _selectedStatus.isNotEmpty) {
+        if (_selectedStatus == 'Active') {
+          statusFilter = 'active';
+        } else if (_selectedStatus == 'Suspended') statusFilter = 'suspended';
+      }
+
+      // Fetch ALL filtered users (not just current page)
+      final result = await SuperAdminService.getPaginatedUsersWithStatus(
+        page: 1,
+        itemsPerPage: 999999, // Get all matching records
+        roleFilter: roleFilter,
+        statusFilter: statusFilter,
+        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+      );
+
+      final allFilteredUsers = result['users'] as List<Map<String, dynamic>>;
+
+      if (allFilteredUsers.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No users to export'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get current admin name
+      String? adminName = 'Super Admin';
+
+      // Generate PDF
+      final Uint8List pdfBytes = await UserPdfService.generateUserReport(
+        usersWithStatus: allFilteredUsers,
+        roleFilter: _selectedRole != 'All Roles' ? _selectedRole : null,
+        statusFilter: _selectedStatus != 'All Status' ? _selectedStatus : null,
+        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+        generatedBy: adminName,
+      );
+
+      // Download PDF
+      final fileName = 'user_report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      file_downloader.downloadFile(fileName, pdfBytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ PDF report generated with ${allFilteredUsers.length} users'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      print('📊 Exported ${allFilteredUsers.length} users to PDF');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ Error generating PDF: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
@@ -559,21 +668,21 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
             PageHeader(
               title: 'User Management',
               subtitle: 'Manage and monitor all users in the system',
-              actions: [
-                ElevatedButton.icon(
-                  onPressed: _showAddUserModal,
-                  icon: const Icon(Icons.person_add, size: kIconSizeMedium),
-                  label: const Text('Add User'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: kSpacingMedium, vertical: kSpacingSmall),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ],
+              // actions: [
+              //   ElevatedButton.icon(
+              //     onPressed: _showAddUserModal,
+              //     icon: const Icon(Icons.person_add, size: kIconSizeMedium),
+              //     label: const Text('Add User'),
+              //     style: ElevatedButton.styleFrom(
+              //       backgroundColor: AppColors.primary,
+              //       foregroundColor: AppColors.white,
+              //       padding: const EdgeInsets.symmetric(horizontal: kSpacingMedium, vertical: kSpacingSmall),
+              //       shape: RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.circular(8),
+              //       ),
+              //     ),
+              //   ),
+              // ],
             ),
             
             SizedBox(height: kSpacingLarge),
@@ -585,7 +694,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
               inactiveUsers: _userStats['suspended'] ?? _usersWithStatus.where((u) => u['isActive'] == false).length,
               adminUsers: _userStats['admins'] ?? _usersWithStatus.where((u) {
                 final user = u['user'] as UserModel;
-                return user.role == 'admin' || user.role == 'super_admin';
+                return user.role == 'admin';
               }).length,
             ),
             
@@ -599,12 +708,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Automa
               onSearchChanged: _onSearchChanged,
               onRoleChanged: _onRoleFilterChanged,
               onStatusChanged: _onStatusFilterChanged,
-              onExportData: () {
-                // TODO: Implement export functionality
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Export functionality coming soon')),
-                );
-              },
+              onExportData: _handleExportCSV,
             ),
             
             SizedBox(height: kSpacingLarge),

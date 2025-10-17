@@ -7,6 +7,7 @@ import 'package:pawsense/core/widgets/user/alerts/alert_item.dart';
 import 'package:pawsense/core/utils/notification_helper.dart';
 import 'package:pawsense/core/services/messaging/messaging_service.dart';
 import 'package:pawsense/pages/mobile/messaging/conversation_page.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
 
 class NotificationDetailPage extends StatefulWidget {
   final String notificationId;
@@ -30,11 +31,36 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
   @override
   void initState() {
     super.initState();
-    _loadNotification();
+    _checkAuthAndLoadNotification();
+  }
+
+  Future<void> _checkAuthAndLoadNotification() async {
+    try {
+      print('NotificationDetailPage: Checking user authentication');
+      final user = await AuthGuard.getCurrentUser();
+      if (user == null) {
+        print('NotificationDetailPage: User not authenticated, redirecting to login');
+        if (mounted) {
+          context.go('/signin');
+        }
+        return;
+      }
+      print('NotificationDetailPage: User authenticated, proceeding to load notification');
+      await _loadNotification();
+    } catch (e) {
+      print('❌ NotificationDetailPage: Auth check failed: $e');
+      if (mounted) {
+        setState(() {
+          _error = 'Authentication error. Please sign in again.';
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadNotification() async {
     try {
+      print('NotificationDetailPage: Starting to load notification ${widget.notificationId}');
       setState(() {
         _isLoading = true;
         _error = null;
@@ -42,10 +68,12 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
 
       // If alertData was passed, convert it to NotificationModel
       if (widget.alertData != null) {
+        print('NotificationDetailPage: Using provided alertData');
         final notification = NotificationHelper.toNotificationModel(widget.alertData!);
         
         // Mark as read
         if (!notification.isRead) {
+          print('NotificationDetailPage: Marking notification as read');
           await NotificationService.markAsRead(widget.notificationId);
         }
         
@@ -59,9 +87,11 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
       }
 
       // Otherwise, try to fetch from database
+      print('NotificationDetailPage: Fetching notification from database');
       final notification = await NotificationService.getNotificationById(widget.notificationId);
       
       if (notification == null) {
+        print('NotificationDetailPage: Notification not found in database');
         setState(() {
           _error = 'Notification not found';
           _isLoading = false;
@@ -69,8 +99,11 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
         return;
       }
 
+      print('NotificationDetailPage: Successfully loaded notification: ${notification.title}');
+      
       // Mark as read
       if (!notification.isRead) {
+        print('NotificationDetailPage: Marking fetched notification as read');
         await NotificationService.markAsRead(widget.notificationId);
       }
 
@@ -81,10 +114,11 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
         });
       }
     } catch (e) {
-      print('Error loading notification: $e');
+      print('❌ Error loading notification: $e');
+      print('❌ Error stack trace: ${StackTrace.current}');
       if (mounted) {
         setState(() {
-          _error = 'Failed to load notification';
+          _error = 'Failed to load notification: ${e.toString()}';
           _isLoading = false;
         });
       }

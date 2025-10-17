@@ -24,6 +24,7 @@ class _AddSpecializationModalState extends State<AddSpecializationModal> {
   bool _hasCertification = true;
   bool _isLoading = false;
   bool _isCustom = false;
+  String? _errorMessage;
 
   // Predefined specializations
   final List<String> _predefinedSpecializations = [
@@ -66,11 +67,16 @@ class _AddSpecializationModalState extends State<AddSpecializationModal> {
         : _selectedSpecialization;
 
     if (specialization == null || specialization.isEmpty) {
-      _showErrorSnackBar('Please select or enter a specialization');
+      setState(() {
+        _errorMessage = 'Please select or enter a specialization';
+      });
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null; // Clear previous errors
+    });
 
     try {
       print('DEBUG Modal: Adding specialization: $specialization');
@@ -93,29 +99,24 @@ class _AddSpecializationModalState extends State<AddSpecializationModal> {
           Navigator.of(context).pop();
         }
       } else if (mounted) {
-        _showErrorSnackBar('Specialization already exists or failed to add');
+        setState(() {
+          _errorMessage = 'Specialization already exists or failed to add';
+          _isLoading = false;
+        });
       }
     } catch (e) {
       print('DEBUG Modal: Error adding specialization: $e');
       if (mounted) {
-        _showErrorSnackBar('Error adding specialization: $e');
+        setState(() {
+          _errorMessage = 'Error adding specialization: $e';
+          _isLoading = false;
+        });
       }
     } finally {
-      if (mounted) {
+      if (mounted && _errorMessage == null) {
         setState(() => _isLoading = false);
       }
     }
-  }
-
-  // Success notification method removed - functionality not currently used
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
   }
 
   @override
@@ -159,6 +160,40 @@ class _AddSpecializationModalState extends State<AddSpecializationModal> {
                 ],
               ),
               const SizedBox(height: kSpacingMedium),
+
+              // Error Banner
+              if (_errorMessage != null)
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(kSpacingMedium),
+                  margin: EdgeInsets.only(bottom: kSpacingMedium),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(kBorderRadiusSmall),
+                    border: Border.all(color: AppColors.error),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                      SizedBox(width: kSpacingSmall),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: AppColors.error,
+                            fontSize: kFontSizeSmall,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, size: 18, color: AppColors.error),
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(),
+                        onPressed: () => setState(() => _errorMessage = null),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Toggle between predefined and custom
               Container(

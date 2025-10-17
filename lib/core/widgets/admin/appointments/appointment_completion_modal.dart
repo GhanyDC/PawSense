@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../utils/app_colors.dart';
 import '../../../models/clinic/appointment_models.dart';
+import '../../../services/notifications/notification_service.dart';
+import '../../../models/notifications/notification_model.dart';
 
 class AppointmentCompletionModal extends StatefulWidget {
   final Appointment appointment;
@@ -49,6 +51,7 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   
   bool _isLoading = false;
   bool _isSaving = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -84,6 +87,8 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
 
       if (assessmentDoc.exists) {
         final data = assessmentDoc.data()!;
+        print('📄 Assessment document fields: ${data.keys.toList()}');
+        
         final analysisResults = data['analysisResults'] as List<dynamic>? ?? [];
         
         setState(() {
@@ -96,14 +101,41 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             };
           }).toList();
           
-          // Load image assessment data for training validation
+          // Load image assessment data from multiple possible sources
+          // Priority: 1. Direct URL fields, 2. detectionResults, 3. imageUrls array
+          
+          // Try direct URL fields first
           _originalImageUrl = data['originalImageUrl'] as String?;
           _annotatedImageUrl = data['annotatedImageUrl'] as String?;
+          
+          // If not found, check detectionResults array for images with bounding boxes
+          if (_originalImageUrl == null || _originalImageUrl!.isEmpty) {
+            final detectionResults = data['detectionResults'] as List<dynamic>? ?? [];
+            if (detectionResults.isNotEmpty) {
+              final firstDetection = detectionResults[0] as Map<String, dynamic>?;
+              if (firstDetection != null) {
+                _originalImageUrl = firstDetection['imageUrl'] as String?;
+                print('📸 Found image in detectionResults: $_originalImageUrl');
+              }
+            }
+          }
+          
+          // If still not found, check imageUrls array
+          if (_originalImageUrl == null || _originalImageUrl!.isEmpty) {
+            final imageUrls = data['imageUrls'] as List<dynamic>? ?? [];
+            if (imageUrls.isNotEmpty) {
+              _originalImageUrl = imageUrls[0] as String?;
+              print('📸 Found image in imageUrls array: $_originalImageUrl');
+            }
+          }
+          
+          // Load metadata
           _assessmentMetadata = data['metadata'] as Map<String, dynamic>?;
           
-          print('AI Assessment loaded: hasAssessment=$_hasAIAssessment, predictions=${_aiPredictions.length}, originalImageUrl=$_originalImageUrl');
+          print('✅ AI Assessment loaded: hasAssessment=$_hasAIAssessment, predictions=${_aiPredictions.length}');
+          print('🖼️ Image URLs - Original: $_originalImageUrl, Annotated: $_annotatedImageUrl');
           
-          // Load assessment images if available
+          // Load assessment images if available from 'images' array
           final images = data['images'] as List<dynamic>? ?? [];
           _assessmentImages = images.map((img) {
             return {
@@ -114,14 +146,35 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
             };
           }).toList();
           
+          // Also add images from detectionResults to _assessmentImages if available
+          final detectionResults = data['detectionResults'] as List<dynamic>? ?? [];
+          for (var detection in detectionResults) {
+            final imageUrl = detection['imageUrl'] as String?;
+            if (imageUrl != null && imageUrl.isNotEmpty) {
+              _assessmentImages.add({
+                'url': imageUrl,
+                'type': 'detection',
+                'timestamp': Timestamp.now(),
+                'description': 'Image with detections',
+              });
+            }
+          }
+          
+          print('📦 Total assessment images: ${_assessmentImages.length}');
+          
           // Initialize validation map
           for (var i = 0; i < _aiPredictions.length; i++) {
             _predictionValidation[i.toString()] = false;
           }
         });
+      } else {
+        print('❌ Assessment document does not exist');
       }
     } catch (e) {
-      print('Error loading AI assessment: $e');
+      print('❌ Error loading AI assessment: $e');
+      if (e is FirebaseException) {
+        print('Firebase error code: ${e.code}, message: ${e.message}');
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -269,47 +322,30 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   Future<void> _saveCompletion() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Clear previous error
+    setState(() => _errorMessage = null);
+
     // Validate follow-up details if needed
     if (_needsFollowUp) {
       if (_followUpDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a follow-up date'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() => _errorMessage = 'Please select a follow-up date');
         return;
       }
       if (_followUpTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a follow-up time'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() => _errorMessage = 'Please select a follow-up time');
         return;
       }
     }
 
     // Validate AI assessment if available
     if (_hasAIAssessment && _aiAssessmentCorrect == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please indicate if the AI assessment was correct'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      setState(() => _errorMessage = 'Please indicate if the AI assessment was correct');
       return;
     }
 
     // Validate correct disease selection if AI assessment is marked as incorrect
     if (_hasAIAssessment && _aiAssessmentCorrect == false && (_selectedCorrectDisease == null || _selectedCorrectDisease!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select the correct disease when marking AI assessment as incorrect'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      setState(() => _errorMessage = 'Please select the correct disease when marking AI assessment as incorrect');
       return;
     }
 
@@ -427,8 +463,10 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       }
 
       // 4. Create follow-up appointment if needed
+      String? followUpAppointmentId;
       if (_needsFollowUp && _followUpDate != null && _followUpTime != null) {
         final followUpRef = FirebaseFirestore.instance.collection('appointments').doc();
+        followUpAppointmentId = followUpRef.id;
         
         final followUpTimeSlot = '$_followUpTime-${_addMinutes(_followUpTime!, 20)}';
         
@@ -450,6 +488,51 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       }
 
       await batch.commit();
+
+      // 5. Create notification for follow-up appointment
+      if (_needsFollowUp && followUpAppointmentId != null && _followUpDate != null && _followUpTime != null) {
+        try {
+          // Build a comprehensive message about the follow-up need
+          final diagnosisText = _diagnosisController.text.trim();
+          final messageText = diagnosisText.isNotEmpty 
+              ? 'Based on the diagnosis "${diagnosisText}", a follow-up appointment for ${widget.appointment.pet.name} has been scheduled for ${_followUpDate!.day}/${_followUpDate!.month}/${_followUpDate!.year} at $_followUpTime. Tap to view details and previous evaluation.'
+              : 'A follow-up appointment for ${widget.appointment.pet.name} has been scheduled for ${_followUpDate!.day}/${_followUpDate!.month}/${_followUpDate!.year} at $_followUpTime. Tap to view details and previous evaluation.';
+          
+          await NotificationService.createNotification(
+            userId: widget.appointment.owner.id,
+            title: 'Follow-up Required - ${widget.appointment.pet.name}',
+            message: messageText,
+            category: NotificationCategory.appointment,
+            priority: NotificationPriority.high,
+            actionUrl: '/appointments/details/${widget.appointment.id}',
+            actionLabel: 'View Evaluation',
+            metadata: {
+              'appointmentId': widget.appointment.id, // Link to previous/completed appointment
+              'petId': widget.appointment.pet.id,
+              'petName': widget.appointment.pet.name,
+              'clinicId': widget.appointment.clinicId,
+              'date': widget.appointment.date, // Use completed appointment date
+              'time': widget.appointment.time, // Use completed appointment time
+              'followUpAppointmentId': followUpAppointmentId,
+              'followUpDate': '${_followUpDate!.year}-${_followUpDate!.month.toString().padLeft(2, '0')}-${_followUpDate!.day.toString().padLeft(2, '0')}',
+              'followUpTime': _followUpTime,
+              'diseaseReason': 'Follow-up for: ${widget.appointment.diseaseReason}',
+              'isFollowUp': true,
+              'notificationType': 'followUp',
+              'needsFollowUp': true,
+              // Include clinic evaluation in metadata
+              'previousDiagnosis': diagnosisText,
+              'previousTreatment': _treatmentController.text.trim(),
+              'previousPrescription': _prescriptionController.text.trim(),
+              'previousClinicNotes': _clinicNotesController.text.trim(),
+            },
+          );
+          print('✅ Follow-up notification created for user ${widget.appointment.owner.id}');
+        } catch (e) {
+          print('⚠️ Error creating follow-up notification: $e');
+          // Don't fail the entire operation if notification fails
+        }
+      }
 
       if (!mounted) return;
       
@@ -480,16 +563,10 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
       
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to complete appointment: ${e.toString()}'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      setState(() {
+        _errorMessage = 'Failed to complete appointment: ${e.toString()}';
+        _isSaving = false;
+      });
     }
   }
 
@@ -501,6 +578,121 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
     final newHour = (totalMinutes ~/ 60) % 24;
     final newMinute = totalMinutes % 60;
     return '${newHour.toString().padLeft(2, '0')}:${newMinute.toString().padLeft(2, '0')}';
+  }
+
+  void _showImageZoomDialog(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierDismissible: true, // Allow closing by tapping outside
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.of(context).pop(), // Close on tap anywhere
+        child: Dialog(
+          backgroundColor: Colors.black87,
+          insetPadding: EdgeInsets.zero, // Remove all padding for full screen
+          child: Container(
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            color: Colors.transparent,
+            child: Stack(
+              children: [
+                // Image - Full screen (prevents closing when tapped)
+                Center(
+                  child: GestureDetector(
+                    onTap: () {}, // Prevent closing when tapping on image
+                    child: SizedBox(
+                      width: MediaQuery.of(context).size.width,
+                      height: MediaQuery.of(context).size.height,
+                      child: InteractiveViewer(
+                        panEnabled: true,
+                        minScale: 0.5,
+                        maxScale: 4.0,
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.black87,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.black87,
+                              child: const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.broken_image, size: 80, color: Colors.white),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'Failed to load image',
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Close button
+                Positioned(
+                  top: 40,
+                  right: 20,
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ),
+                // Hint text at bottom
+                Positioned(
+                  bottom: 40,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: const Text(
+                        'Pinch to zoom • Drag to pan',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -576,6 +768,40 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Error Banner
+                            if (_errorMessage != null)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.error),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: const TextStyle(
+                                          color: AppColors.error,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18, color: AppColors.error),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => setState(() => _errorMessage = null),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
                             // Clinic Evaluation Section (First)
                             const Text(
                               'Clinic Evaluation',
@@ -1181,52 +1407,81 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
                                       const SizedBox(height: 12),
                                       
                                       // Display assessment images (always show container)
-                                      Container(
-                                        width: double.infinity,
-                                        height: 200,
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
-                                              ? Image.network(
-                                                  _originalImageUrl!,
-                                                  fit: BoxFit.cover,
-                                                  loadingBuilder: (context, child, loadingProgress) {
-                                                    if (loadingProgress == null) return child;
-                                                    return const Center(
-                                                      child: CircularProgressIndicator(),
-                                                    );
-                                                  },
-                                                  errorBuilder: (context, error, stackTrace) {
-                                                    return Container(
-                                                      color: Colors.grey.withOpacity(0.1),
-                                                      child: const Center(
-                                                        child: Column(
-                                                          mainAxisAlignment: MainAxisAlignment.center,
-                                                          children: [
-                                                            Icon(Icons.broken_image, size: 40, color: Colors.grey),
-                                                            Text('Image not available', style: TextStyle(color: Colors.grey)),
-                                                          ],
+                                      InkWell(
+                                        onTap: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
+                                            ? () => _showImageZoomDialog(_originalImageUrl!)
+                                            : null,
+                                        child: Container(
+                                          width: double.infinity,
+                                          height: 300,
+                                          decoration: BoxDecoration(
+                                            border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Stack(
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: _originalImageUrl != null && _originalImageUrl!.isNotEmpty
+                                                    ? Image.network(
+                                                        _originalImageUrl!,
+                                                        width: double.infinity,
+                                                        height: double.infinity,
+                                                        fit: BoxFit.cover,
+                                                        loadingBuilder: (context, child, loadingProgress) {
+                                                          if (loadingProgress == null) return child;
+                                                          return const Center(
+                                                            child: CircularProgressIndicator(),
+                                                          );
+                                                        },
+                                                        errorBuilder: (context, error, stackTrace) {
+                                                          return Container(
+                                                            color: Colors.grey.withOpacity(0.1),
+                                                            child: const Center(
+                                                              child: Column(
+                                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                                children: [
+                                                                  Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                                                                  Text('Image not available', style: TextStyle(color: Colors.grey)),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      )
+                                                    : Container(
+                                                        color: Colors.grey.withOpacity(0.1),
+                                                        child: const Center(
+                                                          child: Column(
+                                                            mainAxisAlignment: MainAxisAlignment.center,
+                                                            children: [
+                                                              Icon(Icons.image, size: 40, color: Colors.grey),
+                                                              Text('No assessment image available', style: TextStyle(color: Colors.grey)),
+                                                            ],
+                                                          ),
                                                         ),
                                                       ),
-                                                    );
-                                                  },
-                                                )
-                                              : Container(
-                                                  color: Colors.grey.withOpacity(0.1),
-                                                  child: const Center(
-                                                    child: Column(
-                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                      children: [
-                                                        Icon(Icons.image, size: 40, color: Colors.grey),
-                                                        Text('No assessment image available', style: TextStyle(color: Colors.grey)),
-                                                      ],
+                                              ),
+                                              // Zoom icon overlay when image is available
+                                              if (_originalImageUrl != null && _originalImageUrl!.isNotEmpty)
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withOpacity(0.6),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.zoom_in,
+                                                      color: Colors.white,
+                                                      size: 20,
                                                     ),
                                                   ),
                                                 ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 8),

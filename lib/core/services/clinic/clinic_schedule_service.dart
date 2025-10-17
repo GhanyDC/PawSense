@@ -569,4 +569,190 @@ class ClinicScheduleService {
       return {};
     }
   }
+
+  // ==================== HOLIDAY MANAGEMENT ====================
+  
+  /// Save special holidays for a clinic
+  static Future<bool> saveHolidays(String clinicId, List<DateTime> holidays) async {
+    try {
+      if (clinicId.isEmpty) {
+        print('Error: clinicId cannot be empty');
+        return false;
+      }
+
+      // Convert holidays to ISO8601 strings for Firestore storage
+      final holidayStrings = holidays.map((date) => date.toIso8601String()).toList();
+
+      await _firestore.collection(_collection).doc(clinicId).update({
+        'holidays': holidayStrings,
+        'lastUpdated': Timestamp.fromDate(DateTime.now()),
+      });
+
+      print('Successfully saved ${holidays.length} holidays for clinic: $clinicId');
+      return true;
+    } catch (e) {
+      print('Error saving holidays: $e');
+      return false;
+    }
+  }
+
+  /// Get special holidays for a clinic
+  static Future<List<DateTime>> getHolidays(String clinicId) async {
+    try {
+      if (clinicId.isEmpty) {
+        print('Error: clinicId cannot be empty');
+        return [];
+      }
+
+      final doc = await _firestore.collection(_collection).doc(clinicId).get();
+      
+      if (!doc.exists) {
+        return [];
+      }
+
+      final data = doc.data();
+      if (data == null || !data.containsKey('holidays')) {
+        return [];
+      }
+
+      final holidayStrings = List<String>.from(data['holidays'] ?? []);
+      final holidays = holidayStrings
+          .map((dateStr) {
+            try {
+              return DateTime.parse(dateStr);
+            } catch (e) {
+              print('Error parsing holiday date: $dateStr');
+              return null;
+            }
+          })
+          .whereType<DateTime>()
+          .toList();
+
+      print('Loaded ${holidays.length} holidays for clinic: $clinicId');
+      return holidays;
+    } catch (e) {
+      print('Error getting holidays: $e');
+      return [];
+    }
+  }
+
+  /// Stream holidays for real-time updates
+  static Stream<List<DateTime>> streamHolidays(String clinicId) {
+    if (clinicId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    return _firestore.collection(_collection).doc(clinicId).snapshots().map((doc) {
+      if (!doc.exists) {
+        return [];
+      }
+
+      final data = doc.data();
+      if (data == null || !data.containsKey('holidays')) {
+        return [];
+      }
+
+      final holidayStrings = List<String>.from(data['holidays'] ?? []);
+      final holidays = holidayStrings
+          .map((dateStr) {
+            try {
+              return DateTime.parse(dateStr);
+            } catch (e) {
+              print('Error parsing holiday date: $dateStr');
+              return null;
+            }
+          })
+          .whereType<DateTime>()
+          .toList();
+
+      print('🔄 Holidays updated in real-time: ${holidays.length} holidays');
+      return holidays;
+    });
+  }
+
+  /// Check if a specific date is a holiday
+  static Future<bool> isHoliday(String clinicId, DateTime date) async {
+    try {
+      final holidays = await getHolidays(clinicId);
+      
+      // Compare dates without time component
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      
+      return holidays.any((holiday) {
+        final holidayOnly = DateTime(holiday.year, holiday.month, holiday.day);
+        return holidayOnly == dateOnly;
+      });
+    } catch (e) {
+      print('Error checking if date is holiday: $e');
+      return false;
+    }
+  }
+
+  /// Get day schedule with availability, respecting holidays
+  static Future<Map<String, dynamic>> getDayScheduleWithAvailabilityIncludingHolidays(
+    String clinicId, 
+    String dayOfWeek, 
+    DateTime date
+  ) async {
+    try {
+      // First check if this date is a holiday
+      final isHolidayDate = await isHoliday(clinicId, date);
+      
+      if (isHolidayDate) {
+        print('$dayOfWeek (${date.toString().split(' ')[0]}) is a holiday - clinic closed');
+        return {
+          'schedule': null,
+          'totalSlots': 0,
+          'bookedSlots': 0,
+          'availableSlots': 0,
+          'appointments': [],
+          'utilization': 0,
+          'isHoliday': true,
+        };
+      }
+
+      // If not a holiday, get regular schedule
+      final regularData = await getDayScheduleWithAvailability(clinicId, dayOfWeek, date);
+      regularData['isHoliday'] = false;
+      return regularData;
+    } catch (e) {
+      print('Error getting day schedule with holidays: $e');
+      return {
+        'schedule': null,
+        'totalSlots': 0,
+        'bookedSlots': 0,
+        'availableSlots': 0,
+        'appointments': [],
+        'utilization': 0,
+        'isHoliday': false,
+      };
+    }
+  }
+
+  /// Get weekly schedule with availability, respecting holidays
+  static Future<Map<String, Map<String, dynamic>>> getWeeklyScheduleWithAvailabilityIncludingHolidays(
+    String clinicId, 
+    DateTime weekDate
+  ) async {
+    try {
+      final weeklyData = <String, Map<String, dynamic>>{};
+      
+      // Get Monday of the week
+      final weekday = weekDate.weekday;
+      final monday = weekDate.subtract(Duration(days: weekday - 1));
+      
+      for (int i = 0; i < 7; i++) {
+        final currentDate = monday.add(Duration(days: i));
+        final dayName = _getDayOfWeek(currentDate.weekday);
+        
+        final dayData = await getDayScheduleWithAvailabilityIncludingHolidays(clinicId, dayName, currentDate);
+        weeklyData[dayName] = dayData;
+      }
+      
+      return weeklyData;
+    } catch (e) {
+      print('Error getting weekly schedule with holidays: $e');
+      return {};
+    }
+  }
 }

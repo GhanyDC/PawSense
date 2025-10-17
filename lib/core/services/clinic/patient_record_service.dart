@@ -423,6 +423,7 @@ class PatientRecordService {
           appointmentCount: appointmentCount,
           healthStatus: healthStatus,
           assessmentResultId: assessmentResultId,
+          petCreatedAt: pet.createdAt, // Add pet creation date
         );
 
         uniquePatients[appointment.petId] = patientRecord;
@@ -518,6 +519,7 @@ class PatientRecordService {
         appointmentCount: appointmentCount,
         healthStatus: healthStatus,
         assessmentResultId: appointment.assessmentResultId,
+        petCreatedAt: pet.createdAt,
       );
     } catch (e) {
       print('❌ Error fetching patient by pet ID: $e');
@@ -526,25 +528,113 @@ class PatientRecordService {
   }
 
   /// Get appointment history for a patient
+  /// Fetches both legacy appointments (with petId field) and follow-up appointments (with embedded pet.id)
   static Future<List<AppointmentBooking>> getPatientHistory({
     required String clinicId,
     required String petId,
   }) async {
     try {
-      // Query without orderBy to avoid needing complex index
-      final query = await _firestore
+      print('🔍 PatientHistory: Fetching appointments for petId: $petId, clinicId: $clinicId');
+      
+      // Query 1: Get legacy appointments with petId field
+      final legacyQuery = await _firestore
           .collection('appointments')
           .where('clinicId', isEqualTo: clinicId)
           .where('petId', isEqualTo: petId)
           .get();
 
-      // Convert to list and sort in memory
-      final appointments = query.docs
-          .map((doc) => AppointmentBooking.fromMap(doc.data(), doc.id))
-          .toList();
+      print('📋 Found ${legacyQuery.docs.length} legacy appointments (with petId field)');
+      
+      // Query 2: Get all appointments for this clinic to find follow-ups
+      // We can't query by pet.id directly, so we fetch all clinic appointments and filter
+      final allClinicQuery = await _firestore
+          .collection('appointments')
+          .where('clinicId', isEqualTo: clinicId)
+          .where('isFollowUp', isEqualTo: true)
+          .get();
+
+      print('📋 Found ${allClinicQuery.docs.length} follow-up appointments for clinic');
+      
+      // Filter follow-ups by pet.id
+      final followUpDocs = allClinicQuery.docs.where((doc) {
+        final data = doc.data();
+        if (data['pet'] != null && data['pet'] is Map) {
+          final petMap = data['pet'] as Map<String, dynamic>;
+          return petMap['id'] == petId;
+        }
+        return false;
+      }).toList();
+      
+      print('📋 Filtered to ${followUpDocs.length} follow-up appointments for this pet');
+      
+      // Combine both queries
+      final allDocs = [...legacyQuery.docs, ...followUpDocs];
+      
+      // Convert to list
+      final appointments = allDocs.map((doc) {
+        final data = doc.data();
+        print('  └─ Appointment ${doc.id}: isFollowUp = ${data['isFollowUp']}, status = ${data['status']}, diseaseReason = ${data['diseaseReason']}');
+        
+        // Check if this is the new Appointment format (has 'pet' as map) or old AppointmentBooking format (has 'petId' as string)
+        if (data['pet'] != null && data['pet'] is Map) {
+          // New Appointment model format - convert to AppointmentBooking format
+          print('    📄 Converting from Appointment model format (FOLLOW-UP)');
+          final petMap = data['pet'] as Map<String, dynamic>;
+          final ownerMap = data['owner'] as Map<String, dynamic>?;
+          
+          // Parse date string "2025-10-14" to DateTime
+          DateTime appointmentDate = DateTime.now();
+          if (data['date'] != null) {
+            try {
+              final dateParts = (data['date'] as String).split('-');
+              appointmentDate = DateTime(
+                int.parse(dateParts[0]),
+                int.parse(dateParts[1]),
+                int.parse(dateParts[2]),
+              );
+            } catch (e) {
+              print('    ⚠️ Error parsing date: ${data['date']}');
+            }
+          }
+          
+          return AppointmentBooking(
+            id: doc.id,
+            userId: ownerMap?['id'] ?? '',
+            petId: petMap['id'] ?? petId,
+            clinicId: data['clinicId'] ?? '',
+            serviceName: data['diseaseReason'] ?? 'Unknown Service',
+            serviceId: '', // Not available in new format
+            appointmentDate: appointmentDate,
+            appointmentTime: data['time'] ?? '00:00',
+            notes: data['notes'] ?? '',
+            status: AppointmentStatus.values.firstWhere(
+              (e) => e.name == data['status'],
+              orElse: () => AppointmentStatus.pending,
+            ),
+            type: data['isFollowUp'] == true ? AppointmentType.followUp : AppointmentType.general,
+            createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            cancelReason: data['cancelReason'],
+            assessmentResultId: data['assessmentResultId'],
+            diagnosis: data['diagnosis'],
+            treatment: data['treatment'],
+            prescription: data['prescription'],
+            clinicNotes: data['clinicNotes'],
+            completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
+            isFollowUp: data['isFollowUp'],
+            previousAppointmentId: data['previousAppointmentId'],
+          );
+        } else {
+          // Old AppointmentBooking format - use existing fromMap
+          print('    📄 Using AppointmentBooking.fromMap');
+          return AppointmentBooking.fromMap(data, doc.id);
+        }
+      }).toList();
 
       // Sort by appointment date descending
       appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+
+      print('✅ Total appointments: ${appointments.length}, follow-ups: ${appointments.where((a) => a.isFollowUp == true).length}');
 
       return appointments;
     } catch (e) {
@@ -747,6 +837,7 @@ class PatientRecord {
   final int appointmentCount;
   final PatientHealthStatus healthStatus;
   final String? assessmentResultId;
+  final DateTime petCreatedAt; // Pet registration date for sorting
 
   PatientRecord({
     required this.petId,
@@ -765,6 +856,7 @@ class PatientRecord {
     required this.appointmentCount,
     required this.healthStatus,
     this.assessmentResultId,
+    required this.petCreatedAt,
   });
 
   PatientRecord copyWith({
@@ -784,6 +876,7 @@ class PatientRecord {
     int? appointmentCount,
     PatientHealthStatus? healthStatus,
     String? assessmentResultId,
+    DateTime? petCreatedAt,
   }) {
     return PatientRecord(
       petId: petId ?? this.petId,
@@ -802,6 +895,7 @@ class PatientRecord {
       appointmentCount: appointmentCount ?? this.appointmentCount,
       healthStatus: healthStatus ?? this.healthStatus,
       assessmentResultId: assessmentResultId ?? this.assessmentResultId,
+      petCreatedAt: petCreatedAt ?? this.petCreatedAt,
     );
   }
 

@@ -21,6 +21,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:pawsense/core/services/user/skin_disease_service.dart';
 import 'package:pawsense/core/models/skin_disease/skin_disease_model.dart';
+import 'package:pawsense/core/utils/data_cache.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
 
 class AssessmentStepThree extends StatefulWidget {
   final Map<String, dynamic> assessmentData;
@@ -282,7 +284,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       // No detections meet the threshold
       _analysisResults = [
         AnalysisResult(
-          condition: 'No high-confidence detections',
+          condition: 'No skin disease detected',
           percentage: 100.0,
           color: const Color(0xFF34C759),
         ),
@@ -539,6 +541,32 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
     });
     
     try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Completing assessment...',
+                    style: kMobileTextStyleSubtitle.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
       print('DEBUG: Starting assessment completion...');
       // Save assessment first
       await saveAssessment();
@@ -546,6 +574,15 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       
       // Small delay to ensure Firebase write has propagated
       await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Invalidate assessment history cache to ensure fresh data
+      await _invalidateAssessmentHistoryCache();
+      print('DEBUG: Assessment history cache invalidated');
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
       
       // Navigate to home with history tab and force refresh with timestamp
       if (mounted) {
@@ -555,6 +592,11 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       }
     } catch (e) {
       print('Error completing assessment: $e');
+      
+      // Close loading dialog if still showing
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
       
       // Show error message
       if (mounted) {
@@ -576,9 +618,37 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
   }
 
   Future<void> _generatePDF() async {
+    if (_isGeneratingPDF) return; // Prevent multiple taps
+    
     setState(() => _isGeneratingPDF = true);
     
     try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Generating PDF...',
+                    style: kMobileTextStyleSubtitle.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
       // Get current user
       final authService = AuthService();
       final currentUser = authService.currentUser;
@@ -605,6 +675,11 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       // Save PDF to device
       final fileName = 'PawSense_Assessment_${assessmentResult.petName}_${DateTime.now().millisecondsSinceEpoch}';
       final filePath = await PDFGenerationService.savePDFToDevice(pdfBytes, fileName);
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
 
       setState(() => _isGeneratingPDF = false);
 
@@ -645,17 +720,24 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
       );
 
     } catch (e) {
+      // Close loading dialog if still showing
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
       setState(() => _isGeneratingPDF = false);
       
       print('Error generating PDF: $e');
       
       // Show error dialog
-      _showDialog(
-        'Error',
-        'Failed to generate PDF: ${e.toString()}',
-        'OK',
-        () => Navigator.of(context).pop(),
-      );
+      if (mounted) {
+        _showDialog(
+          'Error',
+          'Failed to generate PDF: ${e.toString()}',
+          'OK',
+          () => Navigator.of(context).pop(),
+        );
+      }
 
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -999,6 +1081,14 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
         Navigator.of(context).pop();
       }
 
+      // Invalidate assessment history cache since we just saved an assessment
+      await _invalidateAssessmentHistoryCache();
+      print('DEBUG: Assessment history cache invalidated after saving for appointment booking');
+
+      // Also invalidate appointment history cache as we're about to create an appointment
+      await _invalidateAppointmentHistoryCache();
+      print('DEBUG: Appointment history cache invalidated in preparation for booking');
+
       // Navigate to book appointment page with assessment result ID
       if (mounted) {
         context.go('/book-appointment?assessment_result_id=$assessmentResultId&skip_service=true');
@@ -1044,6 +1134,41 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
         );
       },
     );
+  }
+
+  // Cache invalidation methods
+  Future<void> _invalidateAssessmentHistoryCache() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final cache = DataCache();
+        
+        // Invalidate assessment results cache
+        final assessmentCacheKey = CacheKeys.userAssessments(user.uid);
+        cache.invalidate(assessmentCacheKey);
+        
+        print('DEBUG: Assessment history cache invalidated for user: ${user.uid}');
+      }
+    } catch (e) {
+      print('DEBUG: Error invalidating assessment history cache: $e');
+    }
+  }
+
+  Future<void> _invalidateAppointmentHistoryCache() async {
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final cache = DataCache();
+        
+        // Invalidate appointment history cache using the same pattern as home_page.dart
+        final appointmentCacheKey = 'user_appointments_${user.uid}';
+        cache.invalidate(appointmentCacheKey);
+        
+        print('DEBUG: Appointment history cache invalidated for user: ${user.uid}');
+      }
+    } catch (e) {
+      print('DEBUG: Error invalidating appointment history cache: $e');
+    }
   }
 
   @override
@@ -1105,13 +1230,16 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Differential Analysis Results',
-                  style: kMobileTextStyleTitle.copyWith(
-                    color: AppColors.textPrimary,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8.0, 8.0, 0, 0),
+                  child: Text(
+                    'Differential Analysis Results',
+                    style: kMobileTextStyleTitle.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
-                const SizedBox(height: kSpacingMedium),
+                const SizedBox(height: kSpacingSmall),
                 
                 // Pie Chart
                 SizedBox(
@@ -1240,72 +1368,48 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
           const SizedBox(height: kSpacingMedium),
           
           // Action Buttons
-          Container(
-            padding: const EdgeInsets.all(kSpacingMedium),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(kBorderRadius),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                PrimaryButton(
-                  text: 'Download as PDF',
-                  icon: Icons.download,
-                  onPressed: _isGeneratingPDF ? null : _generatePDF,
-                  isLoading: _isGeneratingPDF,
-                ),
-                const SizedBox(height: kSpacingMedium),
-                OutlinedButton.icon(
-                  onPressed: _bookAppointment,
-                  icon: Icon(Icons.calendar_today),
-                  label: Text('Book Appointment'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: BorderSide(color: AppColors.primary),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(kButtonRadius),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: kSpacingMedium,
-                    ),
-                    minimumSize: const Size(double.infinity, kButtonHeight),
+          Column(
+            children: [
+              PrimaryButton(
+                text: 'Download as PDF',
+                icon: Icons.download,
+                onPressed: _generatePDF,
+              ),
+              const SizedBox(height: kSpacingMedium),
+              OutlinedButton.icon(
+                onPressed: _bookAppointment,
+                icon: Icon(Icons.calendar_today),
+                label: Text('Book Appointment'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(kButtonRadius),
                   ),
-                ),
-                const SizedBox(height: kSpacingMedium),
-                ElevatedButton.icon(
-                  onPressed: _isCompletingAssessment ? null : _completeAssessment,
-                  icon: _isCompletingAssessment 
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : Icon(Icons.check_circle),
-                  label: Text(_isCompletingAssessment ? 'Completing...' : 'Complete Assessment'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(kButtonRadius),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: kSpacingMedium,
-                    ),
-                    minimumSize: const Size(double.infinity, kButtonHeight),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: kSpacingMedium,
                   ),
+                  minimumSize: const Size(double.infinity, kButtonHeight),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: kSpacingMedium),
+              ElevatedButton.icon(
+                onPressed: _completeAssessment,
+                icon: Icon(Icons.check_circle),
+                label: Text('Complete Assessment'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(kButtonRadius),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: kSpacingMedium,
+                  ),
+                  minimumSize: const Size(double.infinity, kButtonHeight),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: kSpacingMedium),
           
@@ -1726,6 +1830,14 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
   }
 
   Widget _buildRemediesSection() {
+    // Don't show remedies if no skin diseases were detected
+    if (_analysisResults.isEmpty || 
+        (_analysisResults.length == 1 && 
+         (_analysisResults.first.condition == 'No high-confidence detections' ||
+          _analysisResults.first.condition == 'No skin disease detected'))) {
+      return const SizedBox.shrink();
+    }
+    
     // Check if we have disease info with remedies
     final hasRemedies = _detectedDisease?.initialRemedies != null;
     final remedies = _detectedDisease?.initialRemedies;

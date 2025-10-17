@@ -28,16 +28,10 @@ class SettingsTabBar extends StatelessWidget {
         onTap: () => onTabChanged(1),
       ),
       _TabItem(
-        icon: Icons.notifications_outlined,
-        label: 'Notifications',
+        icon: Icons.description_outlined,
+        label: 'Legal Documents',
         isSelected: currentIndex == 2,
         onTap: () => onTabChanged(2),
-      ),
-      _TabItem(
-        icon: Icons.settings_outlined,
-        label: 'System',
-        isSelected: currentIndex == 3,
-        onTap: () => onTabChanged(3),
       ),
     ];
 

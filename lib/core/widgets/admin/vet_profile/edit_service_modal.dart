@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants.dart';
 import '../../../models/clinic/clinic_service_model.dart';
@@ -27,6 +28,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
   
   late ServiceCategory _selectedCategory;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -41,9 +43,10 @@ class _EditServiceModalState extends State<EditServiceModal> {
     final durationNumber = RegExp(r'\d+').firstMatch(durationStr)?.group(0) ?? '30';
     _durationController = TextEditingController(text: durationNumber);
     
-    // Extract price number from string like "PHP 750.00"
+    // Extract price number from string like "PHP 750.00" or "PHP 750" - only integer part
     final priceStr = widget.service['price'] ?? '0';
-    final priceNumber = RegExp(r'[\d.]+').firstMatch(priceStr)?.group(0) ?? '0';
+    final priceMatch = RegExp(r'\d+').firstMatch(priceStr);
+    final priceNumber = priceMatch?.group(0) ?? '0';
     _priceController = TextEditingController(text: priceNumber);
     
     // Set category from service data
@@ -93,6 +96,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null; // Clear previous errors
     });
 
     try {
@@ -109,6 +113,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
         widget.onServiceUpdated();
         if (mounted) {
           Navigator.of(context).pop();
+          // Show success message on parent screen after modal closes
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Service updated successfully!'),
@@ -118,25 +123,21 @@ class _EditServiceModalState extends State<EditServiceModal> {
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to update service'),
-              backgroundColor: AppColors.error,
-            ),
-          );
+          setState(() {
+            _errorMessage = 'Failed to update service. Please try again.';
+            _isLoading = false;
+          });
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() {
+          _errorMessage = 'Error: $e';
+          _isLoading = false;
+        });
       }
     } finally {
-      if (mounted) {
+      if (mounted && _errorMessage == null) {
         setState(() {
           _isLoading = false;
         });
@@ -179,6 +180,40 @@ class _EditServiceModalState extends State<EditServiceModal> {
               ],
             ),
             SizedBox(height: kSpacingLarge),
+
+            // Error Banner
+            if (_errorMessage != null)
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(kSpacingMedium),
+                margin: EdgeInsets.only(bottom: kSpacingMedium),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(kBorderRadiusSmall),
+                  border: Border.all(color: AppColors.error),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                    SizedBox(width: kSpacingSmall),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontSize: kFontSizeSmall,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 18, color: AppColors.error),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      onPressed: () => setState(() => _errorMessage = null),
+                    ),
+                  ],
+                ),
+              ),
 
             // Form
             Form(
@@ -238,7 +273,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                   SizedBox(height: kSpacingSmall),
                   TextFormField(
                     controller: _descriptionController,
-                    maxLines: 3,
+                    maxLines: 6,
+                    maxLength: 300,
+                    onChanged: (value) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: 'Describe the service...',
                       border: OutlineInputBorder(
@@ -258,6 +295,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Please enter a description';
+                      }
+                      if (value.length > 300) {
+                        return 'Description cannot exceed 300 characters';
                       }
                       return null;
                     },
@@ -284,6 +324,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                             TextFormField(
                               controller: _durationController,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly, // Only allow digits (integers)
+                              ],
                               decoration: InputDecoration(
                                 hintText: '30',
                                 border: OutlineInputBorder(
@@ -309,7 +352,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
                                 }
                                 final number = int.tryParse(value.trim());
                                 if (number == null || number <= 0) {
-                                  return 'Must be a positive number';
+                                  return 'Must be a positive integer';
                                 }
                                 return null;
                               },
@@ -325,7 +368,7 @@ class _EditServiceModalState extends State<EditServiceModal> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Price (\$)',
+                              'Price (\PHP)',
                               style: TextStyle(
                                 fontSize: kFontSizeRegular,
                                 fontWeight: FontWeight.w600,
@@ -336,6 +379,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                             TextFormField(
                               controller: _priceController,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly, // Only allow digits (integers)
+                              ],
                               decoration: InputDecoration(
                                 hintText: '0',
                                 border: OutlineInputBorder(
@@ -359,9 +405,9 @@ class _EditServiceModalState extends State<EditServiceModal> {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Required';
                                 }
-                                final number = double.tryParse(value.trim());
+                                final number = int.tryParse(value.trim());
                                 if (number == null || number < 0) {
-                                  return 'Must be a valid number';
+                                  return 'Must be a valid integer';
                                 }
                                 return null;
                               },
