@@ -268,10 +268,24 @@ class AppRouter {
           ),
           GoRoute(
             path: '/admin/appointments',
-            builder: (context, state) => OptimizedAppointmentManagementScreen(),
-            pageBuilder: (context, state) => NoTransitionPage(
-              child: OptimizedAppointmentManagementScreen(),
-            ),
+            builder: (context, state) {
+              final appointmentId = state.uri.queryParameters['appointmentId'];
+              print('📍 ROUTER DEBUG: /admin/appointments route');
+              print('   Query parameters: ${state.uri.queryParameters}');
+              print('   Extracted appointmentId: $appointmentId');
+              return OptimizedAppointmentManagementScreen(
+                highlightAppointmentId: appointmentId,
+              );
+            },
+            pageBuilder: (context, state) {
+              final appointmentId = state.uri.queryParameters['appointmentId'];
+              print('📍 ROUTER PAGE BUILDER: appointmentId = $appointmentId');
+              return NoTransitionPage(
+                child: OptimizedAppointmentManagementScreen(
+                  highlightAppointmentId: appointmentId,
+                ),
+              );
+            },
           ),
           GoRoute(
             path: '/admin/patient-records',

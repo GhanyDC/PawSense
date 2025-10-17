@@ -28,9 +28,22 @@ import '../../../core/widgets/admin/appointments/appointment_table_header.dart';
 import '../../../core/widgets/shared/pagination_widget.dart';
 import 'package:http/http.dart' as http;
 
+// Global key for accessing appointment screen methods from anywhere
+final GlobalKey<_OptimizedAppointmentManagementScreenState> appointmentScreenKey = 
+    GlobalKey<_OptimizedAppointmentManagementScreenState>();
+
 class OptimizedAppointmentManagementScreen extends StatefulWidget {
-  const OptimizedAppointmentManagementScreen({Key? key}) 
-      : super(key: key ?? const PageStorageKey('appointment_management'));
+  final String? highlightAppointmentId; // Appointment ID to auto-open
+  
+  OptimizedAppointmentManagementScreen({
+    Key? key,
+    this.highlightAppointmentId,
+  }) : super(key: key ?? appointmentScreenKey) {
+    // Debug log in constructor
+    if (highlightAppointmentId != null) {
+      print('🎯 CONSTRUCTOR DEBUG: OptimizedAppointmentManagementScreen created with highlightAppointmentId: $highlightAppointmentId');
+    }
+  }
 
   @override
   State<OptimizedAppointmentManagementScreen> createState() => 
@@ -127,6 +140,13 @@ class _OptimizedAppointmentManagementScreenState
           _setupRealtimeListener();
         }
       });
+      
+      // Auto-open appointment details modal if appointmentId is provided
+      if (widget.highlightAppointmentId != null) {
+        print('🎯 DEBUG: highlightAppointmentId detected: ${widget.highlightAppointmentId}');
+        // Schedule the modal opening (no await to avoid blocking)
+        _openAppointmentDetailsById(widget.highlightAppointmentId!);
+      }
     }
   }
 
@@ -1543,6 +1563,107 @@ class _OptimizedAppointmentManagementScreenState
             // Don't show error to user as the appointment was successfully cancelled
           }
         }
+      }
+    }
+  }
+
+  /// Public method to open appointment modal by ID (can be called from anywhere using the global key)
+  void openAppointmentById(String appointmentId) {
+    print('📞 PUBLIC METHOD: openAppointmentById called with ID: $appointmentId');
+    _openAppointmentDetailsById(appointmentId);
+  }
+
+  /// Open appointment details modal by ID (for navigation from notifications)
+  Future<void> _openAppointmentDetailsById(String appointmentId) async {
+    print('🔍 DEBUG: _openAppointmentDetailsById called with ID: $appointmentId');
+    
+    try {
+      // Wait a bit to ensure the UI is ready and data is loaded
+      await Future.delayed(const Duration(milliseconds: 1200));
+      
+      if (!mounted) {
+        print('⚠️ DEBUG: Widget not mounted, aborting');
+        return;
+      }
+      
+      print('🔍 DEBUG: Searching for appointment in ${appointments.length} loaded appointments');
+      print('🔍 DEBUG: Loaded appointment IDs: ${appointments.map((a) => a.id).take(5).toList()}...');
+      
+      // First, try to find the appointment in the current loaded list
+      AppointmentModels.Appointment? foundAppointment;
+      try {
+        foundAppointment = appointments.firstWhere(
+          (apt) => apt.id == appointmentId,
+        );
+        print('✅ DEBUG: Found appointment in loaded list!');
+      } catch (e) {
+        print('⚠️ DEBUG: Appointment not found in loaded list, will fetch from Firestore');
+        foundAppointment = null;
+      }
+      
+      if (foundAppointment != null) {
+        // Found in current page, open the modal
+        print('📱 DEBUG: Opening modal for appointment: ${foundAppointment.pet.name}');
+        AppointmentDetailsModal.show(
+          context,
+          foundAppointment,
+          showAcceptButton: false,
+        );
+        return;
+      }
+      
+      // Appointment not in current page, fetch it directly from Firestore
+      print('🔍 DEBUG: Fetching appointment from Firestore...');
+      
+      final doc = await FirebaseFirestore.instance
+          .collection('appointments')
+          .doc(appointmentId)
+          .get();
+      
+      if (doc.exists && mounted) {
+        print('✅ DEBUG: Fetched appointment from Firestore');
+        final appointmentData = doc.data()!;
+        final appointment = AppointmentModels.Appointment.fromFirestore(
+          appointmentData,
+          doc.id,
+        );
+        
+        print('📱 DEBUG: Opening modal for fetched appointment: ${appointment.pet.name}');
+        print('   Widget mounted: $mounted');
+        print('   Context mounted: ${context.mounted}');
+        
+        // Ensure we're using a valid context
+        if (!context.mounted) {
+          print('❌ Context is not mounted!');
+          return;
+        }
+        
+        // Open the modal with the fetched appointment
+        AppointmentDetailsModal.show(
+          context,
+          appointment,
+          showAcceptButton: false,
+        );
+      } else if (mounted) {
+        print('❌ DEBUG: Appointment not found in Firestore');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Appointment not found'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ ERROR in _openAppointmentDetailsById: $e');
+      print('Stack trace: ${StackTrace.current}');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load appointment details: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }

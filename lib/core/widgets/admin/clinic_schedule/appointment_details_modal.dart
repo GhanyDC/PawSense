@@ -23,14 +23,33 @@ class AppointmentDetailsModal extends StatefulWidget {
     VoidCallback? onAcceptAppointment,
     bool showAcceptButton = false,
   }) {
-    showDialog(
-      context: context,
-      builder: (context) => AppointmentDetailsModal(
-        appointment: appointment,
-        onAcceptAppointment: onAcceptAppointment,
-        showAcceptButton: showAcceptButton,
-      ),
-    );
+    print('🎬 AppointmentDetailsModal.show() called');
+    print('   Pet name: "${appointment.pet.name}"');
+    print('   Status: ${appointment.status}');
+    print('   Date: "${appointment.date}"');
+    print('   Time: "${appointment.time}"');
+    
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          print('🏗️ Dialog builder called');
+          return AppointmentDetailsModal(
+            appointment: appointment,
+            onAcceptAppointment: onAcceptAppointment,
+            showAcceptButton: showAcceptButton,
+          );
+        },
+      ).then((value) {
+        print('✅ Dialog closed');
+      }).catchError((error) {
+        print('❌ Dialog error: $error');
+      });
+    } catch (e, stackTrace) {
+      print('❌ CRITICAL ERROR in showDialog: $e');
+      print('Stack trace: $stackTrace');
+    }
   }
 
   @override
@@ -541,18 +560,63 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
 
   @override
   Widget build(BuildContext context) {
-    final dateTime = DateTime.parse('${widget.appointment.date} ${widget.appointment.time}:00');
-    final formattedDate = '${_getMonthName(dateTime.month)} ${dateTime.day}, ${dateTime.year}';
-    final formattedTime = _formatTime(widget.appointment.time);
+    print('🎨 Building AppointmentDetailsModal widget');
+    
+    try {
+      return _buildDialogContent(context);
+    } catch (e, stackTrace) {
+      print('❌ ERROR building modal: $e');
+      print('Stack trace: $stackTrace');
+      
+      // Return error dialog
+      return Dialog(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              const Text('Error displaying appointment details'),
+              const SizedBox(height: 8),
+              Text(e.toString(), style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
 
-    // Debug: Check clinic evaluation fields
-    print('🔍 Appointment Debug:');
-    print('  Status: ${widget.appointment.status}');
-    print('  Is Follow-up: ${widget.appointment.isFollowUp}');
-    print('  Diagnosis: ${widget.appointment.diagnosis}');
-    print('  Treatment: ${widget.appointment.treatment}');
-    print('  Prescription: ${widget.appointment.prescription}');
-    print('  Clinic Notes: ${widget.appointment.clinicNotes}');
+  Widget _buildDialogContent(BuildContext context) {
+    // Safe date-time parsing with fallback
+    DateTime dateTime;
+    String formattedDate;
+    String formattedTime;
+    
+    try {
+      // Check if date and time are not empty
+      if (widget.appointment.date.isEmpty || widget.appointment.time.isEmpty) {
+        throw FormatException('Empty date or time');
+      }
+      
+      final dateString = '${widget.appointment.date} ${widget.appointment.time}:00';
+      dateTime = DateTime.parse(dateString);
+      formattedDate = '${_getMonthName(dateTime.month)} ${dateTime.day}, ${dateTime.year}';
+      formattedTime = _formatTime(widget.appointment.time);
+    } catch (e) {
+      // For cancelled/invalid appointments, use createdAt as fallback
+      // This shows when the appointment was originally created
+      dateTime = widget.appointment.createdAt;
+      formattedDate = '${_getMonthName(dateTime.month)} ${dateTime.day}, ${dateTime.year}';
+      formattedTime = 'N/A';
+      
+      print('ℹ️ Using fallback date for appointment (Status: ${widget.appointment.status})');
+    }
 
     return Dialog(
       shape: RoundedRectangleBorder(
