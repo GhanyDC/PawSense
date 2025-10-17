@@ -309,6 +309,12 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
         cancelReason: booking.cancelReason,
         isFollowUp: booking.isFollowUp,
         previousAppointmentId: booking.previousAppointmentId,
+        // Clinic evaluation fields
+        diagnosis: booking.diagnosis,
+        treatment: booking.treatment,
+        prescription: booking.prescription,
+        clinicNotes: booking.clinicNotes,
+        completedAt: booking.completedAt,
       );
     } catch (e) {
       print('Error converting appointment: $e');
@@ -1249,6 +1255,12 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
             _buildDetailInfoSection('Notes', appointment.notes!),
           ],
 
+          // Clinic Evaluation Section (for completed appointments that are NOT follow-ups)
+          if (_shouldShowClinicEvaluation(appointment)) ...[
+            const SizedBox(height: 16),
+            _buildClinicEvaluationSection(appointment),
+          ],
+
           // AI Assessment Results
           if (_isLoadingAssessment)
             ...[
@@ -1644,6 +1656,89 @@ class _ImprovedPatientDetailsModalState extends State<ImprovedPatientDetailsModa
           ),
         ),
       ],
+    );
+  }
+
+  bool _shouldShowClinicEvaluation(AppointmentModels.Appointment appointment) {
+    // Must be completed status
+    if (appointment.status != AppointmentModels.AppointmentStatus.completed) {
+      return false;
+    }
+
+    // Must NOT be a follow-up appointment
+    if (appointment.isFollowUp == true) {
+      return false;
+    }
+
+    // Must have at least one evaluation field filled
+    final hasDiagnosis = appointment.diagnosis != null && 
+                        appointment.diagnosis!.trim().isNotEmpty;
+    final hasTreatment = appointment.treatment != null && 
+                        appointment.treatment!.trim().isNotEmpty;
+    final hasPrescription = appointment.prescription != null && 
+                           appointment.prescription!.trim().isNotEmpty;
+    final hasClinicNotes = appointment.clinicNotes != null && 
+                          appointment.clinicNotes!.trim().isNotEmpty;
+
+    return hasDiagnosis || hasTreatment || hasPrescription || hasClinicNotes;
+  }
+
+  Widget _buildClinicEvaluationSection(AppointmentModels.Appointment appointment) {
+    return Container(
+      key: const ValueKey('clinic_evaluation_patient_section'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3B82F6).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.medical_services, size: 16, color: Color(0xFF3B82F6)),
+              SizedBox(width: 8),
+              Text(
+                'Clinic Evaluation:',
+                style: TextStyle(
+                  color: Color(0xFF3B82F6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          
+          // Diagnosis
+          if (appointment.diagnosis != null && 
+              appointment.diagnosis!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Diagnosis', appointment.diagnosis!),
+            const SizedBox(height: 4),
+          ],
+          
+          // Treatment
+          if (appointment.treatment != null && 
+              appointment.treatment!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Treatment', appointment.treatment!),
+            const SizedBox(height: 4),
+          ],
+          
+          // Prescription
+          if (appointment.prescription != null && 
+              appointment.prescription!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Prescription', appointment.prescription!),
+            const SizedBox(height: 4),
+          ],
+          
+          // Clinic Notes
+          if (appointment.clinicNotes != null && 
+              appointment.clinicNotes!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Clinic Notes', appointment.clinicNotes!),
+          ],
+        ],
+      ),
     );
   }
 }

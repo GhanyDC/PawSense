@@ -438,6 +438,15 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
     final formattedDate = '${_getMonthName(dateTime.month)} ${dateTime.day}, ${dateTime.year}';
     final formattedTime = _formatTime(widget.appointment.time);
 
+    // Debug: Check clinic evaluation fields
+    print('🔍 Appointment Debug:');
+    print('  Status: ${widget.appointment.status}');
+    print('  Is Follow-up: ${widget.appointment.isFollowUp}');
+    print('  Diagnosis: ${widget.appointment.diagnosis}');
+    print('  Treatment: ${widget.appointment.treatment}');
+    print('  Prescription: ${widget.appointment.prescription}');
+    print('  Clinic Notes: ${widget.appointment.clinicNotes}');
+
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -730,6 +739,12 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
               _buildInfoSection('Notes', widget.appointment.notes!),
             ],
 
+            // Clinic Evaluation Section (for completed appointments that are NOT follow-ups)
+            if (_shouldShowClinicEvaluation()) ...[
+              const SizedBox(height: 16),
+              _buildClinicEvaluationSection(),
+            ],
+
             // AI Assessment Results
             if (_isLoadingAssessment)
               ...[
@@ -833,35 +848,6 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
     );
   }
 
-  Widget _buildEvaluationRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 90,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[800],
-              height: 1.3,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildPreviousAppointmentDetail(String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -884,6 +870,93 @@ class _AppointmentDetailsModalState extends State<AppointmentDetailsModal> {
           ),
         ),
       ],
+    );
+  }
+
+  bool _shouldShowClinicEvaluation() {
+    // Must be completed status
+    if (widget.appointment.status != AppointmentStatus.completed) {
+      return false;
+    }
+
+    // Must NOT be a follow-up appointment (follow-ups show previous appointment's evaluation)
+    if (widget.appointment.isFollowUp == true) {
+      return false;
+    }
+
+    // Must have at least one evaluation field filled
+    final hasDiagnosis = widget.appointment.diagnosis != null && 
+                        widget.appointment.diagnosis!.trim().isNotEmpty;
+    final hasTreatment = widget.appointment.treatment != null && 
+                        widget.appointment.treatment!.trim().isNotEmpty;
+    final hasPrescription = widget.appointment.prescription != null && 
+                           widget.appointment.prescription!.trim().isNotEmpty;
+    final hasClinicNotes = widget.appointment.clinicNotes != null && 
+                          widget.appointment.clinicNotes!.trim().isNotEmpty;
+
+    final shouldShow = hasDiagnosis || hasTreatment || hasPrescription || hasClinicNotes;
+    
+    print('🔍 Should show clinic evaluation: $shouldShow (diagnosis: $hasDiagnosis, treatment: $hasTreatment, prescription: $hasPrescription, notes: $hasClinicNotes)');
+    
+    return shouldShow;
+  }
+
+  Widget _buildClinicEvaluationSection() {
+    return Container(
+      key: const ValueKey('clinic_evaluation_section'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3B82F6).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.medical_services, size: 18, color: Color(0xFF3B82F6)),
+              SizedBox(width: 8),
+              Text(
+                'Clinic Evaluation:',
+                style: TextStyle(
+                  color: Color(0xFF3B82F6),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          
+          // Diagnosis
+          if (widget.appointment.diagnosis != null && 
+              widget.appointment.diagnosis!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Diagnosis', widget.appointment.diagnosis!),
+            const SizedBox(height: 4),
+          ],
+          
+          // Treatment
+          if (widget.appointment.treatment != null && 
+              widget.appointment.treatment!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Treatment', widget.appointment.treatment!),
+            const SizedBox(height: 4),
+          ],
+          
+          // Prescription
+          if (widget.appointment.prescription != null && 
+              widget.appointment.prescription!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Prescription', widget.appointment.prescription!),
+            const SizedBox(height: 4),
+          ],
+          
+          // Clinic Notes
+          if (widget.appointment.clinicNotes != null && 
+              widget.appointment.clinicNotes!.trim().isNotEmpty) ...[
+            _buildPreviousAppointmentDetail('Clinic Notes', widget.appointment.clinicNotes!),
+          ],
+        ],
+      ),
     );
   }
 
