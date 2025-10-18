@@ -219,8 +219,8 @@ class _AIHistoryDetailPageState extends State<AIHistoryDetailPage> {
             const SizedBox(height: kMobileSizedBoxLarge),
           
           // Analysis Results
-          if (assessment.analysisResults.isNotEmpty) 
-            _buildAnalysisResultsCard(assessment),
+          // if (assessment.analysisResults.isNotEmpty) 
+          //   _buildAnalysisResultsCard(assessment),
           
           if (assessment.analysisResults.isNotEmpty)
             const SizedBox(height: kMobileSizedBoxLarge),

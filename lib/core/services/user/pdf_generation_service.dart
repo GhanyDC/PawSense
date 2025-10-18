@@ -127,11 +127,7 @@ class PDFGenerationService {
             _buildPetAssessmentDetails(assessmentResult),
             pw.SizedBox(height: 15),
 
-            // Assessment results
-            _buildAssessmentResults(assessmentResult),
-            pw.SizedBox(height: 15),
-
-            // Assessment images section
+            // Assessment results with images and bounding boxes (combined section)
             if (assessmentImages.isNotEmpty) ...[
               _buildAssessmentImagesSection(assessmentResult, assessmentImages),
               pw.SizedBox(height: 15),
@@ -443,7 +439,50 @@ class PDFGenerationService {
     );
   }
 
-  static pw.Widget _buildAssessmentResults(AssessmentResult assessmentResult) {
+  static pw.Widget _buildAssessmentImagesSection(AssessmentResult assessmentResult, List<pw.ImageProvider> assessmentImages) {
+    // Helper function to remove duplicate detections using IoU
+    List<Detection> _removeDuplicateDetections(List<Detection> detections) {
+      if (detections.isEmpty) return detections;
+      
+      final List<Detection> uniqueDetections = [];
+      const double IOU_THRESHOLD = 0.5;
+      
+      // Sort by confidence descending
+      final sortedDetections = List<Detection>.from(detections)
+        ..sort((a, b) => b.confidence.compareTo(a.confidence));
+      
+      for (final detection in sortedDetections) {
+        bool isDuplicate = false;
+        
+        for (final existing in uniqueDetections) {
+          // Check if same disease name
+          if (detection.label == existing.label) {
+            // Check if bounding boxes overlap significantly
+            if (detection.boundingBox != null && 
+                existing.boundingBox != null &&
+                detection.boundingBox!.length >= 4 &&
+                existing.boundingBox!.length >= 4) {
+              final iou = _calculateIOU(
+                detection.boundingBox!,
+                existing.boundingBox!,
+              );
+              
+              if (iou > IOU_THRESHOLD) {
+                isDuplicate = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (!isDuplicate) {
+          uniqueDetections.add(detection);
+        }
+      }
+      
+      return uniqueDetections;
+    }
+    
     return pw.Container(
       padding: const pw.EdgeInsets.all(15),
       decoration: pw.BoxDecoration(
@@ -462,282 +501,189 @@ class PDFGenerationService {
             ),
           ),
           pw.SizedBox(height: 15),
-          // Show detection results by image
-          if (assessmentResult.detectionResults.isNotEmpty) ...[
-            pw.Text(
-              'Detection Results by Image (Highest Confidence Only):',
-              style: pw.TextStyle(
-                fontSize: 14,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.grey700,
-              ),
-            ),
-            pw.SizedBox(height: 10),
-            ...assessmentResult.detectionResults.asMap().entries.map((entry) {
-              final imageIndex = entry.key;
-              final detectionResult = entry.value;
-              
-              // Get only the highest confidence detection for this image
-              Detection? highestDetection;
-              if (detectionResult.detections.isNotEmpty) {
-                final sortedDetections = List<Detection>.from(detectionResult.detections);
-                sortedDetections.sort((a, b) => b.confidence.compareTo(a.confidence));
-                highestDetection = sortedDetections.first;
-              }
-              
-              return pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 15),
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey50,
-                  borderRadius: pw.BorderRadius.circular(8),
-                  border: pw.Border.all(color: PdfColors.grey300),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'Image ${imageIndex + 1} Results:',
-                      style: pw.TextStyle(
-                        fontSize: 13,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.grey800,
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
-                    if (highestDetection != null) ...[
-                      pw.Container(
-                        margin: const pw.EdgeInsets.only(bottom: 4),
-                        child: pw.Row(
-                          children: [
-                            pw.Container(
-                              width: 4,
-                              height: 4,
-                              decoration: pw.BoxDecoration(
-                                color: PdfColors.blue,
-                                shape: pw.BoxShape.circle,
-                              ),
-                            ),
-                            pw.SizedBox(width: 8),
-                            pw.Expanded(
-                              child: pw.Text(
-                                highestDetection.label,
-                                style: pw.TextStyle(fontSize: 11),
-                              ),
-                            ),
-                            pw.Text(
-                              '${(highestDetection.confidence * 100).toStringAsFixed(1)}%',
-                              style: pw.TextStyle(
-                                fontSize: 11,
-                                fontWeight: pw.FontWeight.bold,
-                                color: PdfColors.grey700,
-                              ),
-                            ),
-                            pw.SizedBox(width: 8),
-                            pw.Container(
-                              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: pw.BoxDecoration(
-                                color: PdfColors.blue200,
-                                borderRadius: pw.BorderRadius.circular(4),
-                              ),
-                              child: pw.Text(
-                                'Highest',
-                                style: pw.TextStyle(
-                                  fontSize: 9,
-                                  color: PdfColors.blue800,
-                                  fontWeight: pw.FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      pw.Text(
-                        'No detections found in this image',
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          color: PdfColors.grey600,
-                          fontStyle: pw.FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            }).toList(),
-            
-            // Show overall analysis results if available
-            if (assessmentResult.analysisResults.isNotEmpty) ...[
-              pw.SizedBox(height: 15),
-              pw.Text(
-                'Overall Analysis Summary:',
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.grey700,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              ...assessmentResult.analysisResults.map((result) => 
-                pw.Container(
-                  margin: const pw.EdgeInsets.only(bottom: 6),
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.blue50,
-                    borderRadius: pw.BorderRadius.circular(5),
-                  ),
-                  child: pw.Row(
-                    children: [
-                      pw.Expanded(
-                        child: pw.Text(
-                          result.condition,
-                          style: pw.TextStyle(fontSize: 12),
-                        ),
-                      ),
-                      pw.Text(
-                        '${_validatePercentage(result.percentage).toStringAsFixed(1)}%',
-                        style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ).toList(),
-            ],
-          ] else if (assessmentResult.analysisResults.isNotEmpty) ...[
-            pw.Text(
-              'Analysis Results:',
-              style: pw.TextStyle(
-                fontSize: 14,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.grey700,
-              ),
-            ),
-            pw.SizedBox(height: 10),
-            ...assessmentResult.analysisResults.map((result) => 
-              pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 8),
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey50,
-                  borderRadius: pw.BorderRadius.circular(5),
-                ),
-                child: pw.Row(
-                  children: [
-                    pw.Expanded(
-                      child: pw.Text(
-                        result.condition,
-                        style: pw.TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    pw.Text(
-                      '${_validatePercentage(result.percentage).toStringAsFixed(1)}%',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ).toList(),
-          ] else ...[
-            pw.Text(
-              'No specific conditions detected in the analysis.',
-              style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static pw.Widget _buildAssessmentImagesSection(AssessmentResult assessmentResult, List<pw.ImageProvider> assessmentImages) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(15),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300),
-        borderRadius: pw.BorderRadius.circular(8),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'Assessment Images',
-            style: pw.TextStyle(
-              fontSize: 18,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.grey800,
-            ),
-          ),
-          pw.SizedBox(height: 15),
           pw.Text(
             'Images analyzed: ${assessmentImages.length}',
             style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
           ),
           pw.SizedBox(height: 15),
           
-          // Display actual images in a grid
+          // Display images with bounding box information
           if (assessmentImages.isNotEmpty) ...[
-            pw.GridView(
-              crossAxisCount: 2,
-              childAspectRatio: 1.0,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              children: assessmentImages.asMap().entries.map((entry) {
-                final index = entry.key;
-                final image = entry.value;
-                
-                return pw.Container(
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey300),
-                    borderRadius: pw.BorderRadius.circular(8),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      pw.Expanded(
-                        child: pw.Container(
-                          decoration: pw.BoxDecoration(
-                            borderRadius: const pw.BorderRadius.only(
-                              topLeft: pw.Radius.circular(8),
-                              topRight: pw.Radius.circular(8),
+            ...assessmentImages.asMap().entries.map((entry) {
+              final index = entry.key;
+              final image = entry.value;
+              
+              // Get detection results for this image
+              final detectionResult = index < assessmentResult.detectionResults.length 
+                  ? assessmentResult.detectionResults[index] 
+                  : null;
+              
+              // Remove duplicates before displaying
+              final sortedDetections = detectionResult != null 
+                  ? _removeDuplicateDetections(detectionResult.detections)
+                  : <Detection>[];
+              
+              return pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 15),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    // Header with Image number and detection count
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.blue100,
+                        borderRadius: const pw.BorderRadius.only(
+                          topLeft: pw.Radius.circular(8),
+                          topRight: pw.Radius.circular(8),
+                        ),
+                      ),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(
+                            'Image ${index + 1}',
+                            style: pw.TextStyle(
+                              fontSize: 13,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.blue800,
                             ),
                           ),
-                          child: pw.Image(
-                            image,
-                            fit: pw.BoxFit.cover,
-                            width: 200,
-                            height: 150,
-                          ),
-                        ),
+                          if (sortedDetections.isNotEmpty)
+                            pw.Container(
+                              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: pw.BoxDecoration(
+                                color: PdfColors.blue700,
+                                borderRadius: pw.BorderRadius.circular(10),
+                              ),
+                              child: pw.Text(
+                                '${sortedDetections.length} Detection${sortedDetections.length > 1 ? 's' : ''}',
+                                style: pw.TextStyle(
+                                  fontSize: 9,
+                                  color: PdfColors.white,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.all(8),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.grey100,
-                          borderRadius: const pw.BorderRadius.only(
-                            bottomLeft: pw.Radius.circular(8),
-                            bottomRight: pw.Radius.circular(8),
+                    ),
+                    // Image and detections side by side
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          // Image - 65% width
+                          pw.Expanded(
+                            flex: 65,
+                            child: pw.Container(
+                              decoration: pw.BoxDecoration(
+                                border: pw.Border.all(color: PdfColors.grey400, width: 1.5),
+                                borderRadius: pw.BorderRadius.circular(6),
+                              ),
+                              child: pw.ClipRRect(
+                                horizontalRadius: 5,
+                                verticalRadius: 5,
+                                child: pw.Image(
+                                  image,
+                                  fit: pw.BoxFit.contain,
+                                  height: 180,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        child: pw.Text(
-                          'Image ${index + 1}',
-                          style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.grey700,
+                          pw.SizedBox(width: 12),
+                          // Detections list - 35% width
+                          pw.Expanded(
+                            flex: 35,
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                if (sortedDetections.isNotEmpty) ...[
+                                  pw.Text(
+                                    'Detected:',
+                                    style: pw.TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: pw.FontWeight.bold,
+                                      color: PdfColors.grey800,
+                                    ),
+                                  ),
+                                  pw.SizedBox(height: 6),
+                                  ...sortedDetections.asMap().entries.map((detEntry) {
+                                    final detIndex = detEntry.key;
+                                    final detection = detEntry.value;
+                                    final isHighest = detIndex == 0;
+                                    
+                                    return pw.Container(
+                                      margin: const pw.EdgeInsets.only(bottom: 5),
+                                      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                                      decoration: pw.BoxDecoration(
+                                        color: isHighest ? PdfColors.blue50 : PdfColors.grey100,
+                                        borderRadius: pw.BorderRadius.circular(4),
+                                        border: pw.Border.all(
+                                          color: isHighest ? PdfColors.blue300 : PdfColors.grey300,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: pw.Row(
+                                        children: [
+                                          pw.Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: pw.BoxDecoration(
+                                              color: isHighest ? PdfColors.blue600 : PdfColors.grey500,
+                                              shape: pw.BoxShape.circle,
+                                            ),
+                                          ),
+                                          pw.SizedBox(width: 6),
+                                          pw.Expanded(
+                                            child: pw.Text(
+                                              detection.label,
+                                              style: pw.TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: isHighest ? pw.FontWeight.bold : pw.FontWeight.normal,
+                                                color: PdfColors.grey900,
+                                              ),
+                                            ),
+                                          ),
+                                          pw.SizedBox(width: 4),
+                                          pw.Text(
+                                            '${(detection.confidence * 100).toStringAsFixed(1)}%',
+                                            style: pw.TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: pw.FontWeight.bold,
+                                              color: isHighest ? PdfColors.blue700 : PdfColors.grey700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ] else ...[
+                                  pw.Text(
+                                    'No detections',
+                                    style: pw.TextStyle(
+                                      fontSize: 9,
+                                      color: PdfColors.grey600,
+                                      fontStyle: pw.FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
-                          textAlign: pw.TextAlign.center,
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ] else ...[
             pw.Container(
               padding: const pw.EdgeInsets.all(20),
@@ -967,13 +913,45 @@ class PDFGenerationService {
     );
   }
 
-  // Helper method to validate percentage values and prevent infinity/NaN errors
-  static double _validatePercentage(double percentage) {
-    if (percentage.isNaN || percentage.isInfinite) {
-      print('Warning: Invalid percentage value detected: $percentage, using 0.0 instead');
+  // Calculate Intersection over Union (IoU) for bounding box overlap detection
+  static double _calculateIOU(List<double> box1, List<double> box2) {
+    try {
+      final x1_1 = box1[0];
+      final y1_1 = box1[1];
+      final x2_1 = box1[2];
+      final y2_1 = box1[3];
+      
+      final x1_2 = box2[0];
+      final y1_2 = box2[1];
+      final x2_2 = box2[2];
+      final y2_2 = box2[3];
+      
+      // Calculate intersection area
+      final xLeft = x1_1 > x1_2 ? x1_1 : x1_2;
+      final yTop = y1_1 > y1_2 ? y1_1 : y1_2;
+      final xRight = x2_1 < x2_2 ? x2_1 : x2_2;
+      final yBottom = y2_1 < y2_2 ? y2_1 : y2_2;
+      
+      if (xRight < xLeft || yBottom < yTop) {
+        return 0.0; // No intersection
+      }
+      
+      final intersectionArea = (xRight - xLeft) * (yBottom - yTop);
+      
+      // Calculate union area
+      final box1Area = (x2_1 - x1_1) * (y2_1 - y1_1);
+      final box2Area = (x2_2 - x1_2) * (y2_2 - y1_2);
+      final unionArea = box1Area + box2Area - intersectionArea;
+      
+      if (unionArea <= 0) {
+        return 0.0;
+      }
+      
+      return intersectionArea / unionArea;
+    } catch (e) {
+      print('Error calculating IOU: $e');
       return 0.0;
     }
-    return percentage.clamp(0.0, 100.0);
   }
 
   // Debug method to validate assessment data before PDF generation
