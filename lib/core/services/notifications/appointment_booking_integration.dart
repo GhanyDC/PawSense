@@ -162,6 +162,7 @@ class AppointmentBookingIntegration {
           'petName': petName,
           'appointmentDate': appointmentDate.toIso8601String(),
           'appointmentTime': appointmentTime,
+          'status': 'cancelled',  // Add status for proper alert type mapping
           'isNoShow': true,
           'notificationSource': 'onAppointmentNoShow',  // DEBUG: Track source
         },
