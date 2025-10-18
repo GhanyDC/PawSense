@@ -485,15 +485,18 @@ class AppointmentService {
       await _firestore.collection(_collection).doc(appointmentId).update(updateData);
 
       // Create notification for status change (if we have appointment details)
-      // BUT skip if this is an auto-cancelled appointment (those have their own specific notifications)
+      // BUT skip if this is an auto-cancelled or no-show appointment (those have their own specific notifications)
       if (appointment != null) {
         try {
-          // Check if this is an auto-cancelled appointment by reading the updated document
+          // Check if this is an auto-cancelled or no-show appointment by reading the updated document
           final updatedDoc = await _firestore.collection(_collection).doc(appointmentId).get();
           final isAutoCancelled = updatedDoc.data()?['autoCancelled'] == true;
+          final isNoShow = updatedDoc.data()?['isNoShow'] == true;
           
           if (isAutoCancelled) {
             print('⏰ Skipping onAppointmentStatusChanged for auto-cancelled appointment: $appointmentId');
+          } else if (isNoShow) {
+            print('🚫 Skipping onAppointmentStatusChanged for no-show appointment: $appointmentId');
           } else {
             await AppointmentBookingIntegration.onAppointmentStatusChanged(
               userId: appointment.owner.id,

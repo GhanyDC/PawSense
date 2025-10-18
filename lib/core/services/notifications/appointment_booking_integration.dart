@@ -81,8 +81,15 @@ class AppointmentBookingIntegration {
     String? cancelReason,
     bool cancelledByClinic = false,
     bool isAutoCancelled = false,
+    bool isNoShow = false,
   }) async {
     try {
+      // Skip notification if this is a no-show (has its own specific notification)
+      if (isNoShow) {
+        print('⏭️ Skipping generic cancellation notification for no-show appointment');
+        return;
+      }
+      
       String title;
       String message;
       
@@ -114,10 +121,13 @@ class AppointmentBookingIntegration {
           'cancelReason': cancelReason ?? (isAutoCancelled ? 'Auto-cancelled due to expiration' : 'Cancelled'),
           'isAutoCancelled': isAutoCancelled,
           'cancelledByClinic': cancelledByClinic,
+          'notificationSource': 'onAppointmentCancelled',  // DEBUG: Track source
         },
       );
       
       print('✅ Cancellation notification created for user $userId (auto: $isAutoCancelled)');
+      print('   📋 Title: "$title"');
+      print('   📝 Message: "${message.substring(0, message.length > 50 ? 50 : message.length)}..."');
     } catch (e) {
       print('❌ Failed to create cancellation notification: $e');
     }
@@ -153,10 +163,13 @@ class AppointmentBookingIntegration {
           'appointmentDate': appointmentDate.toIso8601String(),
           'appointmentTime': appointmentTime,
           'isNoShow': true,
+          'notificationSource': 'onAppointmentNoShow',  // DEBUG: Track source
         },
       );
       
       print('✅ No-show notification created for user $userId');
+      print('   📋 Title: "$title"');
+      print('   📝 Message: "${message.substring(0, message.length > 50 ? 50 : message.length)}..."');
     } catch (e) {
       print('❌ Failed to create no-show notification: $e');
     }

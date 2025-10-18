@@ -176,10 +176,17 @@ class AdminAppointmentNotificationIntegrator {
       // Handle different status updates with appropriate notifications
       
       if (appointment.status == AppointmentStatus.cancelled && appointment.cancelReason != null) {
-        // Skip notification if this is an auto-cancelled appointment (already handled)
+        // Skip notification if this is an auto-cancelled or no-show appointment (already handled)
         final isAutoCancelled = data['autoCancelled'] == true;
+        final isNoShow = data['isNoShow'] == true;
+        
         if (isAutoCancelled) {
           print('⏭️ Skipping duplicate notification for auto-cancelled appointment: $docId');
+          return;
+        }
+        
+        if (isNoShow) {
+          print('⏭️ Skipping duplicate notification for no-show appointment: $docId');
           return;
         }
         
