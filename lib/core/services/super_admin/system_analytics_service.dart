@@ -755,29 +755,24 @@ class SystemAnalyticsService {
   /// 
   /// Data Source: 100% DYNAMIC - Fetched from Firestore 'assessment_results' collection
   /// - NO static or hardcoded data
-  /// - Aggregates disease labels from all AI detection results
-  /// - Calculates percentage based on total detections
+  /// - Counts ONE disease per assessment (highest confidence detection)
+  /// - Calculates percentage based on total assessments
   /// - Sorts by count (descending) and limits to top N
   /// 
-  /// Data Flow:
+  /// Logic:
   /// 1. Fetch all assessment_results documents from Firestore
-  /// 2. Loop through each assessment's detectionResults array
-  /// 3. Extract disease labels from detections array
-  /// 4. Count occurrences of each unique disease
-  /// 5. Calculate percentage: (diseaseCount / totalDetections) * 100
-  /// 6. Sort by count and return top N diseases
+  /// 2. For EACH assessment, find the HIGHEST confidence detection across ALL images
+  /// 3. Count this primary disease once per assessment (not per image)
+  /// 4. Calculate percentage: (assessmentCount / totalAssessments) * 100
+  /// 5. Sort by count and return top N diseases
   /// 
-  /// Example Structure:
-  /// assessment_results/{docId} = {
-  ///   detectionResults: [
-  ///     {
-  ///       detections: [
-  ///         { label: "hotspot", confidence: 0.95 },
-  ///         { label: "ringworm", confidence: 0.87 }
-  ///       ]
-  ///     }
-  ///   ]
-  /// }
+  /// Example:
+  /// - Assessment A: 3 images with hotspot (95%), ringworm (87%), mange (82%)
+  ///   → Counts as 1 hotspot
+  /// - Assessment B: 2 images with ringworm (91%), fungal (88%)
+  ///   → Counts as 1 ringworm
+  /// 
+  /// This prevents over-counting when assessments have multiple images
   static Future<List<DiseaseData>> getTopDetectedDiseases({
     int limit = 10,
   }) async {
@@ -799,40 +794,50 @@ class SystemAnalyticsService {
 
         final diseaseCounts = <String, int>{};
 
-        // Count disease occurrences from REAL Firestore data
+        // Count disease occurrences: ONE disease per assessment (highest confidence)
         for (final assessment in assessments) {
+          // Find highest confidence detection across ALL images in this assessment
+          String? primaryDisease;
+          double highestConfidence = 0.0;
+
           for (final detectionResult in assessment.detectionResults) {
             for (final detection in detectionResult.detections) {
-              final disease = detection.label;
-              diseaseCounts[disease] = (diseaseCounts[disease] ?? 0) + 1;
+              if (detection.confidence > highestConfidence) {
+                highestConfidence = detection.confidence;
+                primaryDisease = detection.label;
+              }
             }
+          }
+
+          // Count only the primary (highest confidence) disease for this assessment
+          if (primaryDisease != null) {
+            diseaseCounts[primaryDisease] = (diseaseCounts[primaryDisease] ?? 0) + 1;
           }
         }
 
-        print('📈 Found ${diseaseCounts.length} unique diseases');
+        print('📈 Found ${diseaseCounts.length} unique diseases from ${assessments.length} assessments');
         print('   Disease breakdown: ${diseaseCounts.entries.take(5).map((e) => "${e.key}: ${e.value}").join(", ")}');
 
-        final totalDetections =
-            diseaseCounts.values.fold(0, (sum, count) => sum + count);
+        final totalAssessments = assessments.length;
 
-        if (totalDetections == 0) {
-          print('⚠️ No disease detections found in assessment results');
+        if (totalAssessments == 0) {
+          print('⚠️ No assessments found');
           return [];
         }
 
-        // Build disease data list with percentages
+        // Build disease data list with percentages (based on total assessments)
         final diseaseList = diseaseCounts.entries
             .map((entry) => DiseaseData(
                   diseaseName: entry.key,
                   count: entry.value,
-                  percentage: (entry.value / totalDetections) * 100,
+                  percentage: (entry.value / totalAssessments) * 100,
                 ))
             .toList();
 
         // Sort by count (descending) and limit
         diseaseList.sort((a, b) => b.count.compareTo(a.count));
 
-        print('✅ Returning top $limit diseases (total detections: $totalDetections)');
+        print('✅ Returning top $limit diseases (total assessments: $totalAssessments)');
         return diseaseList.take(limit).toList();
       } catch (e) {
         print('❌ Error getting top diseases: $e');
