@@ -97,19 +97,15 @@ class _TopNavBarState extends State<TopNavBar> {
                     userRole: widget.userRole,
                     onViewProfile: () {
                       _closeMenu();
-                      widget.onProfileTap?.call();
+                      context.go('/admin/vet-profile');
                     },
                     onSettings: () {
                       _closeMenu();
-                      // Navigate to settings will be handled by the modal
-                    },
-                    onToggleDarkMode: () {
-                      _closeMenu();
-                      // Toggle dark mode will be handled by the modal
+                      context.go('/admin/settings');
                     },
                     onHelpSupport: () {
                       _closeMenu();
-                      // Navigate to help & support will be handled by the modal
+                      context.go('/admin/support');
                     },
                     onSignOut: () {
                       // Clean up overlay immediately without setState

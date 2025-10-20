@@ -9,10 +9,8 @@ class ProfilePopupModal extends StatelessWidget {
   final String userRole;
   final VoidCallback? onViewProfile;
   final VoidCallback? onSettings;
-  final VoidCallback? onToggleDarkMode;
   final VoidCallback? onHelpSupport;
   final VoidCallback? onSignOut;
-  final bool isDarkMode;
 
   const ProfilePopupModal({
     super.key,
@@ -21,10 +19,8 @@ class ProfilePopupModal extends StatelessWidget {
     required this.userRole,
     this.onViewProfile,
     this.onSettings,
-    this.onToggleDarkMode,
     this.onHelpSupport,
     this.onSignOut,
-    this.isDarkMode = false,
   });
 
   @override
@@ -127,6 +123,7 @@ class ProfilePopupModal extends StatelessWidget {
                   title: 'View Profile',
                   onTap: onViewProfile ?? () {
                     Navigator.of(context).pop();
+                    context.go('/admin/vet-profile');
                   },
                 ),
                 _buildMenuItem(
@@ -138,15 +135,8 @@ class ProfilePopupModal extends StatelessWidget {
                   },
                 ),
                 _buildMenuItem(
-                  icon: isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                  title: 'Dark Mode',
-                  onTap: onToggleDarkMode ?? () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-                _buildMenuItem(
                   icon: Icons.help_outline,
-                  title: 'Help & Support',
+                  title: 'FAQs',
                   onTap: onHelpSupport ?? () {
                     Navigator.of(context).pop();
                     context.go('/admin/support');

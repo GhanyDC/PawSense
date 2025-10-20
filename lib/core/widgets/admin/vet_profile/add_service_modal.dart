@@ -74,7 +74,7 @@ class _AddServiceModalState extends State<AddServiceModal> {
       final success = await VetProfileService.addService(
         serviceName: _serviceNameController.text.trim(),
         serviceDescription: _descriptionController.text.trim(),
-        estimatedPrice: 'PHP ${_priceController.text.trim()}',
+        estimatedPrice: '₱${_priceController.text.trim()}',
         duration: '${_durationController.text.trim()} minutes',
         category: _selectedCategory.name,
         isActive: true,
@@ -370,7 +370,7 @@ class _AddServiceModalState extends State<AddServiceModal> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Price (PHP)',
+                              'Price (₱)',
                               style: TextStyle(
                                 fontSize: kFontSizeRegular,
                                 fontWeight: FontWeight.w600,
