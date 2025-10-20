@@ -5,6 +5,7 @@ import '../../../utils/app_colors.dart';
 import '../../../models/clinic/appointment_models.dart';
 import '../../../services/notifications/notification_service.dart';
 import '../../../models/notifications/notification_model.dart';
+import '../../../services/clinic/clinic_schedule_service.dart';
 
 class AppointmentCompletionModal extends StatefulWidget {
   final Appointment appointment;
@@ -30,6 +31,9 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
   bool _needsFollowUp = false;
   DateTime? _followUpDate;
   String? _followUpTime;
+  
+  // Holidays for date picker
+  List<DateTime> _holidayDates = [];
   
   // AI Assessment Validation
   bool _hasAIAssessment = false;
@@ -58,6 +62,7 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
     super.initState();
     _loadAIAssessment();
     _loadDiseasesFromFirestore();
+    _loadHolidays();
   }
 
   @override
@@ -270,13 +275,86 @@ class _AppointmentCompletionModalState extends State<AppointmentCompletionModal>
     return '${petType}_${diseaseForFilename}_${appointmentId}_${timestamp}';
   }
 
+  /// Load holidays for the clinic
+  Future<void> _loadHolidays() async {
+    try {
+      final holidays = await ClinicScheduleService.getHolidays(widget.appointment.clinicId);
+      if (mounted) {
+        setState(() {
+          _holidayDates = holidays;
+        });
+      }
+      print('✅ Loaded ${holidays.length} holidays for appointment completion');
+    } catch (e) {
+      print('❌ Error loading holidays: $e');
+      if (mounted) {
+        setState(() {
+          _holidayDates = [];
+        });
+      }
+    }
+  }
+
+  /// Check if a date should be selectable for follow-up
+  bool _isDateSelectableForFollowUp(DateTime date) {
+    // Parse the appointment date (format: "YYYY-MM-DD")
+    final appointmentDateParts = widget.appointment.date.split('-');
+    final appointmentDate = DateTime(
+      int.parse(appointmentDateParts[0]),
+      int.parse(appointmentDateParts[1]),
+      int.parse(appointmentDateParts[2]),
+    );
+    
+    // Normalize dates to compare only year, month, day (ignore time)
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final appointmentDateOnly = DateTime(
+      appointmentDate.year,
+      appointmentDate.month,
+      appointmentDate.day,
+    );
+    
+    // Disable if date is before or equal to appointment date
+    if (dateOnly.isBefore(appointmentDateOnly) || dateOnly.isAtSameMomentAs(appointmentDateOnly)) {
+      return false;
+    }
+    
+    // Disable if date is a holiday
+    final isHoliday = _holidayDates.any((holiday) {
+      final holidayOnly = DateTime(holiday.year, holiday.month, holiday.day);
+      return dateOnly.isAtSameMomentAs(holidayOnly);
+    });
+    
+    if (isHoliday) {
+      return false;
+    }
+    
+    return true;
+  }
+
   Future<void> _selectFollowUpDate() async {
+    // Parse the appointment date
+    final appointmentDateParts = widget.appointment.date.split('-');
+    final appointmentDate = DateTime(
+      int.parse(appointmentDateParts[0]),
+      int.parse(appointmentDateParts[1]),
+      int.parse(appointmentDateParts[2]),
+    );
+    
+    // Start from day after appointment
+    final firstSelectableDate = appointmentDate.add(const Duration(days: 1));
     final now = DateTime.now();
+    
+    // Use the later of tomorrow or day after appointment
+    final initialDate = firstSelectableDate.isAfter(now) 
+        ? firstSelectableDate.add(const Duration(days: 6)) // 7 days after appointment
+        : now.add(const Duration(days: 7)); // 7 days from now
+    
     final selectedDate = await showDatePicker(
       context: context,
-      initialDate: now.add(const Duration(days: 7)),
-      firstDate: now,
+      initialDate: initialDate,
+      firstDate: firstSelectableDate.isAfter(now) ? firstSelectableDate : now.add(const Duration(days: 1)),
       lastDate: now.add(const Duration(days: 365)),
+      selectableDayPredicate: _isDateSelectableForFollowUp,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
