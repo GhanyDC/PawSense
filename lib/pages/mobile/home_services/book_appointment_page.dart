@@ -1457,7 +1457,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                                 Row(
                                   children: [
                                     Text(
-                                      '${service['estimatedPrice'] ?? '0.00'} • ${service['duration'] ?? '30 mins'}',
+                                      'PHP ${service['estimatedPrice'] ?? '0.00'} • ${service['duration'] ?? '30 mins'}',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: AppColors.textSecondary,
