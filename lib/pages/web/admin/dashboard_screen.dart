@@ -79,7 +79,16 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   
   @override
   void dispose() {
-    _saveState();
+    // Try to save state, but don't fail if context is already deactivated
+    try {
+      if (mounted) {
+        _saveState();
+      }
+    } catch (e) {
+      // Context might be deactivated during sign out - safe to ignore
+      AppLogger.debug('Could not save state on dispose (widget deactivated): $e');
+    }
+    
     // Cancel listener and debounce timer when widget is disposed
     _appointmentsListener?.cancel();
     _refreshDebounceTimer?.cancel();
@@ -122,21 +131,46 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   
   /// Restore state from PageStorage
   void _restoreState() {
-    final storage = PageStorage.of(context);
-    final savedPeriod = storage.readState(context, identifier: 'selectedPeriod');
-    if (savedPeriod != null && savedPeriod is String) {
-      _safeSetState(() {
-        selectedPeriod = savedPeriod;
-      });
-      print('🔄 Restored dashboard state: period="$selectedPeriod"');
+    if (!mounted) return;
+    
+    try {
+      final storage = PageStorage.maybeOf(context);
+      if (storage == null) {
+        AppLogger.debug('PageStorage not available - skipping state restore');
+        return;
+      }
+      
+      final savedPeriod = storage.readState(context, identifier: 'selectedPeriod');
+      if (savedPeriod != null && savedPeriod is String) {
+        _safeSetState(() {
+          selectedPeriod = savedPeriod;
+        });
+        print('🔄 Restored dashboard state: period="$selectedPeriod"');
+      }
+    } catch (e) {
+      AppLogger.debug('Error restoring state: $e');
     }
   }
   
   /// Save current state to PageStorage
   void _saveState() {
-    final storage = PageStorage.of(context);
-    storage.writeState(context, selectedPeriod, identifier: 'selectedPeriod');
-    print('💾 Saved dashboard state: period="$selectedPeriod"');
+    // Guard against accessing deactivated context (e.g., during sign out)
+    if (!mounted) {
+      AppLogger.debug('Cannot save state - widget not mounted');
+      return;
+    }
+    
+    try {
+      final storage = PageStorage.maybeOf(context);
+      if (storage != null) {
+        storage.writeState(context, selectedPeriod, identifier: 'selectedPeriod');
+        print('💾 Saved dashboard state: period="$selectedPeriod"');
+      } else {
+        AppLogger.debug('PageStorage not available - skipping state save');
+      }
+    } catch (e) {
+      AppLogger.debug('Error saving state: $e');
+    }
   }
 
   /// Safe setState that prevents lifecycle crashes

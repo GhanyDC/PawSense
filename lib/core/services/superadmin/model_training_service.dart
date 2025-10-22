@@ -64,15 +64,27 @@ class TrainingImageData {
   });
 
   factory TrainingImageData.fromFirestore(String id, Map<String, dynamic> data) {
+    // Support both nested (legacy) and flat (new) data structures
+    // New structure: fields at root level (imageUrl, diseaseLabel, uniqueFilename, etc.)
+    // Legacy structure: fields nested under 'imageData' object
+    
+    final imageData = data['imageData'] as Map<String, dynamic>?;
+    
     return TrainingImageData(
       id: id,
       appointmentId: data['appointmentId'] ?? '',
       assessmentResultId: data['assessmentResultId'] ?? '',
       petType: data['petType'] ?? 'Unknown',
       petBreed: data['petBreed'] ?? 'Unknown',
-      diseaseLabel: data['imageData']?['diseaseLabel'] ?? data['correctDisease'] ?? data['clinicDiagnosis'] ?? 'Unknown',
+      // Try flat structure first, then nested, then fallback
+      diseaseLabel: data['diseaseLabel'] ?? 
+                    imageData?['diseaseLabel'] ?? 
+                    data['correctDisease'] ?? 
+                    data['clinicDiagnosis'] ?? 
+                    'Unknown',
       clinicDiagnosis: data['clinicDiagnosis'] ?? '',
-      overallCorrect: data['overallCorrect'] as bool?,
+      // Map 'isCorrect' (new field) to overallCorrect, or use legacy 'overallCorrect'
+      overallCorrect: data['isCorrect'] as bool? ?? data['overallCorrect'] as bool?,
       feedback: data['feedback'] ?? '',
       correctDisease: data['correctDisease'] as String?,
       validatedAt: (data['validatedAt'] as Timestamp).toDate(),
@@ -81,14 +93,17 @@ class TrainingImageData {
       canUseForRetraining: data['canUseForRetraining'] ?? false,
       hasImageAssessment: data['hasImageAssessment'] ?? false,
       trainingDataType: data['trainingDataType'] ?? 'text_assessment',
-      originalImageUrl: data['imageData']?['originalImageUrl'] as String?,
-      annotatedImageUrl: data['imageData']?['annotatedImageUrl'] as String?,
-      assessmentImages: (data['imageData']?['assessmentImages'] as List<dynamic>?)
+      // Try flat structure first (imageUrl), then nested (originalImageUrl)
+      originalImageUrl: data['imageUrl'] as String? ?? imageData?['originalImageUrl'] as String?,
+      annotatedImageUrl: imageData?['annotatedImageUrl'] as String?,
+      assessmentImages: (imageData?['assessmentImages'] as List<dynamic>?)
           ?.map((img) => img as Map<String, dynamic>)
           .toList() ?? [],
-      assessmentMetadata: data['imageData']?['assessmentMetadata'] as Map<String, dynamic>?,
-      uniqueFilename: data['imageData']?['uniqueFilename'] as String?,
-      correctionType: data['imageData']?['correctionType'] ?? 'validation',
+      assessmentMetadata: imageData?['assessmentMetadata'] as Map<String, dynamic>?,
+      // Try flat structure first, then nested
+      uniqueFilename: data['uniqueFilename'] as String? ?? imageData?['uniqueFilename'] as String?,
+      // Try flat structure first, then nested
+      correctionType: data['correctionType'] ?? imageData?['correctionType'] ?? 'validation',
       aiPredictions: (data['aiPredictions'] as List<dynamic>?)
           ?.map((pred) => pred as Map<String, dynamic>)
           .toList() ?? [],
