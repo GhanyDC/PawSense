@@ -1,10 +1,12 @@
 // services/superadmin/model_training_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-// For web downloads
-import 'dart:html' as html;
+// For web downloads - conditional import
+import 'model_training_web.dart'
+  if (dart.library.io) 'model_training_stub.dart';
 import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
+import 'dart:typed_data';
 
 class TrainingImageData {
   final String id;
@@ -252,13 +254,8 @@ class ModelTrainingService {
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').substring(0, 19);
       final filename = 'training_data_$timestamp.zip';
       
-      // Trigger download in browser
-      final blob = html.Blob([zipData], 'application/zip');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..setAttribute('download', filename)
-        ..click();
-      html.Url.revokeObjectUrl(url);
+      // Trigger download using helper function
+      downloadFile(Uint8List.fromList(zipData), filename, 'application/zip');
       
       print('✅ Export completed: $filename ($totalImages images across ${selectedByLabel.length} labels)');
     } catch (e) {
