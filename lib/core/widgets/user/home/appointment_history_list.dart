@@ -167,6 +167,7 @@ class AppointmentHistoryItem extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Flexible(
                             child: Text(
@@ -176,53 +177,42 @@ class AppointmentHistoryItem extends StatelessWidget {
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (data.isFollowUp) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.info.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: AppColors.info.withValues(alpha: 0.3),
-                                  width: 1,
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: 'Follow-up appointment',
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
                                 ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.refresh,
-                                    size: 10,
-                                    color: AppColors.info,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'Follow-up',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.info,
-                                    ),
-                                  ),
-                                ],
+                                decoration: BoxDecoration(
+                                  color: AppColors.info,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.refresh,
+                                  size: 10,
+                                  color: AppColors.white,
+                                ),
                               ),
                             ),
                           ],
                         ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
                         data.subtitle,
                         style: kMobileTextStyleSubtitle.copyWith(
                           color: AppColors.textSecondary,
                           fontSize: 11,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
