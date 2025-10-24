@@ -339,9 +339,13 @@ class _DiseasesManagementScreenState extends State<DiseasesManagementScreen> wit
       // Generate PDF (include summary only when no filters are applied)
       final Uint8List pdfBytes = await DiseasePdfService.generateDiseaseReport(
         diseases: allFilteredDiseases,
-        detectionMethodFilter: _detectionFilter != null && _detectionFilter!.isNotEmpty ? _detectionFilter : null,
+        detectionMethodFilter: _detectionFilter,
         speciesFilter: _speciesFilter.isNotEmpty ? _speciesFilter.join(', ') : null,
-        severityFilter: _severityFilter != null && _severityFilter!.isNotEmpty ? _severityFilter : null,
+        severityFilter: _severityFilter,
+        categoriesFilter: _categoriesFilter.isNotEmpty ? _categoriesFilter.join(', ') : null,
+        contagiousFilter: _contagiousFilter != null 
+            ? (_contagiousFilter! ? 'Yes' : 'No') 
+            : null,
         searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
         generatedBy: adminName,
         includeSummary: !hasFilters, // Only include summary when exporting all data (no filters)

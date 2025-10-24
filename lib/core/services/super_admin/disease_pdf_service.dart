@@ -10,6 +10,8 @@ class DiseasePdfService {
     String? detectionMethodFilter,
     String? speciesFilter,
     String? severityFilter,
+    String? categoriesFilter,
+    String? contagiousFilter,
     String? searchQuery,
     String? generatedBy,
     bool includeSummary = true, // New parameter to control summary display
@@ -18,9 +20,11 @@ class DiseasePdfService {
     final stats = _calculateStatistics(diseases);
     
     List<String> appliedFilters = [];
-    if (detectionMethodFilter != null && detectionMethodFilter != 'all') appliedFilters.add('Detection: $detectionMethodFilter');
-    if (speciesFilter != null && speciesFilter != 'all') appliedFilters.add('Species: $speciesFilter');
-    if (severityFilter != null && severityFilter != 'all') appliedFilters.add('Severity: $severityFilter');
+    if (detectionMethodFilter != null && detectionMethodFilter.isNotEmpty) appliedFilters.add('Detection: $detectionMethodFilter');
+    if (speciesFilter != null && speciesFilter.isNotEmpty) appliedFilters.add('Species: $speciesFilter');
+    if (severityFilter != null && severityFilter.isNotEmpty) appliedFilters.add('Severity: $severityFilter');
+    if (categoriesFilter != null && categoriesFilter.isNotEmpty) appliedFilters.add('Categories: $categoriesFilter');
+    if (contagiousFilter != null && contagiousFilter.isNotEmpty) appliedFilters.add('Contagious: $contagiousFilter');
     if (searchQuery != null && searchQuery.isNotEmpty) appliedFilters.add('Search: "$searchQuery"');
     String filtersText = appliedFilters.isEmpty ? 'None' : appliedFilters.join(', ');
     
