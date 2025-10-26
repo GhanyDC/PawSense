@@ -35,6 +35,8 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
   String? _successMessage;
   String _currentEmail = '';
   Timer? _successMessageTimer;
+  Timer? _otpVerifiedTimer;
+  bool _showOtpVerifiedMessage = false;
   
   // Live validation states
   bool _isEmailValid = false;
@@ -69,6 +71,7 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
     _confirmPasswordController.dispose();
     _fadeController.dispose();
     _successMessageTimer?.cancel();
+    _otpVerifiedTimer?.cancel();
     super.dispose();
   }
 
@@ -179,10 +182,19 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
       if (result.isValid) {
         setState(() {
           _isOTPVerified = true;
-                  setState(() {
+          _showOtpVerifiedMessage = true;
           _successMessage = 'Code verified successfully!';
         });
         _showSuccessMessage();
+        
+        // Auto-hide OTP verified message after 3 seconds
+        _otpVerifiedTimer?.cancel();
+        _otpVerifiedTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _showOtpVerifiedMessage = false;
+            });
+          }
         });
       } else {
         setState(() {
@@ -360,6 +372,78 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
       _isConfirmPasswordValid = value.isNotEmpty && 
                                value == _newPasswordController.text;
     });
+  }
+
+  Map<String, bool> _getPasswordRequirements(String password) {
+    return {
+      'lowercase': RegExp(r'[a-z]').hasMatch(password),
+      'uppercase': RegExp(r'[A-Z]').hasMatch(password),
+      'number': RegExp(r'[0-9]').hasMatch(password),
+      'minLength': password.length >= 8,
+    };
+  }
+
+  Widget _buildPasswordRequirements() {
+    final password = _newPasswordController.text;
+    final requirements = _getPasswordRequirements(password);
+
+    if (password.isEmpty) return SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Password Requirements:',
+            style: kTextStyleRegular.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildRequirementItem(
+              'A lowercase letter', requirements['lowercase']!),
+          const SizedBox(height: 6),
+          _buildRequirementItem(
+              'A capital (uppercase) letter', requirements['uppercase']!),
+          const SizedBox(height: 6),
+          _buildRequirementItem('A number', requirements['number']!),
+          const SizedBox(height: 6),
+          _buildRequirementItem(
+              'Minimum 8 characters', requirements['minLength']!),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementItem(String text, bool isMet) {
+    return Row(
+      children: [
+        Icon(
+          isMet ? Icons.check_circle : Icons.cancel,
+          color: isMet ? AppColors.success : AppColors.error,
+          size: 16,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: kTextStyleRegular.copyWith(
+              color: isMet ? AppColors.success : AppColors.error,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildEmailStep() {
@@ -546,44 +630,44 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
           // Icon
           Center(
             child: Container(
-              width: 100,
-              height: 100,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: AppColors.success.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.lock_open_rounded,
-                size: 50,
+                size: 36,
                 color: AppColors.success,
               ),
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           
           // Title
           Text(
             'Create New Password',
             style: kTextStyleTitle.copyWith(
               color: AppColors.textPrimary,
-              fontSize: 24,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           
           // Description
           Text(
-            'Your identity has been verified. Create a new password for your admin account.',
+            'Create a new password for your admin account.',
             style: kTextStyleRegular.copyWith(
               color: AppColors.textSecondary,
-              fontSize: 14,
-              height: 1.5,
+              fontSize: 13,
+              height: 1.4,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           
           // Password fields
           _buildPasswordField(
@@ -597,6 +681,10 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
             isValid: _isNewPasswordValid,
             validator: passwordValidator,
           ),
+          
+          // Password requirements
+          _buildPasswordRequirements(),
+          
           const SizedBox(height: 20),
           _buildPasswordField(
             controller: _confirmPasswordController,
@@ -644,6 +732,38 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
                     ),
             ),
           ),
+          
+          // OTP Verified Success Message
+          if (_showOtpVerifiedMessage) ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.success.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.success,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Code verified successfully!',
+                    style: kTextStyleRegular.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -962,8 +1082,8 @@ class _WebOTPForgotPasswordPageState extends State<WebOTPForgotPasswordPage>
                                 const SizedBox(height: 24),
                               ],
 
-                              // Success Message
-                              if (_successMessage != null) ...[
+                              // Success Message (only show if not in password step)
+                              if (_successMessage != null && !_isOTPVerified) ...[
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(

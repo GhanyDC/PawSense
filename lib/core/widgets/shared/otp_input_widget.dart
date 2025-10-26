@@ -210,27 +210,17 @@ class _OTPInputWidgetState extends State<OTPInputWidget> {
         border: Border.all(
           color: hasError
               ? AppColors.error
-              : _focusNodes[index].hasFocus
-                  ? AppColors.primary
-                  : AppColors.textTertiary.withOpacity(0.3),
-          width: _focusNodes[index].hasFocus ? 2 : 1,
+              : AppColors.textTertiary.withOpacity(0.4),
+          width: 1,
         ),
         color: widget.isEnabled ? Colors.white : AppColors.background,
-        boxShadow: _focusNodes[index].hasFocus
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.15),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Focus(
         onKeyEvent: (node, event) {
@@ -449,27 +439,17 @@ class _WebOTPInputWidgetState extends State<WebOTPInputWidget> {
         border: Border.all(
           color: hasError
               ? AppColors.error
-              : _focusNodes[index].hasFocus
-                  ? AppColors.primary
-                  : AppColors.border.withOpacity(0.4),
-          width: _focusNodes[index].hasFocus ? 2 : 1,
+              : AppColors.border.withOpacity(0.4),
+          width: 1,
         ),
         color: widget.isEnabled ? Colors.white : AppColors.background,
-        boxShadow: _focusNodes[index].hasFocus
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.15),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Focus(
         onKeyEvent: (node, event) {

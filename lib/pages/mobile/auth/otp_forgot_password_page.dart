@@ -35,6 +35,8 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
   String? _successMessage;
   String _currentEmail = '';
   Timer? _successMessageTimer;
+  Timer? _otpVerifiedTimer;
+  bool _showOtpVerifiedMessage = false;
   
   // Live validation states
   bool _isEmailValid = false;
@@ -90,6 +92,7 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
   @override
   void dispose() {
     _successMessageTimer?.cancel();
+    _otpVerifiedTimer?.cancel();
     _emailController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -148,6 +151,78 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
         _isConfirmPasswordValid = true;
       }
     });
+  }
+
+  Map<String, bool> _getPasswordRequirements(String password) {
+    return {
+      'lowercase': RegExp(r'[a-z]').hasMatch(password),
+      'uppercase': RegExp(r'[A-Z]').hasMatch(password),
+      'number': RegExp(r'[0-9]').hasMatch(password),
+      'minLength': password.length >= 8,
+    };
+  }
+
+  Widget _buildPasswordRequirements() {
+    final password = _newPasswordController.text;
+    final requirements = _getPasswordRequirements(password);
+
+    if (password.isEmpty) return SizedBox.shrink();
+
+    return Container(
+      margin: EdgeInsets.only(top: kMobileSizedBoxMedium),
+      padding: EdgeInsets.all(kMobilePaddingMedium),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+        border: Border.all(color: AppColors.border.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+          'Password Requirements:',
+          style: kMobileTextStyleSubtitle.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
+          SizedBox(height: kMobileSizedBoxSmall),
+          _buildRequirementItem(
+              'A lowercase letter', requirements['lowercase']!),
+          SizedBox(height: 4),
+          _buildRequirementItem(
+              'A capital (uppercase) letter', requirements['uppercase']!),
+          SizedBox(height: 4),
+          _buildRequirementItem('A number', requirements['number']!),
+          SizedBox(height: 4),
+          _buildRequirementItem(
+              'Minimum 8 characters', requirements['minLength']!),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementItem(String text, bool isMet) {
+    return Row(
+      children: [
+        Icon(
+          isMet ? Icons.check_circle : Icons.cancel,
+          color: isMet ? AppColors.success : AppColors.error,
+          size: 16,
+        ),
+        SizedBox(width: kMobileSizedBoxSmall),
+        Expanded(
+          child: Text(
+            text,
+            style: kMobileTextStyleSubtitle.copyWith(
+              color: isMet ? AppColors.success : AppColors.error,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
   }
   
   void _showSuccessMessage(String message) {
@@ -239,8 +314,19 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
       if (result.isValid) {
         setState(() {
           _isOTPVerified = true;
+          _showOtpVerifiedMessage = true;
         });
         _showSuccessMessage('OTP verified successfully!');
+        
+        // Auto-hide OTP verified message after 3 seconds
+        _otpVerifiedTimer?.cancel();
+        _otpVerifiedTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _showOtpVerifiedMessage = false;
+            });
+          }
+        });
       } else {
         setState(() {
           _errorMessage = result.message;
@@ -447,6 +533,38 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
                     ),
                   ),
           ),
+          
+          // Success message for email step
+          if (_successMessage != null && _isEmailSent) ...[
+            SizedBox(height: kMobileSizedBoxLarge),
+            Container(
+              padding: EdgeInsets.all(kMobilePaddingMedium),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+                border: Border.all(color: AppColors.success.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.success,
+                    size: 18,
+                  ),
+                  SizedBox(width: kMobileSizedBoxSmall),
+                  Text(
+                    _successMessage!,
+                    style: kMobileTextStyleSubtitle.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -538,40 +656,41 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
           Container(
             alignment: Alignment.center,
             child: Container(
-              padding: EdgeInsets.all(kMobilePaddingLarge),
+              padding: EdgeInsets.all(kMobilePaddingMedium),
               decoration: BoxDecoration(
                 color: AppColors.success.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.lock_open_rounded,
-                size: 48,
+                size: 32,
                 color: AppColors.success,
               ),
             ),
           ),
-          SizedBox(height: kMobileSizedBoxHuge),
+          SizedBox(height: kMobileSizedBoxLarge),
           
           // Title and description
           Text(
             'Create New Password',
             style: kMobileTextStyleTitle.copyWith(
               color: AppColors.textPrimary,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: kMobileSizedBoxLarge),
+          SizedBox(height: kMobileSizedBoxMedium),
           Text(
-            'Your identity has been verified. Create a new password for your account.',
+            'Create a new password for your account.',
             style: kMobileTextStyleSubtitle.copyWith(
               color: AppColors.textSecondary,
-              height: 1.4,
+              height: 1.3,
+              fontSize: 13,
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: kMobileSizedBoxHuge + kMobileSizedBoxMedium),
+          SizedBox(height: kMobileSizedBoxLarge),
           
           // Password fields
           _buildPasswordField(
@@ -583,6 +702,10 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
             },
             validator: passwordValidator,
           ),
+          
+          // Password requirements
+          _buildPasswordRequirements(),
+          
           SizedBox(height: kMobileSizedBoxXLarge),
           _buildPasswordField(
             controller: _confirmPasswordController,
@@ -623,6 +746,38 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
                     ),
                   ),
           ),
+          
+          // OTP Verified Success Message
+          if (_showOtpVerifiedMessage) ...[
+            SizedBox(height: kMobileSizedBoxLarge),
+            Container(
+              padding: EdgeInsets.all(kMobilePaddingMedium),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+                border: Border.all(color: AppColors.success.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.success,
+                    size: 18,
+                  ),
+                  SizedBox(width: kMobileSizedBoxSmall),
+                  Text(
+                    'OTP verified successfully!',
+                    style: kMobileTextStyleSubtitle.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -850,10 +1005,29 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        leading: IconButton(
+        leading: (!_isEmailSent || !_isOTPVerified) ? IconButton(
           icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
+          onPressed: () {
+            if (_isOTPVerified) {
+              // Go back to OTP step
+              setState(() {
+                _isOTPVerified = false;
+                _errorMessage = null;
+                _successMessage = null;
+              });
+            } else if (_isEmailSent) {
+              // Go back to email step
+              setState(() {
+                _isEmailSent = false;
+                _errorMessage = null;
+                _successMessage = null;
+              });
+            } else {
+              // Go back to previous screen
+              Navigator.pop(context);
+            }
+          },
+        ) : null,
         title: Text(
           'Reset Password',
           style: kMobileTextStyleTitle.copyWith(
@@ -903,8 +1077,8 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
                   SizedBox(height: kMobileSizedBoxXLarge),
                 ],
 
-                // Success message
-                if (_successMessage != null) ...[
+                // Success message (only show if not in password step)
+                if (_successMessage != null && !_isOTPVerified) ...[
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.all(kMobilePaddingSmall),
@@ -957,7 +1131,7 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: () => context.go('/signin'),
                       child: Text(
                         'Sign In',
                         style: kMobileTextStyleSubtitle.copyWith(
