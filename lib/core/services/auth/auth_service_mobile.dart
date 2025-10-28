@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../models/user/user_model.dart';
 import 'otp_service.dart';
 import 'email_service.dart';
@@ -11,6 +12,8 @@ class AuthService {
   final _auth = FirebaseAuth.instance;
   // Firestore instance
   final _firestore = FirebaseFirestore.instance;
+  // Google Sign In instance
+  final _googleSignIn = GoogleSignIn();
   // OTP service instance
   final _otpService = OTPService();
   // Email service instance
@@ -121,7 +124,101 @@ class AuthService {
   }
 
   /// Signs out the current user.
-  Future<void> signOut() async => _auth.signOut();
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+  }
+
+  /// Signs in with Google and creates/updates user data in Firestore
+  Future<User?> signInWithGoogle() async {
+    try {
+      // Trigger the authentication flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        // User canceled the sign-in
+        return null;
+      }
+
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // Create a new credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the Google credential
+      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final User? user = userCredential.user;
+
+      if (user != null) {
+        // Check if user document exists, if not create one
+        final userData = await getUserData(user.uid);
+        
+        if (userData == null) {
+          // Create new user document for Google sign-in
+          final newUserModel = UserModel(
+            uid: user.uid,
+            username: user.displayName ?? 'Google User',
+            email: user.email?.toLowerCase() ?? '',
+            contactNumber: user.phoneNumber ?? '',
+            agreedToTerms: true, // Assume Google users accept terms
+            createdAt: DateTime.now(),
+            address: '',
+            firstName: _extractFirstName(user.displayName ?? ''),
+            lastName: _extractLastName(user.displayName ?? ''),
+            role: 'user',
+            profileImageUrl: user.photoURL,
+          );
+          
+          await saveUser(newUserModel);
+          debugPrint('✅ New Google user created: ${user.uid}');
+        } else {
+          // Update existing user with Google profile image if needed
+          if (userData.profileImageUrl != user.photoURL) {
+            final updatedUser = userData.copyWith(
+              profileImageUrl: user.photoURL,
+            );
+            await saveUser(updatedUser);
+            debugPrint('✅ Existing user updated with Google profile image: ${user.uid}');
+          }
+        }
+        
+        // Check if user account is active
+        final currentUserData = await getUserData(user.uid);
+        if (currentUserData != null && currentUserData.isActive == false) {
+          // Sign out the user since their account is inactive
+          await signOut();
+          throw FirebaseAuthException(
+            code: 'user-disabled',
+            message: 'Your account has been deactivated. Please contact support for assistance.',
+          );
+        }
+      }
+
+      return user;
+    } catch (e) {
+      debugPrint('Google sign-in error: $e');
+      rethrow;
+    }
+  }
+
+  /// Extract first name from full name
+  String _extractFirstName(String fullName) {
+    final parts = fullName.trim().split(' ');
+    return parts.isNotEmpty ? parts.first : '';
+  }
+
+  /// Extract last name from full name
+  String _extractLastName(String fullName) {
+    final parts = fullName.trim().split(' ');
+    if (parts.length > 1) {
+      return parts.sublist(1).join(' ');
+    }
+    return '';
+  }
 
   /// Stream that emits true when the user's email is verified, checks every 2 seconds.
   Stream<bool> get emailVerifiedStream async* {
