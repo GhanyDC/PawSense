@@ -874,7 +874,7 @@ class _AssessmentStepThreeState extends State<AssessmentStepThree> {
             userId: user.uid,
             petName: petName,
             petType: petType,
-            age: petAge,
+            initialAge: petAge,
             weight: petWeight,
             breed: petBreed,
             createdAt: DateTime.now(),
