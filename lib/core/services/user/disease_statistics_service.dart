@@ -28,12 +28,14 @@ class DiseaseStatisticsService {
   }
 
   /// Get most common diseases in user's area, separated by species
-  Future<AreaDiseaseStatistics?> getMostCommonDiseaseInArea(String userAddress) async {
+  /// Excludes the current user's own assessments from the statistics
+  Future<AreaDiseaseStatistics?> getMostCommonDiseaseInArea(String userAddress, String currentUserId) async {
     try {
       print('\n========================================');
       print('🔍 AREA STATISTICS DEBUG START');
       print('========================================');
       print('📍 Current user address: $userAddress');
+      print('👤 Current user ID: $currentUserId (will be excluded)');
       
       final barangay = _extractBarangay(userAddress);
       final city = _extractCity(userAddress);
@@ -55,15 +57,24 @@ class DiseaseStatisticsService {
 
       print('📊 Total users in database: ${usersSnapshot.docs.length}');
 
-      // Filter users by barangay and city
+      // Filter users by barangay and city (excluding current user)
       final userIdsInArea = <String>[];
       print('\n🔎 Step 2: Filtering users by location (STRICT MATCHING)...');
       print('   🎯 Target Barangay: "$barangay" (lowercase: "${barangay.toLowerCase()}")');
       print('   🎯 Target City: "$city" (lowercase: "${city.toLowerCase()}")');
+      print('   🚫 Excluding current user: $currentUserId');
       
       for (var doc in usersSnapshot.docs) {
         final data = doc.data();
         final uid = doc.id;
+        
+        // Skip the current user
+        if (uid == currentUserId) {
+          print('\n   👤 User UID: $uid');
+          print('      🚫 SKIPPED - This is the current user');
+          continue;
+        }
+        
         final address = data['address'] as String?;
         
         if (address != null && address.isNotEmpty) {

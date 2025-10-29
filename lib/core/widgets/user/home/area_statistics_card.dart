@@ -49,7 +49,7 @@ class AreaStatisticsCardState extends State<AreaStatisticsCard> {
         return;
       }
 
-      final statistics = await _statisticsService.getMostCommonDiseaseInArea(user.address!);
+      final statistics = await _statisticsService.getMostCommonDiseaseInArea(user.address!, user.uid);
 
       if (mounted) {
         setState(() {
