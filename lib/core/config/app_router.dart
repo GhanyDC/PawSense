@@ -52,6 +52,7 @@ import 'package:pawsense/pages/web/superadmin/diseases_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/specializations_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/model_training_management_screen.dart';
 import 'package:pawsense/pages/web/superadmin/system_settings_screen.dart';
+import 'package:pawsense/pages/web/superadmin/disease_area_statistics_screen.dart';
 import 'package:flutter/foundation.dart';
 import '../widgets/shared/navigation/admin_shell.dart';
 import '../guards/auth_guard.dart';
@@ -436,6 +437,13 @@ class AppRouter {
             builder: (context, state) => const SystemSettingsScreen(),
             pageBuilder: (context, state) => NoTransitionPage(
               child: const SystemSettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/super-admin/disease-statistics',
+            builder: (context, state) => const DiseaseAreaStatisticsScreen(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: const DiseaseAreaStatisticsScreen(),
             ),
           ),
         ],
