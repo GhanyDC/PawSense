@@ -7,6 +7,7 @@ import '../../../core/services/super_admin/disease_area_statistics_service.dart'
 import '../../../core/utils/app_colors.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/widgets/shared/page_header.dart';
+import '../../../core/widgets/shared/pagination_widget.dart';
 
 class DiseaseAreaStatisticsScreen extends StatefulWidget {
   const DiseaseAreaStatisticsScreen({super.key});
@@ -37,7 +38,7 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
 
   // Pagination
   int currentPage = 1;
-  final int itemsPerPage = 20;
+  final int itemsPerPage = 10;
   int get totalPages => (filteredStatistics.length / itemsPerPage).ceil();
 
   @override
@@ -214,7 +215,7 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text(
-                        'Disease Statistics by Area',
+                        'Area Statistics Report',
                         style: pw.TextStyle(
                           fontSize: 20,
                           fontWeight: pw.FontWeight.bold,
@@ -273,12 +274,12 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
                       pw.TableRow(
                         decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                         children: [
-                          _buildTableHeader('Disease Name'),
-                          _buildTableHeader('Cases'),
-                          _buildTableHeader('Barangay'),
-                          _buildTableHeader('Municipality'),
-                          _buildTableHeader('Province'),
-                          _buildTableHeader('Region'),
+                          _buildPdfTableHeader('Disease Name'),
+                          _buildPdfTableHeader('Cases'),
+                          _buildPdfTableHeader('Barangay'),
+                          _buildPdfTableHeader('Municipality'),
+                          _buildPdfTableHeader('Province'),
+                          _buildPdfTableHeader('Region'),
                         ],
                       ),
                       // Data rows
@@ -337,7 +338,7 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
     }
   }
 
-  pw.Widget _buildTableHeader(String text) {
+  pw.Widget _buildPdfTableHeader(String text) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(4),
       child: pw.Text(
@@ -379,7 +380,7 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
             padding: const EdgeInsets.fromLTRB(
                 kSpacingLarge, kSpacingLarge, kSpacingLarge, 0),
             child: const PageHeader(
-              title: 'Disease Statistics by Area',
+              title: 'Area Statistics',
               subtitle: 'Comprehensive disease data analysis by geographic location',
             ),
           ),
@@ -405,8 +406,16 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
                   const SizedBox(height: kSpacingMedium),
 
                   // Pagination
-                  if (filteredStatistics.length > itemsPerPage)
-                    _buildPagination(),
+                  if (totalPages > 1)
+                    PaginationWidget(
+                      currentPage: currentPage,
+                      totalPages: totalPages,
+                      totalItems: filteredStatistics.length,
+                      onPageChanged: (page) {
+                        setState(() => currentPage = page);
+                      },
+                      isLoading: isLoading,
+                    ),
                 ],
               ),
             ),
@@ -843,130 +852,380 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
 
   Widget _buildDataTable() {
     if (isLoading) {
-      return Container(
-        padding: const EdgeInsets.all(48),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
-        ),
-        child: const Center(child: CircularProgressIndicator()),
-      );
+      return _buildLoadingState();
     }
 
     if (filteredStatistics.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(48),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
-        ),
-        child: Center(
+      return _buildEmptyState();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Table header
+          _buildTableHeader(),
+          
+          // Divider
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE5E7EB)),
+          
+          // Data rows
+          _buildDataRows(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTableHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: Row(
+        children: [
+          // Disease Name - Flex 2
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildHeaderText('DISEASE NAME'),
+            ),
+          ),
+
+          // Cases - Fixed 80px
+          const SizedBox(
+            width: 80,
+            child: Center(
+              child: Text(
+                'CASES',
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+
+          // Barangay - Flex 2
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildHeaderText('BARANGAY'),
+            ),
+          ),
+
+          // Municipality - Flex 2
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildHeaderText('MUNICIPALITY'),
+            ),
+          ),
+
+          // Province - Flex 2
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildHeaderText('PROVINCE'),
+            ),
+          ),
+
+          // Region - Flex 2
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildHeaderText('REGION'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderText(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF6B7280),
+        letterSpacing: 0.8,
+      ),
+    );
+  }
+
+  Widget _buildDataRows() {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: paginatedData.length,
+      itemBuilder: (context, index) {
+        final stat = paginatedData[index];
+        final isLast = index == paginatedData.length - 1;
+        
+        return Container(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isLast ? Colors.transparent : const Color(0xFFE5E7EB),
+                width: 1,
+              ),
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              // Optional: Add tap handler for viewing details
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+              child: Row(
+                children: [
+                  // Disease Name - EMPHASIZED/BOLD
+                  Expanded(
+                    flex: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        stat.diseaseName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold, // BOLD for emphasis
+                          color: Color(0xFF111827),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+
+                  // Cases - EMPHASIZED with badge and bold
+                  SizedBox(
+                    width: 80,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.15), // Slightly more visible
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppColors.primary.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          stat.casesCount.toString(),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold, // BOLD for emphasis
+                            color: AppColors.primary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+
+                  // Barangay - EMPHASIZED/BOLD
+                  Expanded(
+                    flex: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        stat.barangay,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600, // Semi-bold for emphasis
+                          color: Color(0xFF374151), // Slightly darker
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+
+                  // Municipality - EMPHASIZED/BOLD
+                  Expanded(
+                    flex: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        stat.municipality,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600, // Semi-bold for emphasis
+                          color: Color(0xFF374151), // Slightly darker
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+
+                  // Province
+                  Expanded(
+                    flex: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        stat.province,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF6B7280),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+
+                  // Region
+                  Expanded(
+                    flex: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        stat.region,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF6B7280),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(80.0),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.search_off,
-                size: 64,
-                color: AppColors.textSecondary.withValues(alpha: 0.5),
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
               ),
               const SizedBox(height: 16),
+              Text(
+                'Loading statistics...',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(80.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.bar_chart,
+                size: 80,
+                color: Colors.grey.shade300,
+              ),
+              const SizedBox(height: 24),
               Text(
                 'No data found',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
                 ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
                 'Try adjusting your filters',
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.textSecondary,
+                  color: Colors.grey.shade500,
                 ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
         ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(
-            AppColors.primary.withValues(alpha: 0.1),
-          ),
-          columns: const [
-            DataColumn(label: Text('Disease Name', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Cases', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Barangay', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Municipality', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Province', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Region', style: TextStyle(fontWeight: FontWeight.bold))),
-          ],
-          rows: paginatedData.map((stat) {
-            return DataRow(
-              cells: [
-                DataCell(Text(stat.diseaseName)),
-                DataCell(
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      stat.casesCount.toString(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
-                DataCell(Text(stat.barangay)),
-                DataCell(Text(stat.municipality)),
-                DataCell(Text(stat.province)),
-                DataCell(Text(stat.region)),
-              ],
-            );
-          }).toList(),
-        ),
       ),
     );
   }
 
-  Widget _buildPagination() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          onPressed: currentPage > 1
-              ? () => setState(() => currentPage--)
-              : null,
-          icon: const Icon(Icons.chevron_left),
-        ),
-        Text(
-          'Page $currentPage of $totalPages',
-          style: const TextStyle(fontSize: 14),
-        ),
-        IconButton(
-          onPressed: currentPage < totalPages
-              ? () => setState(() => currentPage++)
-              : null,
-          icon: const Icon(Icons.chevron_right),
-        ),
-      ],
-    );
-  }
 }
