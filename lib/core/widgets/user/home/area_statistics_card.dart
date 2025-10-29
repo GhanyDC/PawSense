@@ -8,12 +8,12 @@ class AreaStatisticsCard extends StatefulWidget {
   const AreaStatisticsCard({super.key});
 
   @override
-  State<AreaStatisticsCard> createState() => _AreaStatisticsCardState();
+  State<AreaStatisticsCard> createState() => AreaStatisticsCardState();
 }
 
-class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
+class AreaStatisticsCardState extends State<AreaStatisticsCard> {
   final DiseaseStatisticsService _statisticsService = DiseaseStatisticsService();
-  DiseaseStatistic? _statistic;
+  AreaDiseaseStatistics? _statistics;
   bool _loading = true;
   String? _error;
 
@@ -21,6 +21,11 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
   void initState() {
     super.initState();
     _loadStatistics();
+  }
+
+  /// Public method to refresh statistics (can be called from parent widget)
+  Future<void> refreshStatistics() async {
+    await _loadStatistics();
   }
 
   Future<void> _loadStatistics() async {
@@ -43,11 +48,11 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
         return;
       }
 
-      final statistic = await _statisticsService.getMostCommonDiseaseInArea(user.address!);
+      final statistics = await _statisticsService.getMostCommonDiseaseInArea(user.address!);
 
       if (mounted) {
         setState(() {
-          _statistic = statistic;
+          _statistics = statistics;
           _loading = false;
         });
       }
@@ -139,10 +144,11 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
             _buildLoadingState()
           else if (_error != null)
             _buildErrorState()
-          else if (_statistic == null)
+          else if (_statistics == null || 
+                   (_statistics!.dogStatistic == null && _statistics!.catStatistic == null))
             _buildNoDataState()
           else
-            _buildStatisticContent(),
+            _buildStatisticsContent(),
         ],
       ),
     );
@@ -228,26 +234,67 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
     );
   }
 
-  Widget _buildStatisticContent() {
-    final statistic = _statistic!;
+  Widget _buildStatisticsContent() {
+    final statistics = _statistics!;
+    final dogStat = statistics.dogStatistic;
+    final catStat = statistics.catStatistic;
     
     return Column(
       children: [
+        // Dog statistics
+        if (dogStat != null) ...[
+          _buildSpeciesStatistic(dogStat, '🐶', AppColors.primary),
+          if (catStat != null) const SizedBox(height: 16),
+        ],
+        
+        // Cat statistics
+        if (catStat != null) ...[
+          _buildSpeciesStatistic(catStat, '🐱', const Color(0xFF9C27B0)), // Purple for cats
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSpeciesStatistic(DiseaseStatistic statistic, String emoji, Color accentColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Species header
+        Row(
+          children: [
+            Text(
+              emoji,
+              style: const TextStyle(fontSize: 20),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${statistic.species}s',
+              style: kMobileTextStyleTitle.copyWith(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 12),
+        
         // Disease name and location
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppColors.primary.withOpacity(0.1),
-                AppColors.primary.withOpacity(0.05),
+                accentColor.withOpacity(0.1),
+                accentColor.withOpacity(0.05),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: AppColors.primary.withOpacity(0.2),
+              color: accentColor.withOpacity(0.2),
               width: 1,
             ),
           ),
@@ -258,7 +305,7 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
                 children: [
                   Icon(
                     Icons.medical_services,
-                    color: AppColors.primary,
+                    color: accentColor,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -266,9 +313,9 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
                     child: Text(
                       _formatDiseaseName(statistic.diseaseName),
                       style: kMobileTextStyleTitle.copyWith(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: accentColor,
                       ),
                     ),
                   ),
@@ -298,7 +345,7 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
         // Statistics row
         Row(
@@ -308,7 +355,7 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
                 icon: Icons.medical_information,
                 label: 'Cases',
                 value: '${statistic.count}',
-                color: AppColors.primary,
+                color: accentColor,
               ),
             ),
             const SizedBox(width: 12),
@@ -356,7 +403,7 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Based on ${statistic.totalCases} pet assessments in your area',
+                  'Based on ${statistic.totalCases} ${statistic.species.toLowerCase()} assessments',
                   style: kMobileTextStyleSubtitle.copyWith(
                     fontSize: 11,
                     color: AppColors.textSecondary,

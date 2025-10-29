@@ -43,6 +43,7 @@ class _UserHomePageState extends State<UserHomePage> {
   int _currentTabIndex = 0;
   int _currentHistorySubtabIndex = 0; // For history subtabs: 0=Assessment History, 1=Appointment History
   final GlobalKey<PetInfoCardState> _petCardKey = GlobalKey<PetInfoCardState>();
+  final GlobalKey<AreaStatisticsCardState> _areaStatsKey = GlobalKey<AreaStatisticsCardState>();
   bool _hasInitiallyLoaded = false; // Track if initial load is complete
   bool _isInternalTabSwitch = false; // Track if this is just a tab switch
   final ScrollController _historyScrollController = ScrollController(); // Scroll controller for history tab
@@ -876,6 +877,8 @@ class _UserHomePageState extends State<UserHomePage> {
           setState(() {
             _userModel = updatedUser;
           });
+          // Refresh area statistics when user data updates
+          _areaStatsKey.currentState?.refreshStatistics();
         },
       ),
       body: _loading 
@@ -989,10 +992,14 @@ class _UserHomePageState extends State<UserHomePage> {
                               setState(() {
                                 _userModel = updatedUser;
                               });
+                              // Refresh area statistics if address changed
+                              _areaStatsKey.currentState?.refreshStatistics();
                             }
                           } else {
                             // Fallback: refresh user data from server
                             _fetchUser();
+                            // Also refresh area statistics
+                            _areaStatsKey.currentState?.refreshStatistics();
                           }
                         },
                       ),
@@ -1007,7 +1014,7 @@ class _UserHomePageState extends State<UserHomePage> {
                       const SizedBox(height: kMobileSizedBoxHuge),
 
                       // Area Statistics Card
-                      const AreaStatisticsCard(),
+                      AreaStatisticsCard(key: _areaStatsKey),
 
                       // Add space between statistics and health snapshot
                       const SizedBox(height: kMobileSizedBoxHuge),
