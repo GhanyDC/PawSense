@@ -66,6 +66,7 @@ class _AreaStatisticsCardState extends State<AreaStatisticsCard> {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
+      margin: kMobileMarginCard,
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         color: AppColors.white,
