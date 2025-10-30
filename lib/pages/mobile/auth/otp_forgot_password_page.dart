@@ -428,28 +428,32 @@ class _OTPForgotPasswordPageState extends State<OTPForgotPasswordPage>
               textAlign: TextAlign.center,
             ),
             SizedBox(height: kMobileSizedBoxHuge),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context); // close dialog
-                context.pushReplacement('/signin'); // go to sign in
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: kMobilePaddingSmall),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                'Go to Sign In',
-                style: kMobileTextStyleSubtitle.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+            SizedBox(
+  width: double.infinity, // makes it fill the available width
+  child: ElevatedButton(
+    onPressed: () {
+      Navigator.pop(context); // close dialog
+      context.pushReplacement('/signin'); // go to sign in
+    },
+    style: ElevatedButton.styleFrom(
+      backgroundColor: AppColors.primary,
+      foregroundColor: Colors.white,
+      padding: EdgeInsets.symmetric(vertical: kMobilePaddingSmall),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+      ),
+      elevation: 0,
+    ),
+    child: Text(
+      'Go to Sign In',
+      style: kMobileTextStyleSubtitle.copyWith(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  ),
+),
+
           ],
         ),
       ),
