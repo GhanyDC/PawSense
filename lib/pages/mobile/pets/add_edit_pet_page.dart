@@ -65,7 +65,7 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
     if (_isEditing) {
       final pet = widget.pet!;
       _petNameController.text = pet.petName;
-      _ageController.text = pet.initialAge.toString(); // Use initialAge for editing
+      _ageController.text = pet.age.toString(); // Use calculated age for editing (synced with display)
       _weightController.text = pet.weight.toString();
       _selectedPetType = pet.petType;
       _selectedBreed = pet.breed;
@@ -191,16 +191,41 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
 
     try {
       final now = DateTime.now();
+      
+      // Calculate initialAge based on the entered age and creation date
+      int calculatedInitialAge;
+      DateTime petCreatedAt;
+      
+      if (_isEditing) {
+        // When editing, calculate initialAge by subtracting months since creation
+        final enteredAge = int.parse(_ageController.text);
+        final monthsSinceCreation = (now.year - widget.pet!.createdAt.year) * 12 + 
+                                   (now.month - widget.pet!.createdAt.month);
+        calculatedInitialAge = enteredAge - monthsSinceCreation;
+        
+        // Ensure initialAge is never negative
+        if (calculatedInitialAge < 0) {
+          calculatedInitialAge = enteredAge;
+          petCreatedAt = now; // Reset creation date if age is too low
+        } else {
+          petCreatedAt = widget.pet!.createdAt;
+        }
+      } else {
+        // When adding new pet, initialAge = entered age
+        calculatedInitialAge = int.parse(_ageController.text);
+        petCreatedAt = now;
+      }
+      
       final pet = Pet(
         id: _isEditing ? widget.pet!.id : null,
         userId: _user!.uid,
         petName: _petNameController.text.trim(),
         petType: _selectedPetType,
-        initialAge: int.parse(_ageController.text),
+        initialAge: calculatedInitialAge,
         weight: double.parse(_weightController.text),
         breed: _selectedBreed,
         imageUrl: _petImageUrl,
-        createdAt: _isEditing ? widget.pet!.createdAt : now,
+        createdAt: petCreatedAt,
         updatedAt: now,
       );
 

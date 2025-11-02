@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pawsense/core/services/shared/server_time_service.dart';
 
 class Pet {
   final String? id;
@@ -26,10 +27,16 @@ class Pet {
   });
 
   // Dynamic age calculation - adds 1 month for each month that has passed since creation
+  // Uses server-synced time when available to avoid device clock issues
   int get age {
-    final now = DateTime.now();
+    // Try to use server-synced time, fallback to device time
+    final now = ServerTimeService.getCachedServerTime() ?? DateTime.now();
     final monthsSinceCreation = (now.year - createdAt.year) * 12 + (now.month - createdAt.month);
-    return initialAge + monthsSinceCreation;
+    
+    // Safety check: age should never go below initialAge
+    // This handles cases where device time is moved backwards
+    final calculatedAge = initialAge + monthsSinceCreation;
+    return calculatedAge < initialAge ? initialAge : calculatedAge;
   }
 
   // Convert Pet to Map for Firestore

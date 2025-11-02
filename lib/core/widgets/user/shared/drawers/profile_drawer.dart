@@ -7,6 +7,7 @@ import 'package:pawsense/core/models/user/user_model.dart';
 import 'package:pawsense/core/widgets/shared/profile_avatar.dart';
 import 'package:pawsense/core/utils/user_utils.dart';
 import 'package:pawsense/core/services/auth/auth_service_mobile.dart';
+import 'package:pawsense/core/services/auth/auth_time_enhancement.dart';
 import 'package:pawsense/core/services/cloudinary/cloudinary_service.dart';
 import 'package:pawsense/core/services/user/user_services.dart';
 
@@ -251,6 +252,9 @@ class _ProfileDrawerState extends State<ProfileDrawer> {
                         Navigator.pop(context);
                         // Handle sign out
                         try {
+                          // Stop auth token monitoring
+                          AuthTimeEnhancement.stopAuthMonitoring();
+                          
                           final authService = AuthService();
                           await authService.signOut();
                           if (context.mounted) {

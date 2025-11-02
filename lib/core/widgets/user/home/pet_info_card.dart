@@ -122,10 +122,38 @@ class PetInfoCardState extends State<PetInfoCard> {
         });
       }
     } catch (e) {
-      print('Error loading pets: $e');
+      print('⚠️ Error loading pets: $e');
+      
+      // Check if it's a network error
+      final errorString = e.toString().toLowerCase();
+      final isNetworkError = errorString.contains('network') || 
+                            errorString.contains('unable to resolve') ||
+                            errorString.contains('no address associated') ||
+                            errorString.contains('connection') ||
+                            errorString.contains('firestore');
+      
+      if (isNetworkError && _currentUserId != null) {
+        print('📡 Network error detected - keeping existing pets or using empty state');
+        
+        // If we already have pets loaded (from previous cache), keep showing them
+        if (_pets.isNotEmpty) {
+          print('✅ Keeping ${_pets.length} existing pets (offline mode)');
+          if (mounted) {
+            setState(() {
+              _loading = false;
+              _error = null; // Don't show error if we have existing data
+            });
+          }
+          return;
+        }
+      }
+      
+      // No existing data available
       if (mounted) {
         setState(() {
-          _error = 'Failed to load pets';
+          _error = isNetworkError 
+            ? 'No connection. Please check your internet.' 
+            : 'Failed to load pets';
           _loading = false;
         });
       }

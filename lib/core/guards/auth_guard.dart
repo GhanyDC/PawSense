@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user/user_model.dart';
 import '../models/clinic/clinic_model.dart';
 import '../services/auth/token_manager.dart';
+import '../services/auth/auth_time_enhancement.dart';
 import '../services/admin/schedule_setup_guard.dart';
 
 /// Authentication and authorization guard for route protection
@@ -93,18 +94,26 @@ class AuthGuard {
     try {
       print('AuthGuard: Fetching user data for UID: ${user.uid}');
       
-      // Verify token is still valid (use cached token)
-      final token = await _tokenManager.getToken();
-      if (token == null) {
-        print('AuthGuard: No valid token found');
-        return null;
+      // Try to verify token (but don't block if it fails in offline mode)
+      try {
+        final token = await _tokenManager.getToken();
+        if (token == null) {
+          print('⚠️ AuthGuard: No valid token found - may be offline');
+          // Continue anyway - Firestore offline persistence may still work
+        }
+      } catch (tokenError) {
+        print('⚠️ AuthGuard: Token fetch error: $tokenError - continuing with Firestore cache');
+        // Continue anyway - we'll rely on Firestore offline cache
       }
       
-      // Fetch user data from Firestore
+      // Fetch user data from Firestore (will use offline cache if available)
+      print('📡 AuthGuard: Attempting Firestore fetch (may use cache)...');
       final doc = await _firestore.collection('users').doc(user.uid).get();
+      
       if (doc.exists) {
         final userData = UserModel.fromMap(doc.data()!);
-        print('AuthGuard: User data loaded successfully for role: ${userData.role}');
+        final source = doc.metadata.isFromCache ? 'cache' : 'server';
+        print('✅ AuthGuard: User data loaded from $source for role: ${userData.role}');
         
         // For admin users, check Firestore approval status on session restoration
         // Skip approval validation for super admin users
@@ -114,11 +123,15 @@ class AuthGuard {
         }
         
         _cachedUser = userData;
-        // Cache user data for 5 minutes
-        _userCacheExpiresAt = DateTime.now().add(const Duration(minutes: 5));
+        // Cache user data for longer in offline mode
+        final cacheDuration = source == 'cache' 
+          ? const Duration(hours: 1)  // Offline mode
+          : const Duration(minutes: 5); // Normal mode
+        _userCacheExpiresAt = DateTime.now().add(cacheDuration);
+        print('📦 AuthGuard: Cached user data (expires in ${cacheDuration.inMinutes} min)');
         return _cachedUser;
       } else {
-        print('AuthGuard: User document not found in Firestore');
+        print('❌ AuthGuard: User document not found in Firestore (doc.exists = false)');
         return null;
       }
     } catch (e) {
@@ -129,9 +142,33 @@ class AuthGuard {
         print('AuthGuard: Account-related error, signing out user');
         await _auth.signOut();
         _clearCache();
-      } else {
-        print('AuthGuard: Network or temporary error, not signing out user');
+        return null;
       }
+      
+      // Check if it's a network error
+      final errorString = e.toString().toLowerCase();
+      final isNetworkError = errorString.contains('network') || 
+                            errorString.contains('unable to resolve') ||
+                            errorString.contains('no address associated') ||
+                            errorString.contains('connection') ||
+                            errorString.contains('firestore');
+      
+      if (isNetworkError) {
+        print('📡 AuthGuard: Network error detected');
+        
+        // Return cached user data if available (even if expired)
+        if (_cachedUser != null && _cachedUser!.uid == user.uid) {
+          print('✅ AuthGuard: Using stale cached user data (offline mode)');
+          // Extend cache expiration since we're in offline mode
+          _userCacheExpiresAt = DateTime.now().add(const Duration(hours: 1));
+          return _cachedUser;
+        }
+        
+        print('⚠️ AuthGuard: No cached user data available for offline mode');
+      } else {
+        print('AuthGuard: Non-network error, not using cache');
+      }
+      
       return null;
     }
   }
@@ -490,6 +527,9 @@ class AuthGuard {
   /// Sign out user and clear session
   static Future<void> signOut() async {
     try {
+      // Stop auth token monitoring
+      AuthTimeEnhancement.stopAuthMonitoring();
+      
       _clearCache(); // Clear cached data on sign out
       await _auth.signOut();
     } catch (e) {

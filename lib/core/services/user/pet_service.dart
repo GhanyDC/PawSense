@@ -8,7 +8,12 @@ class PetService {
   /// Add a new pet to Firestore
   static Future<String?> addPet(Pet pet) async {
     try {
-      final docRef = await _firestore.collection(_collection).add(pet.toMap());
+      // Convert pet to map and use server timestamps
+      final petData = pet.toMap();
+      petData['createdAt'] = FieldValue.serverTimestamp();
+      petData['updatedAt'] = FieldValue.serverTimestamp();
+      
+      final docRef = await _firestore.collection(_collection).add(petData);
       return docRef.id;
     } catch (e) {
       print('Error adding pet: $e');
@@ -58,11 +63,14 @@ class PetService {
     try {
       if (pet.id == null) return false;
       
-      final updatedPet = pet.copyWith(updatedAt: DateTime.now());
+      // Convert pet to map and use server timestamp for updatedAt
+      final petData = pet.toMap();
+      petData['updatedAt'] = FieldValue.serverTimestamp();
+      
       await _firestore
           .collection(_collection)
           .doc(pet.id)
-          .update(updatedPet.toMap());
+          .update(petData);
       
       return true;
     } catch (e) {

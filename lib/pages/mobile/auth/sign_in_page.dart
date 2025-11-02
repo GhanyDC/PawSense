@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import '../../../core/services/auth/auth_service_mobile.dart';
 import '../../../core/services/auth/auth_recovery_service.dart';
+import '../../../core/services/auth/auth_time_enhancement.dart';
 import '../../../core/services/messaging/mobile_messaging_preferences_service.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/validators.dart';
@@ -137,9 +138,20 @@ class _SignInPageState extends State<SignInPage>
     setState(() => _isGoogleLoading = true);
 
     try {
-      final user = await _authService.signInWithGoogle();
+      // Wrap Google sign-in with time validation
+      final user = await AuthTimeEnhancement.wrapSignInAttempt(
+        () => _authService.signInWithGoogle(),
+        operation: 'Google Sign-In',
+      );
 
       if (user != null && mounted) {
+        // Initialize auth token monitoring
+        try {
+          await AuthTimeEnhancement.initializeAuthMonitoring(FirebaseAuth.instance);
+        } catch (e) {
+          debugPrint('Error initializing auth monitoring: $e');
+        }
+        
         // Initialize mobile messaging preferences for the signed-in user
         try {
           await MobileMessagingPreferencesService.instance.initializeForUser(user.uid);
@@ -362,9 +374,13 @@ class _SignInPageState extends State<SignInPage>
     setState(() => _isLoading = true);
 
     try {
-      final user = await _authService.signInWithEmail(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      // Wrap sign-in with time validation and enhanced error handling
+      final user = await AuthTimeEnhancement.wrapSignInAttempt(
+        () => _authService.signInWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        ),
+        operation: 'Email Sign-In',
       );
 
       if (user == null) {
@@ -436,6 +452,14 @@ class _SignInPageState extends State<SignInPage>
           ),
         );
       } else if (mounted) {
+        // Initialize auth token monitoring to prevent expiration issues
+        try {
+          await AuthTimeEnhancement.initializeAuthMonitoring(FirebaseAuth.instance);
+        } catch (e) {
+          debugPrint('Error initializing auth monitoring: $e');
+          // Don't block sign-in for monitoring initialization error
+        }
+        
         // Initialize mobile messaging preferences for the signed-in user
         try {
           await MobileMessagingPreferencesService.instance.initializeForUser(user.uid);

@@ -30,9 +30,29 @@ class TokenManager {
       _cachedToken = await user.getIdToken(forceRefresh);
       // Firebase tokens expire in 1 hour, cache for 55 minutes to be safe
       _tokenExpiresAt = now.add(const Duration(minutes: 55));
+      print('✅ TokenManager: Token refreshed successfully');
       return _cachedToken;
     } catch (e) {
-      // Clear cache on error
+      print('⚠️ TokenManager: Failed to get token: $e');
+      
+      // Check if it's a network error
+      final errorString = e.toString().toLowerCase();
+      final isNetworkError = errorString.contains('network') || 
+                            errorString.contains('unable to resolve') ||
+                            errorString.contains('no address associated') ||
+                            errorString.contains('connection') ||
+                            errorString.contains('host unreachable') ||
+                            errorString.contains('no route to host');
+      
+      if (isNetworkError && _cachedToken != null) {
+        print('📡 TokenManager: Network error - using cached token (offline mode)');
+        // Extend cache expiration since we're in offline mode
+        _tokenExpiresAt = now.add(const Duration(hours: 1));
+        return _cachedToken;
+      }
+      
+      // Clear cache on non-network errors
+      print('❌ TokenManager: Clearing cache due to non-network error');
       _clearCache();
       return null;
     }
