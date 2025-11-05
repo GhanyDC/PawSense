@@ -74,7 +74,8 @@ class AuthService {
       debugPrint('User data saved during signup: ${cred.user!.uid}');
     }
     
-    await cred.user?.sendEmailVerification();
+    // NOTE: Email verification is handled via OTP, not Firebase's default email link
+    // await cred.user?.sendEmailVerification(); // REMOVED - Using OTP instead
     return cred.user?.uid;
   }
 
@@ -85,9 +86,8 @@ class AuthService {
     return user?.emailVerified ?? false;
   }
 
-  /// Resends the email verification to the current user.
-  Future<void> resendVerificationEmail() async =>
-      await _auth.currentUser?.sendEmailVerification();
+  /// REMOVED: resendVerificationEmail() - Not needed since we use OTP verification
+  /// REMOVED: resendVerificationEmailWithCredentials() - Not needed since we use OTP verification
 
   /// Updates the display name of the current Firebase user
   /// This is used for showing the sender name in emails
@@ -220,17 +220,18 @@ class AuthService {
     return '';
   }
 
+  /// REMOVED: emailVerifiedStream - Not needed since we use OTP verification instead of email link
   /// Stream that emits true when the user's email is verified, checks every 2 seconds.
-  Stream<bool> get emailVerifiedStream async* {
-    while (true) {
-      await Future.delayed(const Duration(seconds: 2));
-      if (await isEmailVerified()) {
-        yield true;
-        break;
-      }
-      yield false;
-    }
-  }
+  // Stream<bool> get emailVerifiedStream async* {
+  //   while (true) {
+  //     await Future.delayed(const Duration(seconds: 2));
+  //     if (await isEmailVerified()) {
+  //       yield true;
+  //       break;
+  //     }
+  //     yield false;
+  //   }
+  // }
 
   /// Returns the currently signed-in Firebase user, or null if not signed in.
   User? get currentUser => _auth.currentUser;
@@ -249,17 +250,42 @@ class AuthService {
     
     // Check if user account is active
     if (cred.user != null) {
-      // Check email verification status
-      if (!cred.user!.emailVerified) {
+      debugPrint('📧 Checking email verification for ${cred.user!.email}');
+      
+      // Get user data from Firestore to check email verification
+      // This supports both Firebase Auth verification and OTP verification
+      final userData = await getUserData(cred.user!.uid);
+      
+      if (userData == null) {
+        debugPrint('❌ User data not found in Firestore');
         await _auth.signOut();
         throw FirebaseAuthException(
-          code: 'email-not-verified',
-          message: 'Please verify your email address before signing in. Check your inbox for a verification email.',
+          code: 'user-not-found',
+          message: 'User account data not found. Please contact support.',
         );
       }
       
-      final userData = await getUserData(cred.user!.uid);
-      if (userData != null && userData.isActive == false) {
+      // Check email verification ONLY from Firestore (OTP-based verification)
+      // Firebase Auth's emailVerified flag is NOT used since we use OTP instead
+      final isEmailVerified = userData.emailVerified == true;
+      
+      debugPrint('📧 Firestore emailVerified: ${userData.emailVerified}');
+      debugPrint('📧 Email verification status: $isEmailVerified');
+      
+      if (!isEmailVerified) {
+        debugPrint('❌ Email not verified. User must verify email before signing in.');
+        await _auth.signOut();
+        
+        throw FirebaseAuthException(
+          code: 'email-not-verified',
+          message: 'Please verify your email address before signing in. Check your inbox for the verification code.',
+        );
+      }
+      
+      debugPrint('✅ Email verification check passed');
+      
+      // Check if user account is active
+      if (userData.isActive == false) {
         // Sign out the user since their account is inactive
         await _auth.signOut();
         throw FirebaseAuthException(
@@ -269,7 +295,7 @@ class AuthService {
       }
       
       // Update display name for existing users (migration fix)
-      if (userData != null && userData.firstName != null && userData.lastName != null) {
+      if (userData.firstName != null && userData.lastName != null) {
         final currentDisplayName = cred.user!.displayName;
         final expectedDisplayName = '${userData.firstName!.trim()} ${userData.lastName!.trim()}';
         

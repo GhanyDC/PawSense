@@ -32,6 +32,8 @@ class AuthErrorMapper {
       return (field: null, message: null, generalMessage: 'Your clinic registration has been rejected. Please contact support for more information.');
     } else if (error.contains('account-not-verified')) {
       return (field: null, message: null, generalMessage: 'Your account is not yet verified. Please wait for admin approval.');
+    } else if (error.contains('email-not-verified')) {
+      return (field: null, message: null, generalMessage: 'Email not verified. Please complete the email verification process first.');
     }
     // Firebase authentication errors
     else if (error.contains('user-not-found')) {

@@ -417,41 +417,10 @@ class _SignInPageState extends State<SignInPage>
             ),
           ),
         );
-      } else if (!user.emailVerified) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.error,
-            duration: const Duration(days: 365), // Effectively no auto-close
-            behavior: SnackBarBehavior.floating,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), 
-            content: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Please verify your email before signing in.',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      height: 1.2,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 18), 
-                  padding: EdgeInsets.zero,   
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      } else if (mounted) {
+      } 
+      // REMOVED: Firebase emailVerified check - Using OTP verification in Firestore instead
+      // else if (!user.emailVerified) { ... }
+      else if (mounted) {
         // Initialize auth token monitoring to prevent expiration issues
         try {
           await AuthTimeEnhancement.initializeAuthMonitoring(FirebaseAuth.instance);

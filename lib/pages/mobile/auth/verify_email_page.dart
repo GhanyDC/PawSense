@@ -1,14 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart'; // REMOVED: Not used in deprecated page
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/services/auth/auth_service_mobile.dart';
-import '../../../core/models/user/user_model.dart';
+// import '../../../core/services/auth/auth_service_mobile.dart'; // REMOVED: Not used in deprecated page
+// import '../../../core/models/user/user_model.dart'; // REMOVED: Not used in deprecated page
 import '../../../core/utils/constants_mobile.dart';
-import '../../../core/utils/errors.dart';
 import '../../../core/utils/app_colors.dart';
-import '../../../core/utils/text_utils.dart';
+// import '../../../core/utils/text_utils.dart'; // REMOVED: Not used in deprecated page
 
 /// Verify Email Page
 ///
@@ -41,10 +40,12 @@ class VerifyEmailPage extends StatefulWidget {
 /// State for VerifyEmailPage. Handles email verification logic and user saving.
 class _VerifyEmailPageState extends State<VerifyEmailPage> 
     with TickerProviderStateMixin {
-  final _authService = AuthService();
+  // REMOVED: emailVerifiedStream, _checkEmailVerified, _handleVerified - Not used in deprecated page
+  
+  // final _authService = AuthService(); // REMOVED: Not used in deprecated page
 
-  bool _saved = false;
-  bool _navigated = false;
+  // bool _saved = false; // REMOVED: Not used in deprecated page
+  // bool _navigated = false; // Unused in deprecated page
   int _seconds = 60;
   Timer? _timer;
   late StreamSubscription<bool> _emailVerifiedSub;
@@ -84,11 +85,13 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
     
     _startTimer();
 
-    _emailVerifiedSub = _authService.emailVerifiedStream.listen((verified) {
-      if (verified) {
-        _handleVerified();
-      }
-    });
+    // NOTE: This page is deprecated - Use OTPVerifyEmailPage instead
+    // Email link verification is no longer used
+    // _emailVerifiedSub = _authService.emailVerifiedStream.listen((verified) {
+    //   if (verified) {
+    //     _handleVerified();
+    //   }
+    // });
   }
 
   void _startTimer() {
@@ -103,10 +106,8 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
     });
   }
 
-  void _stopTimer() {
-    _timer?.cancel();
-  }
-
+  // REMOVED: _stopTimer - Not used in deprecated page
+  
   @override
   void dispose() {
     _timer?.cancel();
@@ -117,88 +118,26 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
   }
 
   Future<void> _resendEmail() async {
-    try {
-      await _authService.resendVerificationEmail();
-      _startTimer();
-      _showSuccessSnack('Verification email resent successfully!');
-    } on Exception catch (e) {
-      final mapped = AuthErrorMapper.mapSignInError(e.toString());
-      _showErrorSnack(mapped.generalMessage ?? 'Failed to resend email. Please try again.');
-    } catch (e) {
-      _showErrorSnack('Failed to resend email. Please try again.');
-    }
+    // NOTE: This page is deprecated - Use OTPVerifyEmailPage instead
+    // Email link verification is no longer supported
+    _showErrorSnack('This verification method is no longer supported. Please use the OTP verification.');
+    // try {
+    //   await _authService.resendVerificationEmail();
+    //   _startTimer();
+    //   _showSuccessSnack('Verification email resent successfully!');
+    // } on Exception catch (e) {
+    //   final mapped = AuthErrorMapper.mapSignInError(e.toString());
+    //   _showErrorSnack(mapped.generalMessage ?? 'Failed to resend email. Please try again.');
+    // } catch (e) {
+    //   _showErrorSnack('Failed to resend email. Please try again.');
+    // }
   }
 
-  Future<void> _saveUser() async {
-    final user = _authService.currentUser;
-    if (!_saved && user != null) {
-      // Check if user data already exists (from updated signup flow)
-      final existingUserData = await _authService.getUserData(user.uid);
-      
-      if (existingUserData != null) {
-        // User data already exists, just mark as saved
-        debugPrint('✅ User data already exists in Firestore: ${user.uid}');
-        _saved = true;
-        return;
-      }
-      
-      // Create a username with proper capitalization using utility
-      final capitalizedFirstName = TextUtils.capitalizeWords(widget.firstName);
-      final capitalizedLastName = TextUtils.capitalizeWords(widget.lastName);
-      final username = TextUtils.formatFullName(widget.firstName, widget.lastName);
-      
-      // Save user data (fallback for older flow)
-      await _authService.saveUser(
-        UserModel(
-          uid: widget.uid,
-          username: username,
-          email: widget.email,
-          contactNumber: widget.contactNumber,
-          agreedToTerms: widget.agreedToTerms,
-          createdAt: DateTime.now(),
-          address: widget.address,
-          firstName: capitalizedFirstName,
-          lastName: capitalizedLastName,
-          role: 'user',
-        ),
-      );
-      _saved = true;
-      debugPrint('✅ User data saved as fallback: ${user.uid}');
-    }
-  }
-
-  void _showSuccessSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              Icons.check_circle,
-              color: Colors.white,
-              size: 18,
-            ),
-            SizedBox(width: kMobileSizedBoxLarge),
-            Expanded(
-              child: Text(
-                message,
-                style: kMobileTextStyleSubtitle.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
-        ),
-        margin: EdgeInsets.all(kMobilePaddingMedium),
-      ),
-    );
-  }
-
+  // REMOVED: _saveUser - Not used in deprecated page
+  // This page is deprecated - Use OTPVerifyEmailPage instead
+  
+  // REMOVED: _showSuccessSnack - Not used in deprecated page
+  
   void _showErrorSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -231,15 +170,8 @@ class _VerifyEmailPageState extends State<VerifyEmailPage>
     );
   }
 
-  Future<void> _handleVerified() async {
-    if (!_navigated && mounted) {
-      _navigated = true;
-      _stopTimer();
-      await _saveUser();
-      context.pushReplacement('/home');
-    }
-  }
-
+  // REMOVED: _handleVerified - Not used in deprecated page
+  
   Widget _buildEmailCard() {
     return Container(
       padding: EdgeInsets.all(kMobilePaddingMedium),
