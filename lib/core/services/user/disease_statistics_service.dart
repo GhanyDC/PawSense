@@ -28,14 +28,14 @@ class DiseaseStatisticsService {
   }
 
   /// Get most common diseases in user's area, separated by species
-  /// Excludes the current user's own assessments from the statistics
+  /// Includes the current user's own assessments in the statistics
   Future<AreaDiseaseStatistics?> getMostCommonDiseaseInArea(String userAddress, String currentUserId) async {
     try {
       print('\n========================================');
       print('🔍 AREA STATISTICS DEBUG START');
       print('========================================');
       print('📍 Current user address: $userAddress');
-      print('👤 Current user ID: $currentUserId (will be excluded)');
+      print('👤 Current user ID: $currentUserId (will be included)');
       
       final barangay = _extractBarangay(userAddress);
       final city = _extractCity(userAddress);
@@ -57,23 +57,16 @@ class DiseaseStatisticsService {
 
       print('📊 Total users in database: ${usersSnapshot.docs.length}');
 
-      // Filter users by barangay and city (excluding current user)
+      // Filter users by barangay and city (INCLUDING current user)
       final userIdsInArea = <String>[];
       print('\n🔎 Step 2: Filtering users by location (STRICT MATCHING)...');
       print('   🎯 Target Barangay: "$barangay" (lowercase: "${barangay.toLowerCase()}")');
       print('   🎯 Target City: "$city" (lowercase: "${city.toLowerCase()}")');
-      print('   🚫 Excluding current user: $currentUserId');
+      print('   ✅ Including current user: $currentUserId');
       
       for (var doc in usersSnapshot.docs) {
         final data = doc.data();
         final uid = doc.id;
-        
-        // Skip the current user
-        if (uid == currentUserId) {
-          print('\n   👤 User UID: $uid');
-          print('      🚫 SKIPPED - This is the current user');
-          continue;
-        }
         
         final address = data['address'] as String?;
         
@@ -85,6 +78,10 @@ class DiseaseStatisticsService {
           print('      Full Address: "$address"');
           print('      Extracted Barangay: "$userBarangay"');
           print('      Extracted City: "$userCity"');
+          
+          if (uid == currentUserId) {
+            print('      👤 This is the current user - will be included');
+          }
           
           // STRICT match: both barangay and city must match exactly (case-insensitive)
           // Also trim whitespace to avoid false negatives
@@ -125,14 +122,15 @@ class DiseaseStatisticsService {
       if (userIdsInArea.isNotEmpty) {
         print('   📋 Matched User IDs:');
         for (var uid in userIdsInArea) {
-          print('      - $uid');
+          final marker = uid == currentUserId ? ' (CURRENT USER)' : '';
+          print('      - $uid$marker');
         }
       }
       print('========================================');
 
       if (userIdsInArea.isEmpty) {
         print('\n❌ RESULT: No users found in area: $barangay, $city');
-        print('   This means no other users share the exact same Barangay AND City.');
+        print('   This means no users share the exact same Barangay AND City.');
         print('========================================\n');
         return null;
       }
@@ -223,22 +221,22 @@ class DiseaseStatisticsService {
 
       final location = '$barangay, $city';
 
-      print('\n🔎 Step 4: Calculating top 5 diseases per species...');
+      print('\n🔎 Step 4: Calculating all diseases per species...');
       
-      // Calculate top 5 diseases for dogs
+      // Calculate all diseases for dogs (no limit)
       final dogStatistics = <DiseaseStatistic>[];
       if (dogDetections.isNotEmpty) {
         print('\n🐶 Processing dog statistics...');
-        dogStatistics.addAll(_calculateTopDiseases(dogDetections, 'Dog'));
+        dogStatistics.addAll(_calculateTopDiseases(dogDetections, 'Dog', limit: 999));
       } else {
         print('\n🐶 No dog detections found');
       }
 
-      // Calculate top 5 diseases for cats
+      // Calculate all diseases for cats (no limit)
       final catStatistics = <DiseaseStatistic>[];
       if (catDetections.isNotEmpty) {
         print('\n🐱 Processing cat statistics...');
-        catStatistics.addAll(_calculateTopDiseases(catDetections, 'Cat'));
+        catStatistics.addAll(_calculateTopDiseases(catDetections, 'Cat', limit: 999));
       } else {
         print('\n🐱 No cat detections found');
       }
@@ -292,7 +290,7 @@ class DiseaseStatisticsService {
       print('      - $disease: $count');
     });
 
-    // Sort diseases by count (descending) and take top 5
+    // Sort diseases by count (descending) and limit if specified
     final sortedDiseases = diseaseCount.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     
@@ -306,7 +304,7 @@ class DiseaseStatisticsService {
     final totalDetections = detections.length;
     final statistics = <DiseaseStatistic>[];
     
-    print('   ✅ Top ${topDiseases.length} diseases:');
+    print('   ✅ ${limit >= 999 ? 'All' : 'Top ${topDiseases.length}'} diseases:');
     for (var entry in topDiseases) {
       final percentage = (entry.value / totalDetections * 100);
       print('      ${statistics.length + 1}. ${entry.key}: ${entry.value} cases (${percentage.toStringAsFixed(1)}%)');

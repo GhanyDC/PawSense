@@ -174,23 +174,21 @@ class RecommendedClinicsWidget extends StatelessWidget {
     final address = clinic['address'] ?? '';
     final phone = clinic['phone'] ?? '';
     final logoUrl = clinic['logoUrl'];
-    final matchType = clinic['matchType'] ?? '';
-    final matchedDiseases = clinic['matchedDiseases'] as List<String>?;
     final totalCases = clinic['totalCases'] as int? ?? 0;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.15),
+          color: AppColors.primary.withOpacity(0.12),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: AppColors.primary.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
             spreadRadius: 0,
           ),
         ],
@@ -206,22 +204,22 @@ class RecommendedClinicsWidget extends StatelessWidget {
               context.push('/clinic/$clinicId');
             }
           },
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Circular Clinic logo/avatar with shadow
+                // Circular Clinic logo/avatar - more compact
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.white,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.15),
-                        blurRadius: 8,
+                        color: AppColors.primary.withOpacity(0.12),
+                        blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
                     ],
@@ -229,14 +227,14 @@ class RecommendedClinicsWidget extends StatelessWidget {
                   child: ClipOval(
                     child: logoUrl != null && logoUrl.isNotEmpty
                         ? Container(
-                            padding: const EdgeInsets.all(4),
+                            padding: const EdgeInsets.all(3),
                             color: AppColors.white,
                             child: ClipOval(
                               child: Image.network(
                                 logoUrl,
                                 fit: BoxFit.cover,
-                                width: 52,
-                                height: 52,
+                                width: 44,
+                                height: 44,
                                 errorBuilder: (context, error, stackTrace) {
                                   return _buildDefaultLogo();
                                 },
@@ -261,232 +259,124 @@ class RecommendedClinicsWidget extends StatelessWidget {
                         : _buildDefaultLogo(),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 
                 // Clinic info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Clinic name
-                      Text(
-                        TextUtils.capitalizeWords(clinicName),
-                        style: kMobileTextStyleSubtitle.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          height: 1.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      
-                      // Experience and match type badges
-                      if (showMatchType && matchType.isNotEmpty) ...[
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            // Experience level badge
+                      // Clinic name and badge in one row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              TextUtils.capitalizeWords(clinicName),
+                              style: kMobileTextStyleSubtitle.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                height: 1.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (totalCases > 0) ...[
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
+                                horizontal: 6,
+                                vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    _getMatchTypeColor(matchType),
-                                    _getMatchTypeColor(matchType).withOpacity(0.8),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _getMatchTypeColor(matchType).withOpacity(0.3),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                                color: AppColors.info.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    Icons.verified,
-                                    size: 11,
-                                    color: AppColors.white,
+                                    Icons.check_circle,
+                                    size: 10,
+                                    color: AppColors.info,
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 3),
                                   Text(
-                                    matchType,
+                                    '$totalCases treated',
                                     style: kMobileTextStyleLegend.copyWith(
-                                      color: AppColors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.info,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            
-                            // Treatment stats badge
-                            if (totalCases > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      
+                      // Address - compact
+                      if (address.isNotEmpty) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              size: 12,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                address,
+                                style: kMobileTextStyleLegend.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 11,
+                                  height: 1.3,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.info.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: AppColors.info.withOpacity(0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.assignment_turned_in,
-                                      size: 11,
-                                      color: AppColors.info,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '$totalCases ${totalCases == 1 ? 'case' : 'cases'}',
-                                      style: kMobileTextStyleLegend.copyWith(
-                                        color: AppColors.info,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 3),
                       ],
                       
-                      // Multiple conditions badge
-                      if (matchedDiseases != null && matchedDiseases.length > 1) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.done_all,
-                                size: 11,
-                                color: AppColors.success,
+                      // Phone - compact
+                      if (phone.isNotEmpty)
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.phone,
+                              size: 12,
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              phone,
+                              style: kMobileTextStyleLegend.copyWith(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Treats ${matchedDiseases.length} conditions',
-                                style: kMobileTextStyleLegend.copyWith(
-                                  color: AppColors.success,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 6),
-                      ],
-                      
-                      // Contact info with better styling
-                      if (address.isNotEmpty || phone.isNotEmpty) ...[
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Address
-                              if (address.isNotEmpty) ...[
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(
-                                      Icons.location_on,
-                                      size: 13,
-                                      color: AppColors.primary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        address,
-                                        style: kMobileTextStyleLegend.copyWith(
-                                          color: AppColors.textSecondary,
-                                          fontSize: 11,
-                                          height: 1.3,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                              
-                              // Phone
-                              if (phone.isNotEmpty) ...[
-                                if (address.isNotEmpty) const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.phone,
-                                      size: 13,
-                                      color: AppColors.success,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      phone,
-                                      style: kMobileTextStyleLegend.copyWith(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
                 
                 const SizedBox(width: 8),
                 
-                // Enhanced arrow icon
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: AppColors.primary,
-                  ),
+                // Compact arrow icon
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: AppColors.primary.withOpacity(0.6),
                 ),
               ],
             ),
@@ -514,35 +404,9 @@ class RecommendedClinicsWidget extends StatelessWidget {
         child: Icon(
           Icons.local_hospital,
           color: AppColors.primary,
-          size: 28,
+          size: 24,
         ),
       ),
     );
-  }
-
-  Color _getMatchTypeColor(String matchType) {
-    switch (matchType) {
-      case 'Highly Experienced':
-        return AppColors.success;
-      case 'Experienced':
-        return AppColors.primary;
-      case 'Has Experience':
-        return AppColors.info;
-      case 'Similar Cases':
-        return AppColors.warning;
-      case 'Related Cases':
-        return AppColors.textSecondary;
-      // Legacy support for old specialty-based types
-      case 'Exact Specialty Match':
-        return AppColors.success;
-      case 'Primary Specialty':
-        return AppColors.primary;
-      case 'Related Specialty':
-        return AppColors.info;
-      case 'General Practice':
-        return AppColors.warning;
-      default:
-        return AppColors.textTertiary;
-    }
   }
 }

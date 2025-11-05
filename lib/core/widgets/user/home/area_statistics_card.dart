@@ -4,6 +4,7 @@ import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/services/user/disease_statistics_service.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
+import 'package:pawsense/pages/mobile/disease_statistics_page.dart';
 
 class AreaStatisticsCard extends StatefulWidget {
   const AreaStatisticsCard({super.key});
@@ -294,7 +295,6 @@ class AreaStatisticsCardState extends State<AreaStatisticsCard> {
   Widget _buildSpeciesSection(List<DiseaseStatistic> statistics, String title, Color accentColor) {
     if (statistics.isEmpty) return const SizedBox.shrink();
     
-    final totalCases = statistics.first.totalCases;
     final topStats = statistics.take(5).toList();
     
     // Predefined colors for the chart segments
@@ -331,25 +331,66 @@ class AreaStatisticsCardState extends State<AreaStatisticsCard> {
                 ),
               ),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '$totalCases total',
-                  style: kMobileTextStyleSubtitle.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: accentColor,
+              GestureDetector(
+                onTap: () {
+                  // Navigate to detailed statistics page showing all diseases (both dogs and cats)
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const DiseaseStatisticsPage(petType: null),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'View All',
+                        style: kMobileTextStyleSubtitle.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: accentColor,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 10,
+                        color: accentColor,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          
+          // "TOP 5 CASES" label
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'TOP 5 CASES',
+              style: kMobileTextStyleSubtitle.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: accentColor,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 12),
           
           // Row with labels on left and chart on right
           Row(

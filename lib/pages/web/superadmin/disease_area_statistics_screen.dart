@@ -860,6 +860,7 @@ class _DiseaseAreaStatisticsScreenState extends State<DiseaseAreaStatisticsScree
                   style: kTextStyleRegular.copyWith(color: AppColors.textPrimary),
                 ),
               ),
+              
               SizedBox(width: kSpacingMedium),
 
               // Region Dropdown
