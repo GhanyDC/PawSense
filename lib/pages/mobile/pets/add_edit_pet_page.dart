@@ -12,6 +12,7 @@ import 'package:pawsense/core/utils/constants.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/utils/breed_options.dart';
 import 'package:pawsense/core/widgets/user/pets/pet_form_fields.dart';
+import 'package:pawsense/core/widgets/user/pets/pet_age_input_field.dart';
 
 class AddEditPetPage extends StatefulWidget {
   final Pet? pet; // null for add, existing pet for edit
@@ -531,61 +532,36 @@ class _AddEditPetPageState extends State<AddEditPetPage> {
                   ),
                 ),
               
-              // Age and Weight Row
-              Row(
-                children: [
-                  Expanded(
-                    child: PetFormTextField(
-                      controller: _ageController,
-                      label: 'Age (months)',
-                      hint: 'e.g., 24',
-                      keyboardType: TextInputType.number,
-                      maxLength: 3,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(3),
-                      ],
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Age is required';
-                        }
-                        final age = int.tryParse(value);
-                        if (age == null || age <= 0) {
-                          return 'Enter valid age';
-                        }
-                        if (age > 300) {
-                          return 'Age seems too high';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: PetFormTextField(
-                      controller: _weightController,
-                      label: 'Weight (kg)',
-                      hint: 'e.g., 15.5',
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d{0,3}(\.\d{0,2})?$')),
-                      ],
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Weight is required';
-                        }
-                        final weight = double.tryParse(value);
-                        if (weight == null || weight <= 0) {
-                          return 'Enter valid weight';
-                        }
-                        if (weight > 999.99) {
-                          return 'Weight too high (max 999.99)';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
+              // Age Input with Birthdate Option
+              PetAgeInputField(
+                ageController: _ageController,
+                initialAgeInMonths: _isEditing ? widget.pet?.age : null,
+              ),
+              
+              const SizedBox(height: kMobileSizedBoxMedium),
+              
+              // Weight Input
+              PetFormTextField(
+                controller: _weightController,
+                label: 'Weight (kg)',
+                hint: 'e.g., 15.5',
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d{0,3}(\.\d{0,2})?$')),
                 ],
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Weight is required';
+                  }
+                  final weight = double.tryParse(value);
+                  if (weight == null || weight <= 0) {
+                    return 'Enter valid weight';
+                  }
+                  if (weight > 999.99) {
+                    return 'Weight too high (max 999.99)';
+                  }
+                  return null;
+                },
               ),
               
               const SizedBox(height: 40),

@@ -7,6 +7,7 @@ import 'package:pawsense/core/utils/breed_options.dart';
 import 'package:pawsense/core/models/user/pet_model.dart';
 import 'package:pawsense/core/services/user/pet_service.dart';
 import 'package:pawsense/core/guards/auth_guard.dart';
+import 'package:pawsense/core/widgets/user/pets/pet_age_input_field.dart';
 
 class AssessmentStepOne extends StatefulWidget {
   final Map<String, dynamic> assessmentData;
@@ -962,54 +963,8 @@ class _AssessmentStepOneState extends State<AssessmentStepOne> {
   }
 
   Widget _buildPetAgeField(TextEditingController controller) {
-    final hasError = _showValidationErrors && isNewPet && _fieldErrors['age'] == true;
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Age (months)",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          maxLength: 3,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(3),
-          ],
-          decoration: InputDecoration(
-            hintText: "Enter age",
-            fillColor: Colors.grey.shade100,
-            filled: true,
-            counterText: "",
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : AppColors.border,
-                width: hasError ? 1.5 : 1,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : AppColors.border,
-                width: hasError ? 1.5 : 1,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: hasError ? Colors.red : AppColors.primary,
-                width: 2,
-              ),
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          ),
-        ),
-      ],
+    return PetAgeInputField(
+      ageController: controller,
     );
   }  Widget _buildPetWeightField(TextEditingController controller) {
     final hasError = _showValidationErrors && isNewPet && _fieldErrors['weight'] == true;
