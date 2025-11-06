@@ -11,6 +11,7 @@ import '../../../core/widgets/shared/page_header.dart';
 import '../../../core/widgets/super_admin/analytics/kpi_card.dart';
 import '../../../core/widgets/super_admin/analytics/analytics_filters.dart';
 import '../../../core/widgets/super_admin/analytics/growth_trend_chart.dart';
+import '../../../core/widgets/super_admin/analytics/pie_charts_section.dart';
 
 class SystemAnalyticsScreen extends StatefulWidget {
   const SystemAnalyticsScreen({super.key});
@@ -238,6 +239,19 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                   _buildKPIGrid(),
 
                   const SizedBox(height: kSpacingLarge),
+
+                  // Pie Charts Section - Data Distribution
+                  if (!isLoading && _hasDataForPieCharts())
+                    AnalyticsPieChartsSection(
+                      userStats: userStats,
+                      petStats: petStats,
+                      appointmentStats: appointmentStats,
+                      clinicStats: clinicStats,
+                      isLoading: isLoading,
+                    ),
+
+                  if (!isLoading && _hasDataForPieCharts())
+                    const SizedBox(height: kSpacingLarge),
 
                   // Growth Trends Chart - with responsive height
                   Container(
@@ -783,5 +797,15 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
     if (score >= 75) return AppColors.info;
     if (score >= 60) return AppColors.warning;
     return AppColors.error;
+  }
+
+  // Helper method to check if we have data for pie charts
+  bool _hasDataForPieCharts() {
+    return (userStats != null && userStats!.byRole.isNotEmpty) ||
+           (petStats != null && petStats!.byType.isNotEmpty) ||
+           (appointmentStats != null && appointmentStats!.byStatus.isNotEmpty) ||
+           (clinicStats != null && (clinicStats!.activeClinics > 0 || 
+            clinicStats!.pendingClinics > 0 || clinicStats!.rejectedClinics > 0 || 
+            clinicStats!.suspendedClinics > 0));
   }
 }
