@@ -4,9 +4,12 @@ import 'package:pawsense/core/utils/app_colors.dart';
 import 'package:pawsense/core/utils/constants_mobile.dart';
 import 'package:pawsense/core/models/clinic/appointment_booking_model.dart';
 import 'package:pawsense/core/models/clinic/clinic_schedule_model.dart';
+import 'package:pawsense/core/models/user/pet_model.dart';
 import 'package:pawsense/core/services/mobile/appointment_booking_service.dart';
 import 'package:pawsense/core/services/clinic/clinic_schedule_service.dart';
 import 'package:pawsense/core/services/clinic/appointment_service.dart';
+import 'package:pawsense/core/services/user/pet_service.dart';
+import 'package:pawsense/core/guards/auth_guard.dart';
 
 class EditAppointmentDialog extends StatefulWidget {
   final AppointmentBooking appointment;
@@ -29,9 +32,15 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
   
   DateTime? _selectedDate;
   String? _selectedTime;
+  String? _selectedService;
   bool _isLoading = false;
   bool _loadingTimeSlots = false;
   bool _loadingServices = false;
+
+  // Pet selection (only when no assessment is linked)
+  List<Pet> _userPets = [];
+  String? _selectedPetId;
+  bool _loadingPets = false;
 
   // Dynamic data based on clinic
   List<String> _availableTimeSlots = [];
@@ -49,6 +58,8 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
   void _initializeForm() {
     _notesController.text = widget.appointment.notes;
     _serviceNameController.text = widget.appointment.serviceName;
+    _selectedService = widget.appointment.serviceName;
+    _selectedPetId = widget.appointment.petId;
     
     // Ensure we have a proper DateTime object (normalize to date only)
     _selectedDate = DateTime(
@@ -61,8 +72,10 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
     
     print('🔧 Initialized form with:');
     print('   Service: ${widget.appointment.serviceName}');
+    print('   Pet ID: ${widget.appointment.petId}');
     print('   Date: ${widget.appointment.appointmentDate} -> $_selectedDate');
     print('   Time: ${widget.appointment.appointmentTime}');
+    print('   Assessment ID: ${widget.appointment.assessmentResultId}');
   }
 
   Future<void> _loadClinicData() async {
@@ -74,6 +87,7 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
     await Future.wait([
       _loadClinicServices(),
       _loadClinicSchedule(),
+      if (_canEditPet()) _loadUserPets(), // Load pets only if no assessment
     ]);
 
     print('✅ Clinic data loaded. Selected date: $_selectedDate, Selected time: $_selectedTime');
@@ -132,6 +146,7 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
         for (final service in services) {
           if (service['serviceName'] == widget.appointment.serviceName) {
             _serviceNameController.text = service['serviceName'];
+            _selectedService = service['serviceName'];
             serviceFound = true;
             break;
           }
@@ -140,6 +155,7 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
         // If current service not found in clinic services, keep the current value
         if (!serviceFound) {
           _serviceNameController.text = widget.appointment.serviceName;
+          _selectedService = widget.appointment.serviceName;
         }
         
         _loadingServices = false;
@@ -150,6 +166,7 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
         _loadingServices = false;
         // Use current service name as fallback
         _serviceNameController.text = widget.appointment.serviceName;
+        _selectedService = widget.appointment.serviceName;
       });
     }
   }
@@ -164,6 +181,40 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
       print('✅ Clinic schedule loaded successfully');
     } catch (e) {
       print('❌ Error loading clinic schedule: $e');
+    }
+  }
+
+  /// Check if the pet can be edited (no assessment linked)
+  bool _canEditPet() {
+    return widget.appointment.assessmentResultId == null || 
+           widget.appointment.assessmentResultId!.isEmpty;
+  }
+
+  Future<void> _loadUserPets() async {
+    setState(() {
+      _loadingPets = true;
+    });
+
+    try {
+      final user = await AuthGuard.getCurrentUser();
+      if (user != null) {
+        final pets = await PetService.getUserPets(user.uid);
+        setState(() {
+          _userPets = pets;
+          _loadingPets = false;
+        });
+        print('✅ Loaded ${pets.length} user pets');
+      } else {
+        setState(() {
+          _loadingPets = false;
+        });
+        print('❌ No user found for pet loading');
+      }
+    } catch (e) {
+      print('❌ Error loading user pets: $e');
+      setState(() {
+        _loadingPets = false;
+      });
     }
   }
 
@@ -387,8 +438,13 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 8), // Add space on top
           _buildServiceNameField(),
           const SizedBox(height: 16),
+          if (_canEditPet()) ...[
+            _buildPetSelectionField(),
+            const SizedBox(height: 16),
+          ],
           _buildDateField(),
           const SizedBox(height: 16),
           _buildTimeField(),
@@ -417,8 +473,8 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
           )
         : DropdownButtonFormField<String>(
             value: _availableServices.isNotEmpty && 
-                   _availableServices.any((service) => service['serviceName'] == _serviceNameController.text)
-                ? _serviceNameController.text
+                   _availableServices.any((service) => service['serviceName'] == _selectedService)
+                ? _selectedService
                 : null,
             decoration: InputDecoration(
               labelText: 'Service Name',
@@ -431,34 +487,36 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
-                borderSide: BorderSide(color: AppColors.primary),
+                borderSide: BorderSide(color: AppColors.primary, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+                borderSide: BorderSide(color: AppColors.error),
               ),
               prefixIcon: Icon(Icons.medical_services, color: AppColors.primary),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
+            icon: Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+            isExpanded: true,
             items: _availableServices.map((service) {
               return DropdownMenuItem<String>(
                 value: service['serviceName'],
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                  child: Text(
-                    service['serviceName'] ?? 'Unknown Service',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                    softWrap: true,
-                    maxLines: 3,
-                    overflow: TextOverflow.visible,
+                child: Text(
+                  service['serviceName'] ?? 'Unknown Service',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               );
             }).toList(),
-            menuMaxHeight: 300, // Allow dropdown menu to be taller
-            isDense: false, // Give more space for text
+            menuMaxHeight: 300,
             onChanged: (String? value) {
               if (value != null) {
                 setState(() {
+                  _selectedService = value;
                   _serviceNameController.text = value;
                 });
                 
@@ -475,8 +533,207 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
               }
               return null;
             },
-            isExpanded: true,
           );
+  }
+
+  Widget _buildPetSelectionField() {
+    if (_loadingPets) {
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    } else if (_userPets.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.error),
+          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+          color: AppColors.error.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.error),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'No pets found. Please add a pet first.',
+                style: TextStyle(fontSize: 14, color: AppColors.error),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Column(
+        children: [
+          DropdownButtonFormField<String>(
+            value: _userPets.any((pet) => pet.id == _selectedPetId) ? _selectedPetId : null,
+            decoration: InputDecoration(
+              labelText: 'Select Pet',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+                borderSide: BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+                borderSide: BorderSide(color: AppColors.primary, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+                borderSide: BorderSide(color: AppColors.error),
+              ),
+              prefixIcon: Icon(Icons.pets, color: AppColors.primary),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            icon: Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+            isExpanded: true,
+            selectedItemBuilder: (BuildContext context) {
+              return _userPets.map((pet) {
+                return Container(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.background,
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: pet.imageUrl != null && pet.imageUrl!.isNotEmpty
+                            ? ClipOval(
+                                child: Image.network(
+                                  pet.imageUrl!,
+                                  width: 32,
+                                  height: 32,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.pets,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    );
+                                  },
+                                ),
+                              )
+                            : Icon(
+                                Icons.pets,
+                                size: 16,
+                                color: AppColors.primary,
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          pet.petName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList();
+            },
+            items: _userPets.map((pet) {
+              return DropdownMenuItem<String>(
+                value: pet.id,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.background,
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: pet.imageUrl != null && pet.imageUrl!.isNotEmpty
+                            ? ClipOval(
+                                child: Image.network(
+                                  pet.imageUrl!,
+                                  width: 32,
+                                  height: 32,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.pets,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    );
+                                  },
+                                ),
+                              )
+                            : Icon(
+                                Icons.pets,
+                                size: 16,
+                                color: AppColors.primary,
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          pet.petName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+            onChanged: (String? value) {
+              setState(() {
+                _selectedPetId = value;
+              });
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please select a pet';
+              }
+              return null;
+            },
+          ),
+          if (_canEditPet())
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'You can edit the pet because no assessment is linked to this appointment.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textTertiary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+        ],
+      );
+    }
   }
 
   Widget _buildDateField() {
@@ -523,26 +780,32 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
   }
 
   Widget _buildTimeField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Available Time Slots',
-          style: kMobileTextStyleTitle.copyWith(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textSecondary,
-          ),
+    return DropdownButtonFormField<String>(
+      value: _selectedTime,
+      decoration: InputDecoration(
+        labelText: 'Available Time Slots',
+        prefixIcon: Icon(Icons.access_time, color: AppColors.primary),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
         ),
-        const SizedBox(height: 8),
-        if (_loadingTimeSlots)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+          borderSide: BorderSide(color: AppColors.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kMobileBorderRadiusSmall),
+          borderSide: BorderSide(color: AppColors.error),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+      icon: Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+      isExpanded: true,
+      hint: _loadingTimeSlots
+          ? Row(
               children: [
                 SizedBox(
                   width: 16,
@@ -553,104 +816,55 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  'Loading available times...',
-                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                Expanded(
+                  child: Text(
+                    'Loading available times...',
+                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
-            ),
-          )
-        else if (_availableTimeSlots.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.error),
-              borderRadius: BorderRadius.circular(8),
-              color: AppColors.error.withOpacity(0.05),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+            )
+          : _availableTimeSlots.isEmpty
+              ? Row(
                   children: [
                     Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.error),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'No available time slots for this date',
+                        'No available time slots',
                         style: TextStyle(fontSize: 14, color: AppColors.error),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
+                )
+              : Text(
+                  'Select a time slot',
+                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () {
-                    print('🔄 Manual reload requested');
-                    _loadAvailableTimeSlots();
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Retry loading time slots',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButtonFormField<String>(
-                value: _selectedTime,
-                isExpanded: true,
-                icon: Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
-                items: _availableTimeSlots.map((String time) {
-                  return DropdownMenuItem<String>(
-                    value: time,
-                    child: Row(
-                      children: [
-                        Icon(Icons.access_time, size: 18, color: AppColors.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatTimeSlot(time),
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: (String? value) {
-                  setState(() {
-                    _selectedTime = value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please select an appointment time';
-                  }
-                  return null;
-                },
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
+      items: _availableTimeSlots.map((String time) {
+        return DropdownMenuItem<String>(
+          value: time,
+          child: Text(
+            _formatTimeSlot(time),
+            style: const TextStyle(fontSize: 16),
           ),
-      ],
+        );
+      }).toList(),
+      onChanged: _loadingTimeSlots || _availableTimeSlots.isEmpty 
+          ? null 
+          : (String? value) {
+              setState(() {
+                _selectedTime = value;
+              });
+            },
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Please select an appointment time';
+        }
+        return null;
+      },
     );
   }
 
@@ -808,9 +1022,10 @@ class _EditAppointmentDialogState extends State<EditAppointmentDialog> {
       final success = await AppointmentBookingService.updateUserAppointmentDetails(
         widget.appointment.id!,
         notes: _notesController.text.trim(),
-        serviceName: _serviceNameController.text.trim(),
+        serviceName: _selectedService?.trim() ?? _serviceNameController.text.trim(),
         appointmentDate: _selectedDate,
         appointmentTime: _selectedTime,
+        petId: _canEditPet() ? _selectedPetId : null, // Only update petId if allowed
       );
 
       if (success) {

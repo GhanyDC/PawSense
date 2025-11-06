@@ -526,6 +526,7 @@ class AppointmentBookingService {
     String? serviceName,
     DateTime? appointmentDate,
     String? appointmentTime,
+    String? petId,
   }) async {
     try {
       // First verify the appointment is pending and belongs to the current user
@@ -565,6 +566,7 @@ class AppointmentBookingService {
       if (serviceName != null) updateData['serviceName'] = serviceName;
       if (appointmentDate != null) updateData['appointmentDate'] = Timestamp.fromDate(appointmentDate);
       if (appointmentTime != null) updateData['appointmentTime'] = appointmentTime;
+      if (petId != null) updateData['petId'] = petId;
 
       await _firestore
           .collection(_collection)
