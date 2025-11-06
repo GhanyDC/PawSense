@@ -8,7 +8,6 @@ class AnalyticsPieChartsSection extends StatelessWidget {
   final UserStats? userStats;
   final PetStats? petStats;
   final AppointmentStats? appointmentStats;
-  final ClinicStats? clinicStats;
   final bool isLoading;
 
   const AnalyticsPieChartsSection({
@@ -16,7 +15,6 @@ class AnalyticsPieChartsSection extends StatelessWidget {
     this.userStats,
     this.petStats,
     this.appointmentStats,
-    this.clinicStats,
     this.isLoading = false,
   });
 
@@ -101,11 +99,6 @@ class AnalyticsPieChartsSection extends StatelessWidget {
       charts.add(_buildAppointmentStatusChart());
     }
 
-    // Clinic Status Distribution
-    if (clinicStats != null) {
-      charts.add(_buildClinicStatusChart());
-    }
-
     return charts;
   }
 
@@ -186,53 +179,6 @@ class AnalyticsPieChartsSection extends StatelessWidget {
 
     return AnalyticsPieChart(
       title: 'Appointment Status Distribution',
-      data: data,
-      isLoading: isLoading,
-      height: 320,
-    );
-  }
-
-  Widget _buildClinicStatusChart() {
-    final data = <PieChartDataSection>[];
-
-    if (clinicStats!.activeClinics > 0) {
-      data.add(PieChartDataSection(
-        label: 'Active',
-        value: clinicStats!.activeClinics.toDouble(),
-        color: AppColors.success,
-        displayValue: clinicStats!.activeClinics.toString(),
-      ));
-    }
-
-    if (clinicStats!.pendingClinics > 0) {
-      data.add(PieChartDataSection(
-        label: 'Pending Approval',
-        value: clinicStats!.pendingClinics.toDouble(),
-        color: AppColors.warning,
-        displayValue: clinicStats!.pendingClinics.toString(),
-      ));
-    }
-
-    if (clinicStats!.rejectedClinics > 0) {
-      data.add(PieChartDataSection(
-        label: 'Rejected',
-        value: clinicStats!.rejectedClinics.toDouble(),
-        color: AppColors.error,
-        displayValue: clinicStats!.rejectedClinics.toString(),
-      ));
-    }
-
-    if (clinicStats!.suspendedClinics > 0) {
-      data.add(PieChartDataSection(
-        label: 'Suspended',
-        value: clinicStats!.suspendedClinics.toDouble(),
-        color: AppColors.error.withValues(alpha: 0.7),
-        displayValue: clinicStats!.suspendedClinics.toString(),
-      ));
-    }
-
-    return AnalyticsPieChart(
-      title: 'Clinic Status Distribution',
       data: data,
       isLoading: isLoading,
       height: 320,

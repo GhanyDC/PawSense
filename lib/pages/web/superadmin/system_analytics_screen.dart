@@ -246,7 +246,6 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                       userStats: userStats,
                       petStats: petStats,
                       appointmentStats: appointmentStats,
-                      clinicStats: clinicStats,
                       isLoading: isLoading,
                     ),
 
@@ -803,9 +802,6 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
   bool _hasDataForPieCharts() {
     return (userStats != null && userStats!.byRole.isNotEmpty) ||
            (petStats != null && petStats!.byType.isNotEmpty) ||
-           (appointmentStats != null && appointmentStats!.byStatus.isNotEmpty) ||
-           (clinicStats != null && (clinicStats!.activeClinics > 0 || 
-            clinicStats!.pendingClinics > 0 || clinicStats!.rejectedClinics > 0 || 
-            clinicStats!.suspendedClinics > 0));
+           (appointmentStats != null && appointmentStats!.byStatus.isNotEmpty);
   }
 }
