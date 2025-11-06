@@ -4,6 +4,9 @@ import 'package:pawsense/core/models/user/assessment_result_model.dart';
 /// Service to fetch disease statistics by location
 class DiseaseStatisticsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Cache for disease info to avoid repeated queries
+  final Map<String, bool> _diseaseContagiousCache = {};
 
   /// Extract barangay from address
   /// Address format: "BARANGAY, CITY/MUNICIPALITY, PROVINCE, REGION"
@@ -227,7 +230,7 @@ class DiseaseStatisticsService {
       final dogStatistics = <DiseaseStatistic>[];
       if (dogDetections.isNotEmpty) {
         print('\n🐶 Processing dog statistics...');
-        dogStatistics.addAll(_calculateTopDiseases(dogDetections, 'Dog', limit: 999));
+        dogStatistics.addAll(await _calculateTopDiseases(dogDetections, 'Dog', limit: 999));
       } else {
         print('\n🐶 No dog detections found');
       }
@@ -236,7 +239,7 @@ class DiseaseStatisticsService {
       final catStatistics = <DiseaseStatistic>[];
       if (catDetections.isNotEmpty) {
         print('\n🐱 Processing cat statistics...');
-        catStatistics.addAll(_calculateTopDiseases(catDetections, 'Cat', limit: 999));
+        catStatistics.addAll(await _calculateTopDiseases(catDetections, 'Cat', limit: 999));
       } else {
         print('\n🐱 No cat detections found');
       }
@@ -265,12 +268,99 @@ class DiseaseStatisticsService {
     }
   }
 
+  /// Fetch disease contagious information from Firestore
+  Future<bool> _getDiseaseContagiousInfo(String diseaseName) async {
+    print('   🔍 Checking contagious status for: "$diseaseName"');
+    
+    // Check cache first
+    if (_diseaseContagiousCache.containsKey(diseaseName)) {
+      print('   ✅ Found in cache: ${_diseaseContagiousCache[diseaseName]}');
+      return _diseaseContagiousCache[diseaseName]!;
+    }
+
+    try {
+      print('   📡 Querying Firestore collection: skinDiseases');
+      print('   🔎 Query: where("name", isEqualTo: "$diseaseName")');
+      
+      // Query the skinDiseases collection - Try exact match first
+      var querySnapshot = await _firestore
+          .collection('skinDiseases')
+          .where('name', isEqualTo: diseaseName)
+          .limit(1)
+          .get();
+
+      print('   📊 Exact match query returned ${querySnapshot.docs.length} documents');
+
+      // If no exact match, try case-insensitive search
+      if (querySnapshot.docs.isEmpty) {
+        print('   💡 No exact match. Trying case-insensitive search...');
+        
+        // Get all diseases and do case-insensitive comparison
+        final allDiseases = await _firestore
+            .collection('skinDiseases')
+            .get();
+        
+        print('   📊 Total diseases in database: ${allDiseases.docs.length}');
+        
+        // Find matching disease (case-insensitive)
+        final normalizedSearchName = diseaseName.toLowerCase().trim();
+        
+        for (var doc in allDiseases.docs) {
+          final data = doc.data();
+          final dbName = (data['name'] as String? ?? '').toLowerCase().trim();
+          
+          if (dbName == normalizedSearchName) {
+            print('   ✅ Found case-insensitive match!');
+            print('      - Searched for: "$diseaseName"');
+            print('      - Found in DB: "${data['name']}"');
+            
+            final isContagious = data['isContagious'] as bool? ?? false;
+            print('      - isContagious: $isContagious');
+            
+            _diseaseContagiousCache[diseaseName] = isContagious;
+            return isContagious;
+          }
+        }
+        
+        // Show sample disease names for debugging
+        if (allDiseases.docs.isNotEmpty) {
+          print('   ⚠️ No match found. Sample disease names in database:');
+          for (var i = 0; i < allDiseases.docs.length && i < 10; i++) {
+            final doc = allDiseases.docs[i];
+            final data = doc.data();
+            print('      - "${data['name']}" (ID: ${doc.id}, Contagious: ${data['isContagious']})');
+          }
+        }
+      } else {
+        final data = querySnapshot.docs.first.data();
+        final docId = querySnapshot.docs.first.id;
+        final isContagious = data['isContagious'] as bool? ?? false;
+        
+        print('   ✅ Found disease in Firestore (exact match)!');
+        print('      - Document ID: $docId');
+        print('      - Disease name in DB: ${data['name']}');
+        print('      - isContagious: $isContagious');
+        
+        _diseaseContagiousCache[diseaseName] = isContagious;
+        return isContagious;
+      }
+    } catch (e) {
+      print('   ❌ Error fetching contagious info for $diseaseName: $e');
+      print('   Stack trace: ${StackTrace.current}');
+    }
+
+    // Default to false if not found
+    print('   ⚠️ Disease "$diseaseName" not found in database. Defaulting to false (not contagious)');
+    _diseaseContagiousCache[diseaseName] = false;
+    return false;
+  }
+
   /// Calculate top 5 most common diseases from a list of detections
-  List<DiseaseStatistic> _calculateTopDiseases(
+  Future<List<DiseaseStatistic>> _calculateTopDiseases(
     List<Detection> detections,
     String species,
     {int limit = 5}
-  ) {
+  ) async {
     if (detections.isEmpty) {
       print('   ⚠️ No detections provided for $species');
       return [];
@@ -307,7 +397,9 @@ class DiseaseStatisticsService {
     print('   ✅ ${limit >= 999 ? 'All' : 'Top ${topDiseases.length}'} diseases:');
     for (var entry in topDiseases) {
       final percentage = (entry.value / totalDetections * 100);
-      print('      ${statistics.length + 1}. ${entry.key}: ${entry.value} cases (${percentage.toStringAsFixed(1)}%)');
+      final isContagious = await _getDiseaseContagiousInfo(entry.key);
+      
+      print('      ${statistics.length + 1}. ${entry.key}: ${entry.value} cases (${percentage.toStringAsFixed(1)}%) ${isContagious ? '⚠️ Contagious' : ''}');
       
       statistics.add(DiseaseStatistic(
         diseaseName: entry.key,
@@ -315,6 +407,7 @@ class DiseaseStatisticsService {
         totalCases: totalDetections,
         percentage: percentage,
         species: species,
+        isContagious: isContagious,
       ));
     }
 
@@ -342,6 +435,7 @@ class DiseaseStatistic {
   final int totalCases;
   final double percentage;
   final String species; // 'Dog' or 'Cat'
+  final bool isContagious; // Whether the disease is contagious
 
   DiseaseStatistic({
     required this.diseaseName,
@@ -349,5 +443,6 @@ class DiseaseStatistic {
     required this.totalCases,
     required this.percentage,
     required this.species,
+    this.isContagious = false,
   });
 }

@@ -428,17 +428,45 @@ class AreaStatisticsCardState extends State<AreaStatisticsCard> {
                           
                           const SizedBox(width: 8),
                           
-                          // Disease name
+                          // Disease name with contagious indicator
                           Expanded(
-                            child: Text(
-                              _formatDiseaseName(stat.diseaseName),
-                              style: kMobileTextStyleSubtitle.copyWith(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _formatDiseaseName(stat.diseaseName),
+                                  style: kMobileTextStyleSubtitle.copyWith(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (stat.isContagious) ...[
+                                  const SizedBox(height: 3),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEF3C7),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: const Color(0xFFF59E0B),
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Contagious',
+                                      style: kMobileTextStyleSubtitle.copyWith(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFFD97706),
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           
