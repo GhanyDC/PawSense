@@ -733,14 +733,12 @@ class _AssessmentStepOneState extends State<AssessmentStepOne> {
           _buildPetNameField(_nameController),
           const SizedBox(height: kSpacingSmall),
 
-          // Age & Weight Row
-          Row(
-            children: [
-              Expanded(child: _buildPetAgeField(_ageController)),
-              const SizedBox(width: kSpacingSmall),
-              Expanded(child: _buildPetWeightField(_weightController)),
-            ],
-          ),
+          // Age Field (Full Width)
+          _buildPetAgeField(_ageController),
+          const SizedBox(height: kSpacingSmall),
+
+          // Weight Field (Full Width)
+          _buildPetWeightField(_weightController),
           const SizedBox(height: kSpacingSmall),
 
           // Breed

@@ -162,26 +162,28 @@ class _PetAgeInputFieldState extends State<PetAgeInputField> {
       children: [
         // Label with toggle
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Pet Age',
-              style: kMobileTextStyleServiceTitle.copyWith(
-                color: AppColors.textPrimary,
+            Expanded(
+              child: Text(
+                'Pet Age',
+                style: kMobileTextStyleServiceTitle.copyWith(
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
+            const SizedBox(width: 4),
             Container(
-              padding: const EdgeInsets.all(2),
+              padding: const EdgeInsets.all(1),
               decoration: BoxDecoration(
                 color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: AppColors.border, width: 1),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildToggleButton(
-                    'Birthdate',
+                    'Date',
                     AgeInputMode.birthdate,
                     Icons.calendar_today,
                   ),
@@ -242,24 +244,24 @@ class _PetAgeInputFieldState extends State<PetAgeInputField> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 14,
+              size: 10,
               color: isSelected ? AppColors.white : AppColors.textSecondary,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 color: isSelected ? AppColors.white : AppColors.textSecondary,
               ),
