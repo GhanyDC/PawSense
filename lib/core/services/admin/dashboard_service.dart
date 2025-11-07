@@ -239,9 +239,15 @@ class DashboardService {
 
   /// Calculate percentage change between two values
   static double _calculatePercentageChange(num oldValue, num newValue) {
+    // If both are 0, no change occurred
+    if (oldValue == 0 && newValue == 0) {
+      return 0.0;
+    }
+    // If old was 0 but new has value, that's 100% increase
     if (oldValue == 0) {
       return newValue > 0 ? 100.0 : 0.0;
     }
+    // Normal percentage calculation
     return ((newValue - oldValue) / oldValue * 100);
   }
 
@@ -683,6 +689,328 @@ class DashboardService {
     }
   }
 
+  /// Get pet type distribution for the clinic
+  static Future<Map<String, int>> getPetTypeDistribution(String clinicId) async {
+    try {
+      // Get all appointments for this clinic
+      final appointmentsQuery = await _firestore
+          .collection('appointments')
+          .where('clinicId', isEqualTo: clinicId)
+          .get();
+
+      // Get unique pet IDs
+      final petIds = <String>{};
+      for (final doc in appointmentsQuery.docs) {
+        final petId = doc.data()['petId'] as String?;
+        if (petId != null && petId.isNotEmpty) {
+          petIds.add(petId);
+        }
+      }
+
+      if (petIds.isEmpty) {
+        return {};
+      }
+
+      // Batch fetch pets
+      final petTypeMap = <String, int>{};
+      final petIdsList = petIds.toList();
+      
+      for (var i = 0; i < petIdsList.length; i += 10) {
+        final batch = petIdsList.skip(i).take(10).toList();
+        if (batch.isEmpty) break;
+        
+        final petsQuery = await _firestore
+            .collection('pets')
+            .where(FieldPath.documentId, whereIn: batch)
+            .get();
+        
+        for (final petDoc in petsQuery.docs) {
+          final petData = petDoc.data();
+          final petType = petData['petType'] ?? 'Unknown';
+          petTypeMap[petType] = (petTypeMap[petType] ?? 0) + 1;
+        }
+      }
+
+      AppLogger.dashboard('Pet type distribution: $petTypeMap');
+      return petTypeMap;
+    } catch (e) {
+      AppLogger.error('Error getting pet type distribution', error: e, tag: 'DashboardService');
+      return {};
+    }
+  }
+
+  /// Get appointment trends (last 7 days)
+  static Future<List<TrendDataPoint>> getAppointmentTrends(String clinicId) async {
+    try {
+      final now = DateTime.now();
+      final trends = <TrendDataPoint>[];
+
+      for (int i = 6; i >= 0; i--) {
+        final date = now.subtract(Duration(days: i));
+        final startDate = DateTime(date.year, date.month, date.day, 0, 0, 0);
+        final endDate = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+        final count = await _getAppointmentsCount(clinicId, startDate, endDate);
+
+        trends.add(TrendDataPoint(
+          date: date,
+          value: count,
+          label: '${date.month}/${date.day}',
+        ));
+      }
+
+      AppLogger.dashboard('Appointment trends: ${trends.length} data points');
+      return trends;
+    } catch (e) {
+      AppLogger.error('Error getting appointment trends', error: e, tag: 'DashboardService');
+      return [];
+    }
+  }
+
+  /// Get monthly comparison data (current month vs last month)
+  static Future<MonthlyComparison> getMonthlyComparison(String clinicId) async {
+    try {
+      final now = DateTime.now();
+
+      // Current month
+      final currentMonthStart = DateTime(now.year, now.month, 1, 0, 0, 0);
+      final currentMonthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+      // Last month
+      final lastMonthStart = DateTime(now.year, now.month - 1, 1, 0, 0, 0);
+      final lastMonthEnd = DateTime(now.year, now.month, 0, 23, 59, 59);
+
+      // Get counts
+      final currentAppointments = await _getAppointmentsCount(
+        clinicId,
+        currentMonthStart,
+        currentMonthEnd,
+      );
+
+      final lastAppointments = await _getAppointmentsCount(
+        clinicId,
+        lastMonthStart,
+        lastMonthEnd,
+      );
+
+      final currentCompleted = await _getCompletedConsultationsCount(
+        clinicId,
+        currentMonthStart,
+        currentMonthEnd,
+      );
+
+      final lastCompleted = await _getCompletedConsultationsCount(
+        clinicId,
+        lastMonthStart,
+        lastMonthEnd,
+      );
+
+      return MonthlyComparison(
+        currentMonthAppointments: currentAppointments,
+        lastMonthAppointments: lastAppointments,
+        currentMonthCompleted: currentCompleted,
+        lastMonthCompleted: lastCompleted,
+      );
+    } catch (e) {
+      AppLogger.error('Error getting monthly comparison', error: e, tag: 'DashboardService');
+      return MonthlyComparison.empty();
+    }
+  }
+
+  /// Get average response time for appointments (pending to confirmed)
+  static Future<ResponseTimeData> getResponseTimeData(String clinicId) async {
+    try {
+      final query = await _firestore
+          .collection('appointments')
+          .where('clinicId', isEqualTo: clinicId)
+          .where('status', isEqualTo: 'confirmed')
+          .limit(50) // Last 50 confirmed appointments
+          .get();
+
+      final responseTimes = <int>[];
+      
+      for (final doc in query.docs) {
+        final data = doc.data();
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        final confirmedAt = (data['confirmedAt'] as Timestamp?)?.toDate();
+
+        if (createdAt != null && confirmedAt != null) {
+          final responseTime = confirmedAt.difference(createdAt).inHours;
+          if (responseTime >= 0 && responseTime < 168) { // Less than a week
+            responseTimes.add(responseTime);
+          }
+        }
+      }
+
+      if (responseTimes.isEmpty) {
+        return ResponseTimeData.empty();
+      }
+
+      final avgResponse = responseTimes.reduce((a, b) => a + b) / responseTimes.length;
+      final within24h = responseTimes.where((t) => t <= 24).length;
+      final within48h = responseTimes.where((t) => t <= 48).length;
+
+      return ResponseTimeData(
+        averageHours: avgResponse,
+        within24Hours: within24h,
+        within48Hours: within48h,
+        totalSampled: responseTimes.length,
+      );
+    } catch (e) {
+      AppLogger.error('Error getting response time data', error: e, tag: 'DashboardService');
+      return ResponseTimeData.empty();
+    }
+  }
+
+  /// Get location distribution for completed appointments
+  static Future<Map<String, int>> getLocationDistribution(String clinicId) async {
+    try {
+      // Get completed appointments
+      final appointmentsQuery = await _firestore
+          .collection('appointments')
+          .where('clinicId', isEqualTo: clinicId)
+          .where('status', isEqualTo: 'completed')
+          .get();
+
+      AppLogger.dashboard('Found ${appointmentsQuery.docs.length} completed appointments');
+
+      if (appointmentsQuery.docs.isEmpty) {
+        return {};
+      }
+
+      // Get unique user IDs
+      final userIds = <String>{};
+      for (final doc in appointmentsQuery.docs) {
+        final userId = doc.data()['userId'] as String?;
+        if (userId != null && userId.isNotEmpty) {
+          userIds.add(userId);
+        }
+      }
+
+      AppLogger.dashboard('Found ${userIds.length} unique users');
+
+      if (userIds.isEmpty) {
+        return {};
+      }
+
+      // Batch fetch users
+      final locationMap = <String, int>{};
+      final userIdsList = userIds.toList();
+      
+      for (var i = 0; i < userIdsList.length; i += 10) {
+        final batch = userIdsList.skip(i).take(10).toList();
+        if (batch.isEmpty) break;
+        
+        final usersQuery = await _firestore
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: batch)
+            .get();
+        
+        for (final userDoc in usersQuery.docs) {
+          final userData = userDoc.data();
+          // Get address and extract barangay (first part before comma)
+          String? address = userData['address'] as String?;
+          
+          AppLogger.dashboard('User ${userDoc.id} address: $address');
+          
+          if (address != null && address.isNotEmpty) {
+            // Address format: "Barangay, Municipality, Province, Region"
+            final parts = address.split(',');
+            if (parts.isNotEmpty) {
+              final barangay = parts.first.trim();
+              if (barangay.isNotEmpty) {
+                locationMap[barangay] = (locationMap[barangay] ?? 0) + 1;
+                AppLogger.dashboard('Added barangay: $barangay');
+              }
+            }
+          }
+        }
+      }
+
+      AppLogger.dashboard('Total unique barangays: ${locationMap.length}');
+
+      // Sort and return top 10 locations
+      final sortedLocations = locationMap.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      
+      final topLocations = <String, int>{};
+      for (var entry in sortedLocations.take(10)) {
+        topLocations[entry.key] = entry.value;
+      }
+
+      AppLogger.dashboard('Top 10 location distribution: $topLocations');
+      return topLocations;
+    } catch (e) {
+      AppLogger.error('Error getting location distribution', error: e, tag: 'DashboardService');
+      return {};
+    }
+  }
+
+  /// Get breed distribution for dogs and cats
+  static Future<Map<String, int>> getBreedDistribution(String clinicId, {String? petType}) async {
+    try {
+      // Get all appointments for this clinic
+      final appointmentsQuery = await _firestore
+          .collection('appointments')
+          .where('clinicId', isEqualTo: clinicId)
+          .get();
+
+      // Get unique pet IDs
+      final petIds = <String>{};
+      for (final doc in appointmentsQuery.docs) {
+        final petId = doc.data()['petId'] as String?;
+        if (petId != null && petId.isNotEmpty) {
+          petIds.add(petId);
+        }
+      }
+
+      if (petIds.isEmpty) {
+        return {};
+      }
+
+      // Batch fetch pets
+      final breedMap = <String, int>{};
+      final petIdsList = petIds.toList();
+      
+      for (var i = 0; i < petIdsList.length; i += 10) {
+        final batch = petIdsList.skip(i).take(10).toList();
+        if (batch.isEmpty) break;
+        
+        final petsQuery = await _firestore
+            .collection('pets')
+            .where(FieldPath.documentId, whereIn: batch)
+            .get();
+        
+        for (final petDoc in petsQuery.docs) {
+          final petData = petDoc.data();
+          final type = petData['petType'] as String?;
+          final breed = petData['breed'] as String?;
+          
+          // Filter by pet type if specified
+          if (petType != null && type != petType) continue;
+          
+          if (breed != null && breed.isNotEmpty && breed != 'Unknown') {
+            breedMap[breed] = (breedMap[breed] ?? 0) + 1;
+          }
+        }
+      }
+
+      // Return top 10 breeds
+      final sortedBreeds = breedMap.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      
+      final topBreeds = <String, int>{};
+      for (var entry in sortedBreeds.take(10)) {
+        topBreeds[entry.key] = entry.value;
+      }
+
+      return topBreeds;
+    } catch (e) {
+      AppLogger.error('Error getting breed distribution', error: e, tag: 'DashboardService');
+      return {};
+    }
+  }
+
   /// Get the current user's clinic ID
   static Future<String?> getCurrentUserClinicId() async {
     try {
@@ -881,5 +1209,86 @@ class DiseaseEvaluationData {
         .split('_')
         .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
         .join(' ');
+  }
+}
+
+/// Trend data point model for line charts
+class TrendDataPoint {
+  final DateTime date;
+  final int value;
+  final String label;
+
+  TrendDataPoint({
+    required this.date,
+    required this.value,
+    required this.label,
+  });
+}
+
+/// Monthly comparison model
+class MonthlyComparison {
+  final int currentMonthAppointments;
+  final int lastMonthAppointments;
+  final int currentMonthCompleted;
+  final int lastMonthCompleted;
+
+  MonthlyComparison({
+    required this.currentMonthAppointments,
+    required this.lastMonthAppointments,
+    required this.currentMonthCompleted,
+    required this.lastMonthCompleted,
+  });
+
+  factory MonthlyComparison.empty() {
+    return MonthlyComparison(
+      currentMonthAppointments: 0,
+      lastMonthAppointments: 0,
+      currentMonthCompleted: 0,
+      lastMonthCompleted: 0,
+    );
+  }
+
+  double get appointmentChange {
+    if (lastMonthAppointments == 0) return 0.0;
+    return ((currentMonthAppointments - lastMonthAppointments) / lastMonthAppointments) * 100;
+  }
+
+  double get completionChange {
+    if (lastMonthCompleted == 0) return 0.0;
+    return ((currentMonthCompleted - lastMonthCompleted) / lastMonthCompleted) * 100;
+  }
+}
+
+/// Response time data model
+class ResponseTimeData {
+  final double averageHours;
+  final int within24Hours;
+  final int within48Hours;
+  final int totalSampled;
+
+  ResponseTimeData({
+    required this.averageHours,
+    required this.within24Hours,
+    required this.within48Hours,
+    required this.totalSampled,
+  });
+
+  factory ResponseTimeData.empty() {
+    return ResponseTimeData(
+      averageHours: 0.0,
+      within24Hours: 0,
+      within48Hours: 0,
+      totalSampled: 0,
+    );
+  }
+
+  double get percentageWithin24h {
+    if (totalSampled == 0) return 0.0;
+    return (within24Hours / totalSampled) * 100;
+  }
+
+  double get percentageWithin48h {
+    if (totalSampled == 0) return 0.0;
+    return (within48Hours / totalSampled) * 100;
   }
 }

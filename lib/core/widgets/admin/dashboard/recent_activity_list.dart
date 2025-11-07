@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/activity_item.dart';
 import '../../../utils/app_colors.dart';
-import '../../../utils/constants.dart';
 import '../../../services/admin/dashboard_service.dart';
 import 'activity_list_item.dart';
 
@@ -88,46 +87,78 @@ class RecentActivityList extends StatelessWidget {
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.border.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.03),
+            blurRadius: 40,
+            offset: Offset(0, 8),
+            spreadRadius: 0,
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Recent Activity',
-            style: TextStyle(
-              fontSize: kFontSizeLarge,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  Icons.history,
+                  size: 18,
+                  color: AppColors.info,
+                ),
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Recent Activity',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 24),
-          Expanded(
-            child: hasActivities
-                ? ListView.separated(
-                    itemCount: displayActivities.length,
-                    separatorBuilder: (context, index) => SizedBox(height: 20),
-                    itemBuilder: (context, index) {
-                      return ActivityListItem(activity: displayActivities[index]);
-                    },
-                  )
-                : Center(
-                    child: Text(
-                      'No recent activity',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
-                      ),
+          // Use Column instead of ListView since we're already in a ScrollView
+          hasActivities
+              ? Column(
+                  children: displayActivities.asMap().entries.map((entry) {
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: entry.key < displayActivities.length - 1 ? 20 : 0),
+                      child: ActivityListItem(activity: entry.value),
+                    );
+                  }).toList(),
+                )
+              : Container(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'No recent activity',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
                     ),
                   ),
-          ),
+                ),
         ],
       ),
     );

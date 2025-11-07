@@ -12,6 +12,10 @@ import '../../../core/widgets/super_admin/analytics/kpi_card.dart';
 import '../../../core/widgets/super_admin/analytics/analytics_filters.dart';
 import '../../../core/widgets/super_admin/analytics/growth_trend_chart.dart';
 import '../../../core/widgets/super_admin/analytics/pie_charts_section.dart';
+import '../../../core/widgets/super_admin/analytics/messaging_stats_card.dart';
+import '../../../core/widgets/super_admin/analytics/rating_distribution_chart.dart';
+import '../../../core/widgets/super_admin/analytics/peak_hours_chart.dart';
+import '../../../core/widgets/super_admin/analytics/breed_popularity_chart.dart';
 
 class SystemAnalyticsScreen extends StatefulWidget {
   const SystemAnalyticsScreen({super.key});
@@ -42,6 +46,12 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
   List<ClinicPerformance> topClinics = [];
   List<ClinicAlert> clinicAlerts = [];
   List<DiseaseData> topDiseases = [];
+  
+  // New Analytics Data
+  MessagingStats? messagingStats;
+  RatingDistribution? ratingDistribution;
+  PeakHoursData? peakHoursData;
+  BreedPopularity? breedPopularity;
 
   @override
   void initState() {
@@ -78,6 +88,14 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
         SystemAnalyticsService.getClinicsNeedingAttention(),
         SystemAnalyticsService.getTopDetectedDiseases(limit: 10),
       ]);
+      
+      // Load new analytics data
+      final newAnalyticsResults = await Future.wait([
+        SystemAnalyticsService.getMessagingStats(selectedPeriod),
+        SystemAnalyticsService.getClinicRatingDistribution(),
+        SystemAnalyticsService.getAppointmentPeakHours(),
+        SystemAnalyticsService.getBreedPopularity(limit: 10),
+      ]);
 
       if (mounted) {
         setState(() {
@@ -95,6 +113,11 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
           topClinics = tableResults[0] as List<ClinicPerformance>;
           clinicAlerts = tableResults[1] as List<ClinicAlert>;
           topDiseases = tableResults[2] as List<DiseaseData>;
+          
+          messagingStats = newAnalyticsResults[0] as MessagingStats;
+          ratingDistribution = newAnalyticsResults[1] as RatingDistribution;
+          peakHoursData = newAnalyticsResults[2] as PeakHoursData;
+          breedPopularity = newAnalyticsResults[3] as BreedPopularity;
 
           isLoading = false;
           lastUpdated = DateTime.now();
@@ -264,6 +287,84 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                       petTrend: petTrend,
                       isLoading: isLoading,
                     ),
+                  ),
+
+                  const SizedBox(height: kSpacingLarge),
+                  
+                  // New Analytics Section - 2x2 Grid
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Determine if we should use 2 columns or 1
+                      final useDoubleColumn = constraints.maxWidth >= 900;
+                      
+                      if (useDoubleColumn) {
+                        return Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: MessagingStatsCard(
+                                    messagingStats: messagingStats,
+                                    isLoading: isLoading,
+                                  ),
+                                ),
+                                const SizedBox(width: kSpacingLarge),
+                                Expanded(
+                                  child: RatingDistributionChart(
+                                    ratingData: ratingDistribution,
+                                    isLoading: isLoading,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: kSpacingLarge),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: PeakHoursChart(
+                                    peakHoursData: peakHoursData,
+                                    isLoading: isLoading,
+                                  ),
+                                ),
+                                const SizedBox(width: kSpacingLarge),
+                                Expanded(
+                                  child: BreedPopularityChart(
+                                    breedData: breedPopularity,
+                                    isLoading: isLoading,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      } else {
+                        return Column(
+                          children: [
+                            MessagingStatsCard(
+                              messagingStats: messagingStats,
+                              isLoading: isLoading,
+                            ),
+                            const SizedBox(height: kSpacingLarge),
+                            RatingDistributionChart(
+                              ratingData: ratingDistribution,
+                              isLoading: isLoading,
+                            ),
+                            const SizedBox(height: kSpacingLarge),
+                            PeakHoursChart(
+                              peakHoursData: peakHoursData,
+                              isLoading: isLoading,
+                            ),
+                            const SizedBox(height: kSpacingLarge),
+                            BreedPopularityChart(
+                              breedData: breedPopularity,
+                              isLoading: isLoading,
+                            ),
+                          ],
+                        );
+                      }
+                    },
                   ),
 
                   const SizedBox(height: kSpacingLarge),

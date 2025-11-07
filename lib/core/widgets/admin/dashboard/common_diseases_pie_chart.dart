@@ -20,33 +20,54 @@ class CommonDiseasesPieChart extends StatelessWidget {
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.border.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.03),
+            blurRadius: 40,
+            offset: Offset(0, 8),
+            spreadRadius: 0,
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Common Diseases',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            diseaseData != null ? 'Period: ${diseaseData!.period.toUpperCase()}' : '',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  Icons.medical_services,
+                  size: 18,
+                  color: AppColors.warning,
+                ),
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Common Diseases',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 24),
           Expanded(
@@ -112,15 +133,23 @@ class CommonDiseasesPieChart extends StatelessWidget {
     final pieData = diseaseData!.toPieChartData();
     
     return pieData.map((data) {
+      final percentage = (data.value / diseaseData!.total * 100);
       return PieChartSectionData(
         color: data.color,
         value: data.value.toDouble(),
-        title: '',
-        radius: 60,
+        title: percentage > 8 ? '${percentage.toStringAsFixed(0)}%' : '',
+        radius: 70,
         titleStyle: TextStyle(
-          fontSize: 0,
+          fontSize: 13,
           fontWeight: FontWeight.bold,
-          color: Colors.transparent,
+          color: Colors.white,
+          shadows: [
+            Shadow(
+              color: Colors.black26,
+              offset: Offset(1, 1),
+              blurRadius: 2,
+            ),
+          ],
         ),
       );
     }).toList();

@@ -34,37 +34,65 @@ class CommonDiseasesChart extends StatelessWidget {
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.border.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.03),
+            blurRadius: 40,
+            offset: Offset(0, 8),
+            spreadRadius: 0,
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Most Common Diseases',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  Icons.bar_chart,
+                  size: 18,
+                  color: AppColors.error,
+                ),
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Common Diseases',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 24),
-          Expanded(
-            child: ListView.separated(
-              itemCount: displayDiseases.length,
-              separatorBuilder: (context, index) => SizedBox(height: 20),
-              itemBuilder: (context, index) {
-                final disease = displayDiseases[index];
-                return DiseaseItem(disease: disease, maxValue: maxValue);
-              },
-            ),
-          ),
+          // Use Column instead of ListView since we're already in a ScrollView
+          ...displayDiseases.asMap().entries.map((entry) {
+            final disease = entry.value;
+            return Padding(
+              padding: EdgeInsets.only(bottom: entry.key < displayDiseases.length - 1 ? 20 : 0),
+              child: DiseaseItem(disease: disease, maxValue: maxValue),
+            );
+          }).toList(),
         ],
       ),
     );

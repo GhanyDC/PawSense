@@ -511,3 +511,107 @@ class DiseaseData {
         percentage: json['percentage']?.toDouble() ?? 0.0,
       );
 }
+
+/// Messaging statistics model
+class MessagingStats {
+  final int totalConversations;
+  final int activeConversations;
+  final int totalMessages;
+  final int messagesInPeriod;
+  final double avgResponseTimeHours;
+
+  const MessagingStats({
+    required this.totalConversations,
+    required this.activeConversations,
+    required this.totalMessages,
+    required this.messagesInPeriod,
+    required this.avgResponseTimeHours,
+  });
+
+  factory MessagingStats.empty() => const MessagingStats(
+        totalConversations: 0,
+        activeConversations: 0,
+        totalMessages: 0,
+        messagesInPeriod: 0,
+        avgResponseTimeHours: 0.0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'totalConversations': totalConversations,
+        'activeConversations': activeConversations,
+        'totalMessages': totalMessages,
+        'messagesInPeriod': messagesInPeriod,
+        'avgResponseTimeHours': avgResponseTimeHours,
+      };
+}
+
+/// Rating distribution model
+class RatingDistribution {
+  final Map<double, int> ratingBuckets; // 5.0: 120, 4.0: 80, etc.
+  final double averageSystemRating;
+  final int totalRatedClinics;
+  final int unratedClinics;
+
+  const RatingDistribution({
+    required this.ratingBuckets,
+    required this.averageSystemRating,
+    required this.totalRatedClinics,
+    required this.unratedClinics,
+  });
+
+  factory RatingDistribution.empty() => const RatingDistribution(
+        ratingBuckets: {},
+        averageSystemRating: 0.0,
+        totalRatedClinics: 0,
+        unratedClinics: 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'ratingBuckets': ratingBuckets,
+        'averageSystemRating': averageSystemRating,
+        'totalRatedClinics': totalRatedClinics,
+        'unratedClinics': unratedClinics,
+      };
+}
+
+/// Peak hours data model
+class PeakHoursData {
+  final Map<int, int> hourlyDistribution; // Hour (0-23) -> count
+  final List<int> peakHours; // Top 3 busiest hours
+
+  const PeakHoursData({
+    required this.hourlyDistribution,
+    required this.peakHours,
+  });
+
+  factory PeakHoursData.empty() => const PeakHoursData(
+        hourlyDistribution: {},
+        peakHours: [],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'hourlyDistribution': hourlyDistribution,
+        'peakHours': peakHours,
+      };
+}
+
+/// Breed popularity model
+class BreedPopularity {
+  final Map<String, int> topDogBreeds;
+  final Map<String, int> topCatBreeds;
+
+  const BreedPopularity({
+    required this.topDogBreeds,
+    required this.topCatBreeds,
+  });
+
+  factory BreedPopularity.empty() => const BreedPopularity(
+        topDogBreeds: {},
+        topCatBreeds: {},
+      );
+
+  Map<String, dynamic> toJson() => {
+        'topDogBreeds': topDogBreeds,
+        'topCatBreeds': topCatBreeds,
+      };
+}

@@ -20,33 +20,54 @@ class AppointmentStatusPieChart extends StatelessWidget {
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.border.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.03),
+            blurRadius: 40,
+            offset: Offset(0, 8),
+            spreadRadius: 0,
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Appointment Status Distribution',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            statusData != null ? 'Period: ${statusData!.period.toUpperCase()}' : '',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  Icons.pie_chart,
+                  size: 18,
+                  color: AppColors.primary,
+                ),
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Appointment Status',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 24),
           Expanded(
@@ -112,15 +133,17 @@ class AppointmentStatusPieChart extends StatelessWidget {
     final pieData = statusData!.toPieChartData();
     
     return pieData.map((data) {
+      final percentage = (data.value / statusData!.total * 100);
+      
       return PieChartSectionData(
         color: data.color,
         value: data.value.toDouble(),
-        title: '',
+        title: percentage > 8 ? '${percentage.toStringAsFixed(0)}%' : '',
         radius: 60,
         titleStyle: TextStyle(
-          fontSize: 0,
+          fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: Colors.transparent,
+          color: Colors.white,
         ),
       );
     }).toList();

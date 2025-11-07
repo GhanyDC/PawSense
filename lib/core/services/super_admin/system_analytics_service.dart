@@ -859,6 +859,222 @@ class SystemAnalyticsService {
     });
   }
 
+  /// Get messaging statistics
+  static Future<MessagingStats> getMessagingStats(AnalyticsPeriod period) async {
+    return _getCached('messaging_stats_${period.name}', () async {
+      try {
+        final now = DateTime.now();
+        final periodStart = now.subtract(Duration(days: period.days));
+
+        // Get all conversations
+        final conversationsSnapshot = await _firestore.collection('conversations').get();
+        
+        // Get all messages
+        final messagesSnapshot = await _firestore.collection('messages').get();
+
+        final totalConversations = conversationsSnapshot.docs.length;
+        
+        int activeConversations = 0;
+        int totalMessages = 0;
+        int messagesInPeriod = 0;
+        double avgResponseTime = 0.0;
+        final List<int> responseTimes = [];
+
+        for (final messageDoc in messagesSnapshot.docs) {
+          final data = messageDoc.data();
+          final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
+          
+          if (timestamp != null) {
+            totalMessages++;
+            if (timestamp.isAfter(periodStart)) {
+              messagesInPeriod++;
+            }
+          }
+        }
+
+        // Count active conversations (with messages in period)
+        for (final convDoc in conversationsSnapshot.docs) {
+          final data = convDoc.data();
+          final lastMessageAt = (data['lastMessageAt'] as Timestamp?)?.toDate();
+          
+          if (lastMessageAt != null && lastMessageAt.isAfter(periodStart)) {
+            activeConversations++;
+          }
+        }
+
+        if (responseTimes.isNotEmpty) {
+          avgResponseTime = responseTimes.reduce((a, b) => a + b) / responseTimes.length;
+        }
+
+        return MessagingStats(
+          totalConversations: totalConversations,
+          activeConversations: activeConversations,
+          totalMessages: totalMessages,
+          messagesInPeriod: messagesInPeriod,
+          avgResponseTimeHours: avgResponseTime,
+        );
+      } catch (e) {
+        print('Error getting messaging stats: $e');
+        return MessagingStats.empty();
+      }
+    });
+  }
+
+  /// Get clinic rating distribution
+  static Future<RatingDistribution> getClinicRatingDistribution() async {
+    return _getCached('rating_distribution', () async {
+      try {
+        final clinicsSnapshot = await _firestore.collection('clinics').get();
+        
+        final ratingBuckets = <double, int>{
+          5.0: 0,
+          4.0: 0,
+          3.0: 0,
+          2.0: 0,
+          1.0: 0,
+        };
+
+        int totalRated = 0;
+        double totalRating = 0.0;
+        int unratedClinics = 0;
+
+        for (final clinicDoc in clinicsSnapshot.docs) {
+          final data = clinicDoc.data();
+          final averageRating = (data['averageRating'] as num?)?.toDouble();
+          final totalRatings = (data['totalRatings'] as num?)?.toInt() ?? 0;
+
+          if (averageRating != null && totalRatings > 0) {
+            totalRated++;
+            totalRating += averageRating;
+
+            // Bucket the rating
+            if (averageRating >= 4.5) {
+              ratingBuckets[5.0] = ratingBuckets[5.0]! + 1;
+            } else if (averageRating >= 3.5) {
+              ratingBuckets[4.0] = ratingBuckets[4.0]! + 1;
+            } else if (averageRating >= 2.5) {
+              ratingBuckets[3.0] = ratingBuckets[3.0]! + 1;
+            } else if (averageRating >= 1.5) {
+              ratingBuckets[2.0] = ratingBuckets[2.0]! + 1;
+            } else {
+              ratingBuckets[1.0] = ratingBuckets[1.0]! + 1;
+            }
+          } else {
+            unratedClinics++;
+          }
+        }
+
+        final avgSystemRating = totalRated > 0 ? totalRating / totalRated : 0.0;
+
+        return RatingDistribution(
+          ratingBuckets: ratingBuckets,
+          averageSystemRating: avgSystemRating,
+          totalRatedClinics: totalRated,
+          unratedClinics: unratedClinics,
+        );
+      } catch (e) {
+        print('Error getting rating distribution: $e');
+        return RatingDistribution.empty();
+      }
+    });
+  }
+
+  /// Get appointment peak hours analysis
+  static Future<PeakHoursData> getAppointmentPeakHours() async {
+    return _getCached('peak_hours', () async {
+      try {
+        final appointmentsSnapshot = await _firestore.collection('appointments').get();
+        
+        final hourBuckets = <int, int>{};
+        for (int i = 0; i < 24; i++) {
+          hourBuckets[i] = 0;
+        }
+
+        for (final doc in appointmentsSnapshot.docs) {
+          final data = doc.data();
+          final time = data['appointmentTime'] as String?;
+          
+          if (time != null) {
+            // Parse time string (format: "HH:MM" or "HH:MM AM/PM")
+            try {
+              final parts = time.split(':');
+              if (parts.isNotEmpty) {
+                int hour = int.parse(parts[0].trim());
+                
+                // Handle AM/PM format
+                if (time.toUpperCase().contains('PM') && hour < 12) {
+                  hour += 12;
+                } else if (time.toUpperCase().contains('AM') && hour == 12) {
+                  hour = 0;
+                }
+
+                if (hour >= 0 && hour < 24) {
+                  hourBuckets[hour] = hourBuckets[hour]! + 1;
+                }
+              }
+            } catch (e) {
+              print('Error parsing time: $time');
+            }
+          }
+        }
+
+        // Find peak hours
+        final sortedHours = hourBuckets.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
+        final peakHours = sortedHours.take(3).map((e) => e.key).toList();
+
+        return PeakHoursData(
+          hourlyDistribution: hourBuckets,
+          peakHours: peakHours,
+        );
+      } catch (e) {
+        print('Error getting peak hours: $e');
+        return PeakHoursData.empty();
+      }
+    });
+  }
+
+  /// Get breed popularity analysis
+  static Future<BreedPopularity> getBreedPopularity({int limit = 10}) async {
+    return _getCached('breed_popularity_$limit', () async {
+      try {
+        final petsSnapshot = await _firestore.collection('pets').get();
+        
+        final dogBreeds = <String, int>{};
+        final catBreeds = <String, int>{};
+        
+        for (final doc in petsSnapshot.docs) {
+          final data = doc.data();
+          final petType = data['petType'] as String?;
+          final breed = data['breed'] as String?;
+
+          if (breed != null && breed.isNotEmpty && breed != 'Unknown' && breed != 'Mixed') {
+            if (petType == 'Dog') {
+              dogBreeds[breed] = (dogBreeds[breed] ?? 0) + 1;
+            } else if (petType == 'Cat') {
+              catBreeds[breed] = (catBreeds[breed] ?? 0) + 1;
+            }
+          }
+        }
+
+        // Get top breeds
+        final topDogBreeds = dogBreeds.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        final topCatBreeds = catBreeds.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
+        return BreedPopularity(
+          topDogBreeds: Map.fromEntries(topDogBreeds.take(limit)),
+          topCatBreeds: Map.fromEntries(topCatBreeds.take(limit)),
+        );
+      } catch (e) {
+        print('Error getting breed popularity: $e');
+        return BreedPopularity.empty();
+      }
+    });
+  }
+
   // ==================== HELPER METHODS ====================
 
   /// Build time series data from date list

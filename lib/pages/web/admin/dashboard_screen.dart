@@ -8,6 +8,10 @@ import '../../../core/widgets/admin/dashboard/dashboard_header.dart';
 import '../../../core/widgets/admin/dashboard/common_diseases_chart.dart';
 import '../../../core/widgets/admin/dashboard/appointment_status_pie_chart.dart';
 import '../../../core/widgets/admin/dashboard/common_diseases_pie_chart.dart';
+import '../../../core/widgets/admin/dashboard/pet_type_pie_chart.dart';
+import '../../../core/widgets/admin/dashboard/appointment_trends_chart.dart';
+import '../../../core/widgets/admin/dashboard/monthly_comparison_chart.dart';
+import '../../../core/widgets/admin/dashboard/response_time_card.dart';
 import '../../../core/utils/app_colors.dart';
 import '../../../core/services/admin/dashboard_service.dart';
 import '../../../core/services/admin/admin_appointment_notification_integrator.dart';
@@ -36,6 +40,13 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   DiseaseEvaluationData? _commonDiseaseData;
   bool _isLoadingCharts = false;
   
+  // New chart data
+  Map<String, int> _petTypeDistribution = {};
+  List<TrendDataPoint> _appointmentTrends = [];
+  MonthlyComparison? _monthlyComparison;
+  ResponseTimeData? _responseTimeData;
+  bool _isLoadingNewCharts = false;
+  
   // Cache for stats by period
   final Map<String, DashboardStats> _statsCache = {};
   
@@ -44,6 +55,12 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   List<DiseaseData>? _cachedDiseases;
   AppointmentStatusData? _cachedAppointmentStatus;
   DiseaseEvaluationData? _cachedCommonDiseases;
+  
+  // Cache for new charts
+  Map<String, int>? _cachedPetTypeDistribution;
+  List<TrendDataPoint>? _cachedAppointmentTrends;
+  MonthlyComparison? _cachedMonthlyComparison;
+  ResponseTimeData? _cachedResponseTimeData;
   
   // Firebase listener subscription
   StreamSubscription? _appointmentsListener;
@@ -245,16 +262,33 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
       final clinicId = await DashboardService.getCurrentUserClinicId();
       final userName = await _getCurrentUserName();
       
+      print('🔍 Attempting to load dashboard data...');
+      print('   User name: $userName');
+      print('   Clinic ID: $clinicId');
+      
       if (clinicId == null) {
+        print('❌ ERROR: No clinic ID found for current user');
         AppLogger.error('No clinic ID found for current user', tag: 'DashboardScreen');
         _safeSetState(() {
           _isLoadingStats = false;
         });
+        
+        // Show error message to user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Unable to load clinic data. Please try logging in again.'),
+              backgroundColor: AppColors.error,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
         return;
       }
 
       _clinicId = clinicId;
       _userName = userName;
+      print('✅ Dashboard initialized - Clinic ID: $_clinicId, User: $_userName');
       AppLogger.info('Clinic ID obtained: $_clinicId, User: $_userName');
 
       // Initialize notification integrators for real-time notifications
@@ -275,6 +309,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
         _loadDiseaseData(),
         _loadAppointmentStatusData(),
         _loadCommonDiseaseData(),
+        _loadNewAnalyticsData(),
       ]);
       
       AppLogger.success('Dashboard data loaded successfully');
@@ -384,11 +419,13 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
   Future<void> _loadStats() async {
     // Critical widget lifecycle protection
     if (_clinicId == null || !mounted) {
-      AppLogger.debug('Skipping _loadStats - widget disposed or invalid state');
+      AppLogger.debug('Skipping _loadStats - widget disposed or invalid state (clinicId: $_clinicId, mounted: $mounted)');
       return;
     }
 
     final periodKey = selectedPeriod.toLowerCase();
+    
+    print('📊 Loading stats for clinic: $_clinicId, period: $periodKey');
     
     // Check cache first
     if (_statsCache.containsKey(periodKey)) {
@@ -405,10 +442,13 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     });
 
     try {
+      print('📡 Fetching dashboard stats from Firebase...');
       final stats = await DashboardService.getClinicDashboardStats(
         _clinicId!,
         period: periodKey,
       );
+
+      print('📊 Stats received: appointments=${stats.totalAppointments}, completed=${stats.completedConsultations}, patients=${stats.activePatients}');
 
       // Check again after async operation - critical!
       if (!mounted) {
@@ -427,6 +467,7 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
       
       AppLogger.dashboard('Stats loaded and cached for $periodKey');
     } catch (e) {
+      print('❌ Error loading stats: $e');
       AppLogger.error('Error loading stats', error: e, tag: 'DashboardScreen');
       _safeSetState(() {
         _isLoadingStats = false;
@@ -578,6 +619,61 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     }
   }
 
+  /// Load new analytics data
+  Future<void> _loadNewAnalyticsData() async {
+    if (_clinicId == null || !mounted) return;
+
+    // Check cache first
+    if (_cachedPetTypeDistribution != null &&
+        _cachedAppointmentTrends != null &&
+        _cachedMonthlyComparison != null &&
+        _cachedResponseTimeData != null) {
+      print('Using cached new analytics data');
+      _safeSetState(() {
+        _petTypeDistribution = _cachedPetTypeDistribution!;
+        _appointmentTrends = _cachedAppointmentTrends!;
+        _monthlyComparison = _cachedMonthlyComparison;
+        _responseTimeData = _cachedResponseTimeData;
+      });
+      return;
+    }
+
+    _safeSetState(() {
+      _isLoadingNewCharts = true;
+    });
+
+    try {
+      // Load all new analytics data in parallel
+      final results = await Future.wait([
+        DashboardService.getPetTypeDistribution(_clinicId!),
+        DashboardService.getAppointmentTrends(_clinicId!),
+        DashboardService.getMonthlyComparison(_clinicId!),
+        DashboardService.getResponseTimeData(_clinicId!),
+      ]);
+
+      // Cache results
+      _cachedPetTypeDistribution = results[0] as Map<String, int>;
+      _cachedAppointmentTrends = results[1] as List<TrendDataPoint>;
+      _cachedMonthlyComparison = results[2] as MonthlyComparison;
+      _cachedResponseTimeData = results[3] as ResponseTimeData;
+
+      _safeSetState(() {
+        _petTypeDistribution = _cachedPetTypeDistribution!;
+        _appointmentTrends = _cachedAppointmentTrends!;
+        _monthlyComparison = _cachedMonthlyComparison;
+        _responseTimeData = _cachedResponseTimeData;
+        _isLoadingNewCharts = false;
+      });
+
+      print('New analytics data loaded and cached');
+    } catch (e) {
+      print('Error loading new analytics data: $e');
+      _safeSetState(() {
+        _isLoadingNewCharts = false;
+      });
+    }
+  }
+
   /// Build loading skeleton for stats cards with static UI (title & icons)
   Widget _buildLoadingStatsCards() {
     // Static card configurations with titles and icons
@@ -616,6 +712,98 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
     );
   }
 
+  /// Build empty state when no data is available
+  Widget _buildEmptyStatsState() {
+    return Container(
+      height: 120,
+      padding: EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border, width: 1),
+      ),
+      child: Center(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 32,
+              color: AppColors.info,
+            ),
+            SizedBox(width: 16),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No Dashboard Data Available',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Statistics will appear once you start receiving appointments.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build section header with icon
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: AppColors.primary,
+          ),
+        ),
+        SizedBox(width: 12),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            letterSpacing: 0.3,
+          ),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.border,
+                  AppColors.border.withOpacity(0),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Convert dashboard stats to stats card format
   List<Map<String, dynamic>> _getStatsCards() {
     if (_currentStats == null) {
@@ -629,28 +817,47 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
             ? 'week' 
             : 'month';
 
+    // Helper to format change text
+    String formatChange(double change, int currentValue, String period) {
+      if (currentValue == 0 && change == 0.0) {
+        return 'No appointments yet';
+      }
+      if (change == 0.0) {
+        return 'No change from last $period';
+      }
+      return '${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}% from last $period';
+    }
+
+    // Helper to determine change color
+    Color getChangeColor(double change, int currentValue) {
+      if (currentValue == 0 && change == 0.0) {
+        return AppColors.textSecondary;
+      }
+      return change >= 0 ? AppColors.success : AppColors.error;
+    }
+
     return [
       {
         'title': 'Total Appointments',
         'value': '${stats.totalAppointments}',
-        'change': '${stats.appointmentsChange >= 0 ? '+' : ''}${stats.appointmentsChange.toStringAsFixed(1)}% from last $periodText',
-        'changeColor': stats.appointmentsChange >= 0 ? AppColors.success : AppColors.error,
+        'change': formatChange(stats.appointmentsChange, stats.totalAppointments, periodText),
+        'changeColor': getChangeColor(stats.appointmentsChange, stats.totalAppointments),
         'icon': Icons.calendar_today,
         'iconColor': AppColors.primary,
       },
       {
         'title': 'Consultations Completed',
         'value': '${stats.completedConsultations}',
-        'change': '${stats.consultationsChange >= 0 ? '+' : ''}${stats.consultationsChange.toStringAsFixed(1)}% from last $periodText',
-        'changeColor': stats.consultationsChange >= 0 ? AppColors.success : AppColors.error,
+        'change': formatChange(stats.consultationsChange, stats.completedConsultations, periodText),
+        'changeColor': getChangeColor(stats.consultationsChange, stats.completedConsultations),
         'icon': Icons.check_circle_outline,
         'iconColor': AppColors.success,
       },
       {
         'title': 'Active Patients',
         'value': '${stats.activePatients}',
-        'change': '${stats.patientsChange >= 0 ? '+' : ''}${stats.patientsChange.toStringAsFixed(1)}% from last $periodText',
-        'changeColor': stats.patientsChange >= 0 ? AppColors.success : AppColors.info,
+        'change': formatChange(stats.patientsChange, stats.activePatients, periodText),
+        'changeColor': getChangeColor(stats.patientsChange, stats.activePatients),
         'icon': Icons.favorite_outline,
         'iconColor': AppColors.info,
       },
@@ -693,11 +900,22 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
               _loadDashboardData();
             });
           },
-          dashboardContent: Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          dashboardContent: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.background,
+                  AppColors.background.withOpacity(0.8),
+                ],
+              ),
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // ✅ Header appears immediately (no data dependency)
                 DashboardHeader(
                   selectedPeriod: selectedPeriod,
@@ -720,76 +938,122 @@ class _DashboardScreenState extends State<DashboardScreen> with AutomaticKeepAli
                 // Stats section with loading state
                 _isLoadingStats
                     ? _buildLoadingStatsCards()
-                    : statsCards.isNotEmpty
+                    : _currentStats != null
                         ? StatsCards(statsList: statsCards)
-                        : Center(
-                            child: Container(
-                              height: 120,
-                              child: Center(
-                                child: Text(
-                                  'No data available',
-                                  style: TextStyle(color: AppColors.textSecondary),
-                                ),
-                              ),
-                            ),
-                          ),
+                        : _buildEmptyStatsState(),
+                SizedBox(height: 40),
+                
+                // Analytics Overview Section
+                _buildSectionHeader('Analytics Overview', Icons.analytics),
+                SizedBox(height: 20),
+                
+                // First row: Appointment Status and Common Diseases pie charts
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: AppointmentStatusPieChart(
+                        statusData: _appointmentStatusData,
+                        isLoading: _isLoadingCharts,
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 1,
+                      child: CommonDiseasesPieChart(
+                        diseaseData: _commonDiseaseData,
+                        isLoading: _isLoadingCharts,
+                      ),
+                    ),
+                  ],
+                ),
+                
                 SizedBox(height: 32),
                 
-                // Charts and activities section - Updated layout
-                Expanded(
-                  child: Column(
-                    children: [
-                      // First row: Appointment Status and Common Diseases pie charts
-                      Expanded(
-                        flex: 1,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 1,
-                              child: AppointmentStatusPieChart(
-                                statusData: _appointmentStatusData,
-                                isLoading: _isLoadingCharts,
-                              ),
-                            ),
-                            SizedBox(width: 24),
-                            Expanded(
-                              flex: 1,
-                              child: CommonDiseasesPieChart(
-                                diseaseData: _commonDiseaseData,
-                                isLoading: _isLoadingCharts,
-                              ),
-                            ),
-                          ],
-                        ),
+                // Patient & Appointment Insights Section
+                _buildSectionHeader('Patient & Appointment Insights', Icons.pets),
+                SizedBox(height: 20),
+                
+                // Second row: Pet Type Distribution and Appointment Trends
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: PetTypePieChart(
+                        petTypeDistribution: _petTypeDistribution,
+                        isLoading: _isLoadingNewCharts,
                       ),
-                      SizedBox(height: 24),
-                      // Second row: Common diseases (bar chart view) and recent activities
-                      Expanded(
-                        flex: 1,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 1,
-                              child: CommonDiseasesChart(
-                                diseaseData: _diseaseData,
-                              ),
-                            ),
-                            SizedBox(width: 24),
-                            Expanded(
-                              flex: 1,
-                              child: RecentActivityList(
-                                activities: _recentActivities,
-                              ),
-                            ),
-                          ],
-                        ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 1,
+                      child: AppointmentTrendsChart(
+                        trendData: _appointmentTrends,
+                        isLoading: _isLoadingNewCharts,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+                
+                SizedBox(height: 32),
+                
+                // Performance Metrics Section
+                _buildSectionHeader('Performance Metrics', Icons.speed),
+                SizedBox(height: 20),
+                
+                // Third row: Monthly Comparison and Response Time
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: MonthlyComparisonChart(
+                        comparisonData: _monthlyComparison ?? MonthlyComparison.empty(),
+                        isLoading: _isLoadingNewCharts,
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 1,
+                      child: ResponseTimeCard(
+                        responseData: _responseTimeData ?? ResponseTimeData.empty(),
+                        isLoading: _isLoadingNewCharts,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: 32),
+                
+                // Activity & Health Trends Section
+                _buildSectionHeader('Activity & Health Trends', Icons.show_chart),
+                SizedBox(height: 20),
+                
+                // Fourth row: Common diseases (bar chart view) and recent activities
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: CommonDiseasesChart(
+                        diseaseData: _diseaseData,
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    Expanded(
+                      flex: 1,
+                      child: RecentActivityList(
+                        activities: _recentActivities,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: 40), // Bottom padding
+                ],
+              ),
             ),
           ),
         );
