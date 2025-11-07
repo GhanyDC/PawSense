@@ -23,16 +23,27 @@ class MessagingStatsCard extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      height: 480,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.border.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.03),
+            blurRadius: 40,
+            offset: const Offset(0, 8),
+            spreadRadius: 0,
           ),
         ],
       ),
@@ -41,28 +52,38 @@ class MessagingStatsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.chat_bubble_outline, color: AppColors.info, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Messaging Activity',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.chat_bubble_outline,
+                  color: AppColors.info,
+                  size: 18,
                 ),
               ),
-            ],
+          const SizedBox(width: 10),
+          const Text(
+            'Messaging Activity',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+              letterSpacing: 0.2,
+            ),
           ),
-          const SizedBox(height: 24),
-          
-          // Metrics Grid
-          _buildMetricsGrid(),
-          
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 16),
-          
-          // Activity Chart
+        ],
+      ),
+      const SizedBox(height: 12),
+      
+      // Metrics Grid
+      _buildMetricsGrid(),
+      
+      const SizedBox(height: 12),
+      const Divider(),
+      const SizedBox(height: 10),          // Activity Chart
           _buildActivityChart(),
         ],
       ),
@@ -77,6 +98,7 @@ class MessagingStatsCard extends StatelessWidget {
     return Column(
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _buildMetricItem(
@@ -86,6 +108,7 @@ class MessagingStatsCard extends StatelessWidget {
                 color: AppColors.primary,
               ),
             ),
+            const SizedBox(width: 16),
             Expanded(
               child: _buildMetricItem(
                 icon: Icons.chat,
@@ -97,8 +120,9 @@ class MessagingStatsCard extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _buildMetricItem(
@@ -108,6 +132,7 @@ class MessagingStatsCard extends StatelessWidget {
                 color: AppColors.info,
               ),
             ),
+            const SizedBox(width: 16),
             Expanded(
               child: _buildMetricItem(
                 icon: Icons.schedule,
@@ -130,13 +155,15 @@ class MessagingStatsCard extends StatelessWidget {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      height: 100,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
@@ -148,32 +175,37 @@ class MessagingStatsCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary.withValues(alpha: 0.7),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
               ),
-            ),
-          ],
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
@@ -186,14 +218,14 @@ class MessagingStatsCard extends StatelessWidget {
         const Text(
           'Message Volume',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w600,
             color: AppColors.textSecondary,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         SizedBox(
-          height: 150,
+          height: 110,
           child: Row(
             children: [
               Expanded(
@@ -227,7 +259,7 @@ class MessagingStatsCard extends StatelessWidget {
     required Color color,
   }) {
     final percentage = maxValue > 0 ? (value / maxValue) : 0.0;
-    final barHeight = (150 - 70) * percentage.clamp(0.0, 1.0); // 150 total - 70 for text spacing
+    final barHeight = (110 - 60) * percentage.clamp(0.0, 1.0); // 110 total - 60 for text spacing
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -237,15 +269,15 @@ class MessagingStatsCard extends StatelessWidget {
         Text(
           _formatNumber(value),
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.bold,
             color: color,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
           width: double.infinity,
-          height: 150 - 70, // Fixed height for the bar area
+          height: 110 - 60, // Fixed height for the bar area
           decoration: BoxDecoration(
             color: AppColors.border.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(8),
@@ -259,11 +291,11 @@ class MessagingStatsCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           label,
           style: const TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             color: AppColors.textSecondary,
           ),
         ),

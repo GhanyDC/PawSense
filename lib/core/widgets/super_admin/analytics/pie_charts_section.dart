@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:pawsense/core/models/analytics/system_analytics_models.dart';
 import 'package:pawsense/core/utils/app_colors.dart';
 import 'pie_chart_widget.dart';
+import 'diseases_pie_chart.dart';
 
 /// Collection of Pie Charts for Analytics Dashboard
 class AnalyticsPieChartsSection extends StatelessWidget {
   final UserStats? userStats;
   final PetStats? petStats;
   final AppointmentStats? appointmentStats;
+  final List<DiseaseData> topDiseases;
   final bool isLoading;
 
   const AnalyticsPieChartsSection({
@@ -15,6 +17,7 @@ class AnalyticsPieChartsSection extends StatelessWidget {
     this.userStats,
     this.petStats,
     this.appointmentStats,
+    this.topDiseases = const [],
     this.isLoading = false,
   });
 
@@ -94,9 +97,35 @@ class AnalyticsPieChartsSection extends StatelessWidget {
       charts.add(_buildPetTypeChart());
     }
 
-    // Appointment Status Distribution
-    if (appointmentStats != null && appointmentStats!.byStatus.isNotEmpty) {
+    // Appointment Status Distribution and Diseases - Side by Side
+    final hasAppointments = appointmentStats != null && appointmentStats!.byStatus.isNotEmpty;
+    final hasDiseases = topDiseases.isNotEmpty;
+    
+    if (hasAppointments && hasDiseases) {
+      charts.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildAppointmentStatusChart(),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: DiseasesPieChart(
+                topDiseases: topDiseases,
+                isLoading: isLoading,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (hasAppointments) {
       charts.add(_buildAppointmentStatusChart());
+    } else if (hasDiseases) {
+      charts.add(DiseasesPieChart(
+        topDiseases: topDiseases,
+        isLoading: isLoading,
+      ));
     }
 
     return charts;

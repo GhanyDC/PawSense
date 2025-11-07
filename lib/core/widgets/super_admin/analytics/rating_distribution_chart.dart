@@ -23,16 +23,27 @@ class RatingDistributionChart extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      height: 480,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.border.withOpacity(0.5),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.03),
+            blurRadius: 40,
+            offset: const Offset(0, 8),
+            spreadRadius: 0,
           ),
         ],
       ),
@@ -41,31 +52,43 @@ class RatingDistributionChart extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.star, color: AppColors.warning, size: 20),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.star,
+                  color: AppColors.warning,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
               const Text(
                 'Clinic Rating Distribution',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
+                  letterSpacing: 0.2,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
           
           // Average Rating Card
           _buildAverageRatingCard(),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
           const Divider(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           
           // Rating Bars
           _buildRatingBars(),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           
           // Quality Summary
           _buildQualitySummary(),
@@ -76,7 +99,7 @@ class RatingDistributionChart extends StatelessWidget {
 
   Widget _buildAverageRatingCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -91,7 +114,7 @@ class RatingDistributionChart extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppColors.white,
               shape: BoxShape.circle,
@@ -106,13 +129,13 @@ class RatingDistributionChart extends StatelessWidget {
             child: Text(
               ratingData!.averageSystemRating.toStringAsFixed(1),
               style: TextStyle(
-                fontSize: 32,
+                fontSize: 28,
                 fontWeight: FontWeight.bold,
                 color: AppColors.warning,
               ),
             ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +192,7 @@ class RatingDistributionChart extends StatelessWidget {
         final percentage = totalRated > 0 ? (count / totalRated * 100) : 0.0;
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 10),
           child: _buildRatingBar(
             stars: stars,
             count: count,
@@ -214,7 +237,7 @@ class RatingDistributionChart extends StatelessWidget {
           child: Stack(
             children: [
               Container(
-                height: 28,
+                height: 24,
                 decoration: BoxDecoration(
                   color: AppColors.border.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(6),
@@ -223,7 +246,7 @@ class RatingDistributionChart extends StatelessWidget {
               FractionallySizedBox(
                 widthFactor: (percentage / 100).clamp(0.0, 1.0),
                 child: Container(
-                  height: 28,
+                  height: 24,
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(6),
@@ -268,7 +291,7 @@ class RatingDistributionChart extends StatelessWidget {
     final highRatingPercentage = totalRated > 0 ? (highRatings / totalRated * 100) : 0.0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.success.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),

@@ -258,27 +258,39 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
 
                   const SizedBox(height: kSpacingLarge),
 
-                  // KPI Cards Grid
-                  _buildKPIGrid(),
+                  // Section Header: Overview Metrics
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.insights,
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'System Overview',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
 
-                  const SizedBox(height: kSpacingLarge),
-
-                  // Pie Charts Section - Data Distribution
-                  if (!isLoading && _hasDataForPieCharts())
-                    AnalyticsPieChartsSection(
-                      userStats: userStats,
-                      petStats: petStats,
-                      appointmentStats: appointmentStats,
-                      isLoading: isLoading,
-                    ),
-
-                  if (!isLoading && _hasDataForPieCharts())
-                    const SizedBox(height: kSpacingLarge),
-
-                  // Growth Trends Chart - with responsive height
+                  // Growth Trends Chart - Priority #1
                   Container(
                     constraints: BoxConstraints(
-                      minHeight: 300,
+                      minHeight: 350,
                       maxHeight: MediaQuery.of(context).size.height * 0.5,
                     ),
                     child: GrowthTrendChart(
@@ -290,6 +302,48 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                   ),
 
                   const SizedBox(height: kSpacingLarge),
+
+                  // Pie Charts Section - Data Distribution
+                  if (!isLoading && _hasDataForPieCharts())
+                    AnalyticsPieChartsSection(
+                      userStats: userStats,
+                      petStats: petStats,
+                      appointmentStats: appointmentStats,
+                      topDiseases: topDiseases,
+                      isLoading: isLoading,
+                    ),
+
+                  if (!isLoading && _hasDataForPieCharts())
+                    const SizedBox(height: kSpacingLarge),
+                  
+                  // Section Header: Detailed Analytics
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.info.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.bar_chart,
+                          color: AppColors.info,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Detailed Analytics',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
                   
                   // New Analytics Section - 2x2 Grid
                   LayoutBuilder(
@@ -368,6 +422,69 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                   ),
 
                   const SizedBox(height: kSpacingLarge),
+                  
+                  // Section Header: Key Performance Indicators
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.dashboard,
+                          color: AppColors.success,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Key Performance Indicators',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
+
+                  // KPI Cards Grid
+                  _buildKPIGrid(),
+
+                  const SizedBox(height: kSpacingLarge),
+                  
+                  // Section Header: Performance Tables
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.table_chart,
+                          color: AppColors.warning,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Performance & Insights',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
 
                   // Additional Analytics - with empty state messages
                   if (!isLoading && topClinics.isEmpty && clinicAlerts.isEmpty && topDiseases.isEmpty)
@@ -379,11 +496,6 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
                   if (!isLoading && clinicAlerts.isNotEmpty) ...[
                     const SizedBox(height: kSpacingLarge),
                     _buildClinicsNeedingAttention(),
-                  ],
-
-                  if (!isLoading && topDiseases.isNotEmpty) ...[
-                    const SizedBox(height: kSpacingLarge),
-                    _buildTopDiseasesChart(),
                   ],
                 ],
               ),
@@ -791,97 +903,7 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
     );
   }
 
-  Widget _buildTopDiseasesChart() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Top Detected Diseases',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: topDiseases.take(10).length,
-            itemBuilder: (context, index) {
-              final disease = topDiseases[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            disease.diseaseName,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textPrimary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          '${disease.count} (${disease.percentage.toStringAsFixed(1)}%)',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: disease.percentage / 100,
-                        minHeight: 8,
-                        backgroundColor: AppColors.border.withValues(alpha: 0.3),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          _getDiseaseColor(disease.percentage),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
-  Color _getDiseaseColor(double percentage) {
-    if (percentage >= 30) return AppColors.error;
-    if (percentage >= 15) return AppColors.warning;
-    return AppColors.primary;
-  }
 
   // Helper method to get health status text
   String _getHealthStatus(double score) {
@@ -903,6 +925,7 @@ class _SystemAnalyticsScreenState extends State<SystemAnalyticsScreen> {
   bool _hasDataForPieCharts() {
     return (userStats != null && userStats!.byRole.isNotEmpty) ||
            (petStats != null && petStats!.byType.isNotEmpty) ||
-           (appointmentStats != null && appointmentStats!.byStatus.isNotEmpty);
+           (appointmentStats != null && appointmentStats!.byStatus.isNotEmpty) ||
+           topDiseases.isNotEmpty;
   }
 }
